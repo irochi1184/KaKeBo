@@ -93,3 +93,12 @@ final class DataStore: ObservableObject {
         }
     }
 }
+
+extension DataStore {
+    func deleteTransaction(id: UUID) {
+        if let idx = transactions.firstIndex(where: { $0.id == id }) {
+            transactions.remove(at: idx)
+            save()
+        }
+    }
+}

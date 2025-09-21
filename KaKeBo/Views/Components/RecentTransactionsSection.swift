@@ -8,8 +8,14 @@
 import SwiftUI
 
 struct RecentTransactionsSection: View {
+    @EnvironmentObject var store: DataStore
     let transactions: [Transaction]
     let categories: [Category]
+    
+    // 行高さ（見た目に合わせて微調整OK）
+    private let rowHeight: CGFloat = 20
+    // 最大高さ（カード内でスクロールさせたくないなら少し大きめでもOK）
+    private let maxListHeight: CGFloat = 720
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -21,12 +27,29 @@ struct RecentTransactionsSection: View {
                 Text("まだ取引がありません")
                     .font(.callout).foregroundStyle(.secondary)
             } else {
-                ForEach(transactions) { tx in
-                    if let cat = categories.first(where: { $0.id == tx.categoryId }) {
-                        TransactionRow(tx: tx, category: cat)
-                        Divider().opacity(0.2)
+                // 必要な高さを計算して明示的に指定
+                let needed = CGFloat(transactions.count) * (rowHeight * 2) + 6
+                List {
+                    ForEach(transactions) { tx in
+                        if let cat = categories.first(where: { $0.id == tx.categoryId }) {
+                            TransactionRow(tx: tx, category: cat)
+                                .frame(height: rowHeight)
+                                .listRowBackground(Color.clear)       // カードと馴染ませる
+                                .listRowSeparator(.hidden)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        store.deleteTransaction(id: tx.id)
+                                    } label: {
+                                        Label("削除", systemImage: "trash")
+                                    }
+                                }
+                        }
                     }
                 }
+                .listStyle(.plain)
+                .scrollDisabled(true) // 親ScrollViewにスクロールを任せる
+                .frame(height: min(needed, maxListHeight)) // ← ここがキモ！
+                .background(Color.clear)
             }
         }
     }

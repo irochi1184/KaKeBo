@@ -8,7 +8,6 @@
 import SwiftUI
 import Charts
 
-// これが無いと「Cannot find type 'CategorySlice'」になります
 struct CategorySlice: Identifiable {
     let id: UUID
     let name: String
@@ -18,24 +17,29 @@ struct CategorySlice: Identifiable {
 
 struct CategoryDonutChart: View {
     let breakdown: [CategorySlice]
-    /// スライス内にラベルを出す最小比率（例: 8%）
+    let currentTotal: Int
+    let previousTotal: Int
     var minShareToShowLabel: Double = 0.08
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("カテゴリ別（今月）")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
             
-            Chart(breakdown) { (item: CategorySlice) in  // ← 型を明示
+            // 見出し + 先月比バッジ
+            HStack {
+                Text("カテゴリ別（今月）")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                DiffBadge(current: currentTotal, previous: previousTotal, mode: .expense) // ← ここ！
+            }
+            
+            Chart(breakdown) { (item: CategorySlice) in
                 SectorMark(
                     angle: .value("支出", item.value),
                     innerRadius: .ratio(0.55),
                     angularInset: 1.5
                 )
                 .foregroundStyle(item.color)
-                
-                // スライス内ラベル（カテゴリ名 + 改行 + 金額）
                 .annotation(position: .overlay) {
                     if share(of: item) >= minShareToShowLabel {
                         VStack(spacing: 2) {
@@ -70,12 +74,10 @@ struct CategoryDonutChart: View {
     
     // MARK: - Helpers
     private var total: Int { breakdown.reduce(0) { $0 + $1.value } }
-    
     private func share(of item: CategorySlice) -> Double {
         guard total > 0 else { return 0 }
         return Double(item.value) / Double(total)
     }
-    
     private func currency(_ n: Int) -> String {
         let f = NumberFormatter()
         f.numberStyle = .decimal
@@ -83,3 +85,63 @@ struct CategoryDonutChart: View {
         return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
     }
 }
+
+// 先月比の小さなバッジ
+private struct DiffBadge: View {
+    enum Mode { case expense, balance }  // ← 追加
+    let current: Int
+    let previous: Int
+    var mode: Mode = .expense            // ← 既定は “支出”
+    
+    var body: some View {
+        let (percent, signUp): (Double?, Bool) = {
+            switch mode {
+            case .expense:
+                // 支出は常に “大きい = 悪化” の解釈。負数が来たら0以上に補正
+                let prev = max(0, previous)
+                let curr = max(0, current)
+                guard prev > 0 else { return (nil, curr > 0) }
+                let p = (Double(curr - prev) / Double(prev)) * 100.0
+                return (p, p > 0)
+            case .balance:
+                // 収支は符号あり。前月の絶対値で正規化して割合を計算
+                let denom = abs(Double(previous))
+                guard denom > 0 else { return (nil, current != 0) }
+                let p = (Double(current - previous) / denom) * 100.0
+                // 収支は “増えた = 改善” とみなす
+                return (p, p > 0)
+            }
+        }()
+        
+        // 表示テキスト & 色
+        let (text, bg, icon): (String, Color, String) = {
+            if let p = percent {
+                let v = round(p) // 小数不要なら丸め
+                if v > 0 {
+                    // 支出: 赤（悪化） / 収支: 緑（改善）
+                    let color: Color = (mode == .expense) ? .red : .green
+                    return ("支出先月比 +\(Int(v))%", color, "arrow.up.right")
+                } else if v < 0 {
+                    let color: Color = (mode == .expense) ? .green : .red
+                    return ("支出先月比 \(Int(v))%", color, "arrow.down.right")
+                } else {
+                    return ("支出先月比 ±0%", .secondary, "arrow.right")
+                }
+            } else {
+                // 前月0円などで %が出せない時
+                return ("支出先月比 —", .secondary, "minus")
+            }
+        }()
+        
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text(text)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.white)
+        .padding(.vertical, 4).padding(.horizontal, 8)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(bg.gradient.opacity(0.85)))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(.white.opacity(0.1), lineWidth: 1))
+    }
+}
+
