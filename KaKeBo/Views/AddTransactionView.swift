@@ -10,12 +10,12 @@ import SwiftUI
 struct AddTransactionView: View {
     @EnvironmentObject var store: DataStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme // ← ダークモード判定用
     
     @State private var date: Date = Date()
     @State private var amount: Int = 0
     @State private var type: TransactionType = .expense
     @State private var memo: String = ""
-    
     @State private var selectedCategoryId: UUID?
     
     init(defaultCategoryId: UUID? = nil) {
@@ -26,51 +26,52 @@ struct AddTransactionView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 18) {
-                    
-                    // セクション1：取引メタ（種別/日付/メモ）
+                    // 種別・日付・メモ
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("詳細").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        TypePillSelector(type: $type)
                         
-                        Picker("", selection: $type) {
-                            ForEach(TransactionType.allCases, id: \.self) { t in
-                                Text(t.rawValue).tag(t)
-                            }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("日付")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            DatePicker("", selection: $date, displayedComponents: .date)
+                                .environment(\.locale, Locale(identifier: "ja_JP"))
+                                .datePickerStyle(.compact)
+                                .labelsHidden()
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .pickerStyle(.segmented)
                         
-                        DatePicker("日付", selection: $date, displayedComponents: .date)
-                            .environment(\.locale, Locale(identifier: "ja_JP")) // ← 個別指定でもOK
-                            .datePickerStyle(.compact)
-                        
-                        TextField("メモ（任意）", text: $memo)
-                            .textFieldStyle(.roundedBorder)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("メモ（任意）")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            TextField("例：昼食／スタバ など", text: $memo)
+                                .textFieldStyle(.roundedBorder)
+                        }
                     }
                     .luxCard()
                     
-                    // セクション2：カテゴリ（カードセレクタ）
+                    // カテゴリ
                     CategorySelector(selectedCategoryId: $selectedCategoryId)
                         .environmentObject(store)
                     
-                    // セクション3：金額テンキー（カード化）
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("金額").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                        NumericKeypad(amount: $amount, maxDigits: 9)
-                            .tint(type == .income ? .green : .accentColor)
-                    }
-                    .luxCard()
-                    
-                    Spacer(minLength: 8)
+                    Spacer(minLength: 60) // ← 電卓に重ならないよう余白
                 }
                 .padding(.top, 12)
                 .padding(.horizontal)
             }
             .background(
                 LinearGradient(
-                    colors: [Color(white: 0.98), Color(white: 0.94)],
-                    startPoint: .top, endPoint: .bottom
-                ).ignoresSafeArea()
+                    colors: colorScheme == .dark
+                    ? [Color.black, Color(white: 0.15)]
+                    : [Color(white: 0.98), Color(white: 0.94)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
             )
             .navigationTitle("新規追加")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("閉じる") { dismiss() }
@@ -95,6 +96,24 @@ struct AddTransactionView: View {
                     }
                     .disabled(store.categories.isEmpty || amount == 0 || selectedCategoryId == nil)
                 }
+            }
+            .safeAreaInset(edge: .bottom) {
+                NumericKeypad(amount: $amount, maxDigits: 9)
+                    .tint(type == .income ? .green : .accentColor)
+                    .padding(.top, 8)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .background(
+                        ZStack {
+                            if colorScheme == .dark {
+                                Color(white: 0.08).opacity(0.95)
+                            } else {
+                                Rectangle().fill(.regularMaterial)
+                            }
+                        }
+                    )
+                    .overlay(Divider(), alignment: .top)
+                    .shadow(color: .black.opacity(0.15), radius: 10, y: -2)
             }
         }
     }

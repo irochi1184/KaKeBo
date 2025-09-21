@@ -15,39 +15,38 @@ struct CategoryCard: View {
     let isSelected: Bool
     
     var body: some View {
-        // 複雑な計算は事前に変数へ
         let strokeColor: Color = isSelected ? .accentColor : .white.opacity(0.08)
         let lineWidth: CGFloat = isSelected ? 2 : 1
-        let shadowOpacity: Double = isSelected ? 0.12 : 0.06
-        let shadowRadius: CGFloat = isSelected ? 12 : 8
-        let shadowY: CGFloat = isSelected ? 8 : 5
+        let shadowOpacity: Double = isSelected ? 0.10 : 0.04
+        let shadowRadius: CGFloat = isSelected ? 8 : 4
+        let shadowY: CGFloat = isSelected ? 5 : 3
         
-        VStack(spacing: 10) {
+        VStack(spacing: 6) {
             ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(color.opacity(0.12))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(color.opacity(0.10))
                 Image(systemName: symbolName)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(color)
             }
-            .frame(height: 54)
+            .frame(height: 44) // ← 小さめタイル
             
             Text(name)
-                .font(.footnote.weight(.medium))
+                .font(.caption.weight(.medium)) // ← 小さめ文字
                 .foregroundStyle(.primary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
-        .padding(12)
+        .padding(10) // ← 余白も少しだけ
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(.thinMaterial)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(strokeColor, lineWidth: lineWidth)
         )
-        .shadow(color: .black.opacity(shadowOpacity),
-                radius: shadowRadius, y: shadowY)
+        .shadow(color: .black.opacity(shadowOpacity), radius: shadowRadius, y: shadowY)
     }
 }

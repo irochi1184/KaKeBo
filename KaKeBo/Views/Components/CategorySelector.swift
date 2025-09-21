@@ -10,12 +10,13 @@ import SwiftUI
 struct CategorySelector: View {
     @EnvironmentObject var store: DataStore
     @Binding var selectedCategoryId: UUID?
+    @Environment(\.horizontalSizeClass) private var hSize
     
-    private let columns: [GridItem] = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
-    ]
+    // iPhoneコンパクト幅：4列 / それ以外：6列
+    private var columns: [GridItem] {
+        let count = (hSize == .compact) ? 4 : 6
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -25,14 +26,12 @@ struct CategorySelector: View {
             
             if store.categories.isEmpty {
                 Text("カテゴリがありません。先に追加してください。")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                LazyVGrid(columns: columns, spacing: 12) {
+                LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(store.categories, id: \.id) { cat in
                         let isSelected = (selectedCategoryId == cat.id)
-                        
                         Button {
                             selectedCategoryId = cat.id
                         } label: {
