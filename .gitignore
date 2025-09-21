@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Xcode
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
@@ -60,3 +61,39 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+=======
+# macOS
+.DS_Store
+
+# Xcode
+DerivedData/
+*.xcuserstate
+**/xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# SwiftPM
+.build/
+.swiftpm/
+
+# CocoaPods / Carthage（使ってないならそのままでOK）
+Pods/
+Carthage/Build/
+
+# Archives
+*.xcarchive
+
+# Playground
+timeline.xctimeline
+playground.xcworkspace
+
+# Fastlane / Logs
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+*.log
+
+# App-specific (開発用アセット/一時出力などあればここに追加)
+KaKeBoStarter.zip
+>>>>>>> 98c9520 (chore: initial public commit (SwiftUI app, custom keypad, luxe UI))

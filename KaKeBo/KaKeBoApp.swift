@@ -4,29 +4,16 @@
 //
 //  Created by 有田健一郎 on 2025/09/21.
 //
-
 import SwiftUI
-import SwiftData
 
 @main
 struct KaKeBoApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
-
+    @StateObject private var dataStore = DataStore()
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootTabView()
+                .environmentObject(dataStore)
+                .environment(\.locale, Locale(identifier: "ja_JP"))
         }
-        .modelContainer(sharedModelContainer)
     }
 }
