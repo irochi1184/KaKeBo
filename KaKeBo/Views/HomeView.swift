@@ -80,7 +80,7 @@ struct HomeView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showAdd = true
-                    } label: { Image(systemName: "plus.circle.fill") }
+                    } label: { Image(systemName: "plus") }
                         .accessibilityLabel("新規追加")
                 }
             }

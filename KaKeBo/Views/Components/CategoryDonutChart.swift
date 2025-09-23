@@ -94,22 +94,17 @@ private struct DiffBadge: View {
     var mode: Mode = .expense            // ← 既定は “支出”
     
     var body: some View {
-        let (percent, signUp): (Double?, Bool) = {
+        let percent: Double? = {
             switch mode {
             case .expense:
-                // 支出は常に “大きい = 悪化” の解釈。負数が来たら0以上に補正
                 let prev = max(0, previous)
                 let curr = max(0, current)
-                guard prev > 0 else { return (nil, curr > 0) }
-                let p = (Double(curr - prev) / Double(prev)) * 100.0
-                return (p, p > 0)
+                guard prev > 0 else { return nil }
+                return (Double(curr - prev) / Double(prev)) * 100.0
             case .balance:
-                // 収支は符号あり。前月の絶対値で正規化して割合を計算
                 let denom = abs(Double(previous))
-                guard denom > 0 else { return (nil, current != 0) }
-                let p = (Double(current - previous) / denom) * 100.0
-                // 収支は “増えた = 改善” とみなす
-                return (p, p > 0)
+                guard denom > 0 else { return nil }
+                return (Double(current - previous) / denom) * 100.0
             }
         }()
         
