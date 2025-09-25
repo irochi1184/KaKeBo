@@ -69,7 +69,7 @@ final class DataStore: ObservableObject {
         budgets = loadJSON([Budget].self, from: budgetsURL) ?? []
     }
 
-    private func save() {
+    public func save() {
         saveJSON(categories, to: categoriesURL)
         saveJSON(transactions, to: transactionsURL)
         saveJSON(budgets, to: budgetsURL)

@@ -1,0 +1,158 @@
+//
+//  Views/Calendar/CalendarMonthGrid.swift
+//  KaKeBo
+//
+//  Created by 有田健一郎 on 2025/09/23.
+//
+
+import SwiftUI
+
+struct CalendarMonthGrid: View {
+    let month: Date
+    /// その月の各日の支出合計（正）
+    let expenseBuckets: [Date: Int]
+    /// その月の各日の収入合計（正）
+    let incomeBuckets:  [Date: Int]
+    let maxExpense: Int
+    let maxIncome:  Int
+    let onTapDay: (Date) -> Void
+    let onLongPressDay: (Date) -> Void
+    
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+    private var cal: Calendar { Calendar.current }
+    
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 6) {
+            let days = daysInMonth()
+            ForEach(Array(days.enumerated()), id: \.offset) { _, day in
+                if let day = day {
+                    let key = cal.startOfDay(for: day)
+                    DayCell(
+                        date: day,
+                        expense: expenseBuckets[key] ?? 0,
+                        income: incomeBuckets[key] ?? 0,
+                        maxExpense: maxExpense,
+                        maxIncome: maxIncome,
+                        isToday: cal.isDateInToday(day)
+                    )
+                    .onTapGesture { onTapDay(day) }
+                    .onLongPressGesture(minimumDuration: 0.3) { onLongPressDay(day) }
+                } else {
+                    Color.clear.frame(height: 54)
+                }
+            }
+        }
+    }
+    
+    /// 6行×7列で該当月を並べる（先頭の空白は nil）
+    private func daysInMonth() -> [Date?] {
+        var result: [Date?] = []
+        
+        let comps = cal.dateComponents([.year,.month], from: month)
+        guard let firstDay = cal.date(from: comps) else { return [] }
+        
+        guard let range = cal.range(of: .day, in: .month, for: firstDay) else {
+            return []
+        }
+        let firstWeekday = cal.component(.weekday, from: firstDay) // 1:日〜7:土
+        let leadingBlanks = (firstWeekday - cal.firstWeekday + 7) % 7
+        
+        result.append(contentsOf: Array(repeating: nil, count: leadingBlanks))
+        
+        for day in range {
+            if let d = cal.date(from: DateComponents(year: comps.year, month: comps.month, day: day)) {
+                result.append(d)
+            }
+        }
+        
+        // 42マスにパディング
+        while result.count % 7 != 0 { result.append(nil) }
+        if result.count < 42 { result.append(contentsOf: Array(repeating: nil, count: 42 - result.count)) }
+        
+        return result
+    }
+}
+
+private struct DayCell: View {
+    let date: Date
+    let expense: Int
+    let income: Int
+    let maxExpense: Int
+    let maxIncome: Int
+    let isToday: Bool
+    
+    private var cal: Calendar { Calendar.current }
+    
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            // 枠
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .stroke(isToday ? .blue.opacity(0.6) : .secondary.opacity(0.15),
+                        lineWidth: isToday ? 2 : 1)
+            
+            VStack(spacing: 4) {
+                // 上：左寄せを妨げないよう日付は右上に小さく
+                HStack {
+                    Spacer(minLength: 0)
+                    Text("\(cal.component(.day, from: date))")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                        .padding(.trailing, 6)
+                }
+                
+                // 下：横幅をフルに使うピル（支出→収入の順）
+                VStack(alignment: .leading, spacing: 3) {
+                    if expense > 0 {
+                        AmountPill(text: "¥" + decimal(expense),
+                                   color: color(for: expense, max: maxExpense, base: .red))
+                    }
+                    if income > 0 {
+                        AmountPill(text: "¥" + decimal(income),
+                                   color: color(for: income, max: maxIncome, base: .green))
+                    }
+                }
+                .padding(.horizontal, 3)
+                .padding(.bottom, 3)
+            }
+        }
+        .frame(height: 56) // 少し縦に余裕（必要なら 56〜60 に調整）
+    }
+    
+    // 等幅＆縮小で見切れない十進数表記
+    private func decimal(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        return f.string(from: n as NSNumber) ?? "\(n)"
+    }
+    
+    // 金額に応じて濃さ変化
+    private func color(for amount: Int, max: Int, base: Color) -> Color {
+        guard max > 0 else { return base.opacity(0.35) }
+        let ratio = min(Double(amount) / Double(max), 1.0)
+        return base.opacity(0.25 + 0.55 * ratio)
+    }
+}
+
+// 横幅フルで省略しないピル
+private struct AmountPill: View {
+    let text: String
+    let color: Color
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .monospacedDigit()                   // 等幅数字で桁ズレ防止
+            .lineLimit(1)
+            .minimumScaleFactor(0.50)            // かなり小さくまで縮小OK
+            .allowsTightening(true)
+            .padding(.vertical, 2)
+            .padding(.horizontal, 6)
+            .frame(width: 41, height: 12) // 横幅固定
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(color)
+            )
+            .foregroundStyle(.white)
+    }
+}

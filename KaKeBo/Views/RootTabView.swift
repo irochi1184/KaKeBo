@@ -17,6 +17,8 @@ struct RootTabView: View {
                 .tabItem { Label("ホーム", systemImage: "house.fill") }
             CategoryListView()
                 .tabItem { Label("カテゴリ", systemImage: "square.grid.2x2.fill") }
+            CalendarScreen()
+                .tabItem { Label("カレンダー", systemImage: "calendar") }
             ReportsView()
                 .tabItem { Label("レポート", systemImage: "chart.pie.fill") }
             ReminderSettingsView()
