@@ -36,25 +36,61 @@ struct CategoryDonutChart: View {
             Chart(breakdown) { (item: CategorySlice) in
                 SectorMark(
                     angle: .value("支出", item.value),
-                    innerRadius: .ratio(0.55),
-                    angularInset: 1.5
+                    innerRadius: .ratio(0.6),
+                    outerRadius: .ratio(1.0)
                 )
                 .foregroundStyle(item.color)
-                .annotation(position: .overlay) {
+                .accessibilityLabel(Text("\(item.name)"))
+//                .accessibilityValue(Text(yen(item.amount)))
+                .annotation(position: .overlay, alignment: .center) {
                     if share(of: item) >= minShareToShowLabel {
                         VStack(spacing: 2) {
                             Text(item.name)
+                                .font(.caption2.weight(.semibold))
                             Text(currency(item.value))
+                                .font(.caption2)
+                                .monospacedDigit()
                         }
                         .font(.caption2.weight(.semibold))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.white)
-                        .shadow(radius: 2)
-                        .padding(2)
+                        .padding(.vertical, 2).padding(.horizontal, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .shadow(radius: 1)
+                        .allowsHitTesting(false)
                     }
                 }
             }
             .frame(height: 220)
+            
+//            Chart(breakdown, id: \.id) { c in
+//                let share = Double(c.amount) / max(1.0, Double(total))
+//                
+//                SectorMark(
+//                    angle: .value("金額", c.amount),
+//                    innerRadius: .ratio(0.6),
+//                    outerRadius: .ratio(1.0)
+//                )
+//                .foregroundStyle(c.color)
+//                .accessibilityLabel(Text("\(c.name)"))
+//                .accessibilityValue(Text(yen(c.amount)))
+//                
+//                // 十分大きい扇だけ、白い注釈を中に表示
+//                .annotation(position: .overlay, alignment: .center) {
+//                    if share >= insideThreshold {
+//                        VStack(spacing: 2) {
+//                            Text(c.name)
+//                                .font(.caption2.weight(.semibold))
+//                            Text(yen(c.amount))
+//                                .font(.caption2)
+//                                .monospacedDigit()
+//                        }
+//                        .shadow(radius: 1)
+//                        .allowsHitTesting(false)
+//                    }
+//                }
+//            }
+//            .chartLegend(.hidden)
             
             // レジェンド（上位のみ）
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())]) {
