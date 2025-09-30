@@ -15,6 +15,7 @@ struct CalendarMonthGrid: View {
     let incomeBuckets:  [Date: Int]
     let maxExpense: Int
     let maxIncome:  Int
+    let todoCounts: [Date: Int]
     let onTapDay: (Date) -> Void
     let onLongPressDay: (Date) -> Void
     
@@ -27,13 +28,15 @@ struct CalendarMonthGrid: View {
             ForEach(Array(days.enumerated()), id: \.offset) { _, day in
                 if let day = day {
                     let key = cal.startOfDay(for: day)
+                    let k = cal.startOfDay(for: day)
                     DayCell(
                         date: day,
                         expense: expenseBuckets[key] ?? 0,
                         income: incomeBuckets[key] ?? 0,
                         maxExpense: maxExpense,
                         maxIncome: maxIncome,
-                        isToday: cal.isDateInToday(day)
+                        isToday: cal.isDateInToday(day),
+                        todoCount: todoCounts[k] ?? 0
                     )
                     .onTapGesture { onTapDay(day) }
                     .onLongPressGesture(minimumDuration: 0.3) { onLongPressDay(day) }
@@ -80,18 +83,19 @@ private struct DayCell: View {
     let maxExpense: Int
     let maxIncome: Int
     let isToday: Bool
+    let todoCount: Int
     
     private var cal: Calendar { Calendar.current }
     
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack(alignment: .topLeading) {   // ← 右上から左上に変更
             // 枠
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .stroke(isToday ? .blue.opacity(0.6) : .secondary.opacity(0.15),
                         lineWidth: isToday ? 2 : 1)
             
             VStack(spacing: 4) {
-                // 上：左寄せを妨げないよう日付は右上に小さく
+                // 上：日付は右上に表示
                 HStack {
                     Spacer(minLength: 0)
                     Text("\(cal.component(.day, from: date))")
@@ -101,7 +105,7 @@ private struct DayCell: View {
                         .padding(.trailing, 6)
                 }
                 
-                // 下：横幅をフルに使うピル（支出→収入の順）
+                // 下：支出・収入
                 VStack(alignment: .leading, spacing: 3) {
                     if expense > 0 {
                         AmountPill(text: "¥" + decimal(expense),
@@ -114,6 +118,20 @@ private struct DayCell: View {
                 }
                 .padding(.horizontal, 3)
                 .padding(.bottom, 3)
+            }
+            
+            // ▼ ToDoバッジ（左上）
+            if todoCount > 0 {
+                Text(todoCount > 9 ? "9+" : "\(todoCount)")
+                    .font(.system(size: 10, weight: .semibold))   // ← フォントを少し小さめ
+                    .monospacedDigit()
+                    .padding(.vertical, 1.8)   // ← 縦パディングを微調整
+                    .padding(.horizontal, 4.5) // ← 横パディングを微調整
+                    .background(Capsule().fill(Color.accentColor.opacity(0.9)))
+                    .foregroundStyle(.white)
+                    .padding(.leading, 4)
+                    .padding(.top, 4)
+                    .accessibilityLabel("ToDo \(todoCount) 件")
             }
         }
         .frame(height: 56) // 少し縦に余裕（必要なら 56〜60 に調整）
