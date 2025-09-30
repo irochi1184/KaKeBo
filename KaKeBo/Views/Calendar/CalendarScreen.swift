@@ -101,7 +101,7 @@ struct CalendarScreen: View {
                     Button {
                         sheet = .add(.now)        // 右上＋は今日で追加
                     } label: {
-                        Image(systemName: "plus.circle.fill")
+                        Image(systemName: "plus")
                     }
                 }
             }
