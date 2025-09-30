@@ -15,6 +15,12 @@ struct SettingsView: View {
     
     @Environment(\.dismiss) private var dismiss
     @State private var notifAuthorized = false
+    @State private var sheet: Sheet?
+    
+    enum Sheet: Identifiable {
+        case categories
+        var id: String { "sheet-\(self)" }
+    }
     
     private static var defaultTime: Date {
         var comps = DateComponents()
@@ -36,23 +42,52 @@ struct SettingsView: View {
                             Task { await applyScheduling() }
                         }
                     
-                    DatePicker("時刻",
-                               selection: .init(
-                                get: { selectedTime },
-                                set: { newVal in
-                                    timeRaw = newVal.timeIntervalSinceReferenceDate
-                                    Task { await applyScheduling() }
-                                }
-                               ),
-                               displayedComponents: .hourAndMinute)
+                    DatePicker(
+                        "時刻",
+                        selection: .init(
+                            get: { selectedTime },
+                            set: { newVal in
+                                timeRaw = newVal.timeIntervalSinceReferenceDate
+                                Task { await applyScheduling() }
+                            }
+                        ),
+                        displayedComponents: .hourAndMinute
+                    )
                     .disabled(!enabled)
+                }
+                Section("カテゴリ") {
+                    Button {
+                        sheet = .categories                 // ← ここだけ
+                    } label: {
+                        HStack {
+                            Label("カテゴリを管理", systemImage: "square.grid.2x2")
+                            Spacer()
+                            Text("\(store.categories.count)件")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
             .navigationTitle("設定")
             .task {
-                // 初回に通知許可を取得
                 notifAuthorized = await ReminderManager.requestAuthorization()
                 if enabled { await applyScheduling() }
+            }
+            .sheet(item: $sheet) { s in
+                switch s {
+                case .categories:
+                    // カテゴリ画面を “中で” NavigationStack 付きで出すと安定
+                    NavigationStack {
+                        CategoryListView()
+                            .environmentObject(store)
+                            .navigationTitle("カテゴリ")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                    // iPad/Macでも確実に画面っぽく出るように
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
+                }
             }
         }
     }
