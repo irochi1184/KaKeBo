@@ -179,6 +179,7 @@ struct CalendarScreen: View {
         } else {
             todos = []
         }
+        ensureRecurringTodos(for: month)
     }
     private func saveTodos() {
         let k = key(for: month)
@@ -230,6 +231,49 @@ struct CalendarScreen: View {
             }
         }
         return dict
+    }
+    
+    @AppStorage("kakebo.recurring.templates") private var templatesData: Data = Data()
+    private var templates: [RecurringTodoTemplate] {
+        (try? JSONDecoder().decode([RecurringTodoTemplate].self, from: templatesData)) ?? []
+    }
+    
+    private func ensureRecurringTodos(for month: Date) {
+        guard !templates.isEmpty else { return }
+        let active = templates.filter { $0.isActive }
+        
+        for t in active {
+            let due = computeDue(for: t, in: month)
+            // 既にテンプレ由来のToDoがあるか？
+            if todos.first(where: { $0.templateId == t.id }) == nil {
+                // 無ければ作成
+                todos.append(CalendarTodo(title: t.title, done: false, due: due, templateId: t.id))
+            } else {
+                // あれば月が変わった時に due を揃える（必要なら）
+                if let idx = todos.firstIndex(where: { $0.templateId == t.id }) {
+                    todos[idx].due = due
+                    // タイトル変更に追随
+                    todos[idx].title = t.title
+                }
+            }
+        }
+        saveTodos()
+    }
+    
+    // 31日→30/28日対応、0=月末
+    private func computeDue(for tpl: RecurringTodoTemplate, in month: Date) -> Date {
+        let start = cal.date(from: cal.dateComponents([.year,.month], from: month))!
+        if tpl.dayOfMonth == 0 {
+            // 月末
+            let end = cal.date(byAdding: DateComponents(month: 1, day: -1), to: start)!
+            return end
+        } else {
+            let range = cal.range(of: .day, in: .month, for: start)!
+            let day = min(tpl.dayOfMonth, range.count)
+            return cal.date(from: DateComponents(year: cal.component(.year, from: start),
+                                                 month: cal.component(.month, from: start),
+                                                 day: day)) ?? start
+        }
     }
 }
 

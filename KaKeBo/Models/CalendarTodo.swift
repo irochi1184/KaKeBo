@@ -11,6 +11,6 @@ struct CalendarTodo: Identifiable, Codable, Hashable {
     var id = UUID()
     var title: String
     var done: Bool = false
-    /// 期日（同月内の日付だけ使う想定。nilでも可）
     var due: Date?
+    var templateId: UUID? = nil
 }
