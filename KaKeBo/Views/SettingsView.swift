@@ -17,8 +17,14 @@ struct SettingsView: View {
     @State private var notifAuthorized = false
     @State private var sheet: Sheet?
     
+    @AppStorage("kakebo.recurring.templates") private var templatesData: Data = Data()
+    @State private var templates: [RecurringTodoTemplate] = []
+    @State private var newTitle: String = ""
+    @State private var newDay: Int = 0 // 0=月末, 1...31
+    
     enum Sheet: Identifiable {
         case categories
+        case recurringTodos
         var id: String { "sheet-\(self)" }
     }
     
@@ -31,6 +37,21 @@ struct SettingsView: View {
     private var selectedTime: Date {
         get { Date(timeIntervalSinceReferenceDate: timeRaw) }
         set { timeRaw = newValue.timeIntervalSinceReferenceDate }
+    }
+    
+    private func loadTemplates() {
+        if templatesData.isEmpty { templates = []; return }
+        if let items = try? JSONDecoder().decode([RecurringTodoTemplate].self, from: templatesData) {
+            templates = items
+        }
+    }
+    
+    private func saveTemplates() {
+        templatesData = (try? JSONEncoder().encode(templates)) ?? Data()
+    }
+    
+    private var recurringCount: Int {
+        (try? JSONDecoder().decode([RecurringTodoTemplate].self, from: templatesData))?.count ?? 0
     }
     
     var body: some View {
@@ -68,8 +89,24 @@ struct SettingsView: View {
                         }
                     }
                 }
+                Section("毎月のToDo") {
+                    Button {
+                        sheet = .recurringTodos
+                    } label: {
+                        HStack {
+                            Label("毎月のToDoを管理", systemImage: "calendar.badge.clock")
+                            Spacer()
+                            Text("\(recurringCount)件")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
             .navigationTitle("設定")
+            .onAppear {
+                loadTemplates()
+            }
+            .onChange(of: templates) { _, _ in saveTemplates() }
             .task {
                 notifAuthorized = await ReminderManager.requestAuthorization()
                 if enabled { await applyScheduling() }
@@ -85,6 +122,14 @@ struct SettingsView: View {
                             .navigationBarTitleDisplayMode(.inline)
                     }
                     // iPad/Macでも確実に画面っぽく出るように
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
+                case .recurringTodos:
+                    NavigationStack {
+                        RecurringTodoSettingsView()
+                            .navigationTitle("毎月のToDo")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
                     .presentationDetents([.large, .medium])
                     .presentationDragIndicator(.visible)
                 }
