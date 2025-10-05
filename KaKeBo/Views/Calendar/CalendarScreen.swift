@@ -21,10 +21,12 @@ struct CalendarScreen: View {
     enum Sheet: Identifiable, Equatable {
         case detail(Date)
         case add(Date)
+        case addPrefilled(date: Date, categoryId: UUID?, amount: Int?, memo: String?) // ← 追加
         var id: String {
             switch self {
             case .detail(let d): return "detail-\(d.timeIntervalSince1970)"
-            case .add(let d):    return "add-\(d.timeIntervalSince1970)"
+            case .add(let d): return "add-\(d.timeIntervalSince1970)"
+            case .addPrefilled(let date, _, _, _): return "addp-\(date.timeIntervalSince1970)"
             }
         }
     }
@@ -82,13 +84,14 @@ struct CalendarScreen: View {
                 
                 TodoCard(
                     month: month,
-                    todos: filteredTodos,
-                    onToggle: toggleTodo,
-                    onDelete: deleteTodos,
-                    onEditDue: setDue,
+                    todos: filteredTodos,                 // ← 未完のみ切り替え対応
+                    onToggle: { id in toggleTodo(id) },
+                    onDelete: { offsets in deleteTodos(offsets) },
+                    onEditDue: { id, newDate in setDue(id, newDate) },
                     newTitle: $newTodoTitle,
-                    onAdd: addTodo,
-                    showOnlyUndone: $showOnlyUndone
+                    onAdd: { addTodo() },
+                    showOnlyUndone: $showOnlyUndone,
+                    onQuickAdd: { tapped in handleQuickAdd(tapped) } // ← プリセット起動
                 )
                 .padding(.horizontal)
                 
@@ -108,13 +111,27 @@ struct CalendarScreen: View {
             .sheet(item: $sheet) { s in
                 switch s {
                 case .detail(let date):
-                    DayDetailSheet(date: date)
-                        .environmentObject(store)
-                case .add(_):
-                    // AddTransactionView に初期日付を渡したい場合は
-                    // init を増やすか、DataStore 経由で適用してください
-                    AddTransactionView(defaultCategoryId: store.categories.first?.id)
-                        .environmentObject(store)
+                    DayDetailSheet(date: date).environmentObject(store)
+                    
+                case .add(let date):
+                    AddTransactionView(
+                        defaultCategoryId: store.categories.first?.id,
+                        defaultDate: date
+                    )
+                    .environmentObject(store)
+                    
+                case .addPrefilled(let date, let categoryId, let amount, let memo):
+                    let targetCat = categoryId ?? store.categories.first?.id
+                    let initialAmount = amount
+                    let initialMemo = memo
+                    AddTransactionView(
+                        defaultCategoryId: targetCat,
+                        defaultAmount: initialAmount,
+                        defaultDate: date,
+                        defaultType: .expense,
+                        defaultMemo: initialMemo
+                    )
+                    .environmentObject(store)
                 }
             }
             .onAppear { loadTodos(for: month) }                                  // ★ 初回ロード
@@ -244,18 +261,15 @@ struct CalendarScreen: View {
         
         for t in active {
             let due = computeDue(for: t, in: month)
-            // 既にテンプレ由来のToDoがあるか？
-            if todos.first(where: { $0.templateId == t.id }) == nil {
-                // 無ければ作成
-                todos.append(CalendarTodo(title: t.title, done: false, due: due, templateId: t.id))
+            
+            if let idx = todos.firstIndex(where: { $0.templateId == t.id }) {
+                todos[idx].due = due
+                todos[idx].title = t.title
             } else {
-                // あれば月が変わった時に due を揃える（必要なら）
-                if let idx = todos.firstIndex(where: { $0.templateId == t.id }) {
-                    todos[idx].due = due
-                    // タイトル変更に追随
-                    todos[idx].title = t.title
-                }
+                todos.append(CalendarTodo(title: t.title, done: false, due: due, templateId: t.id))
             }
+            
+            Task { await ReminderManager.scheduleMonthly(template: t, due: due, hour: 8) }
         }
         saveTodos()
     }
@@ -275,6 +289,22 @@ struct CalendarScreen: View {
                                                  day: day)) ?? start
         }
     }
+    private func handleQuickAdd(_ todo: CalendarTodo) {
+        // テンプレ参照（@AppStorage decode は既に下部で定義済みの templates を使用）
+        let tpl = templates.first { $0.id == todo.templateId }
+        let catId = tpl?.defaultCategoryId ?? store.categories.first?.id
+        let amount = tpl?.defaultAmount
+        let memo = tpl?.defaultMemo
+        let initialDate = todo.due ?? Date()
+        
+        sheet = .addPrefilled(
+            date: initialDate,
+            categoryId: catId,
+            amount: amount,
+            memo: memo
+        )
+    }
+
 }
 
 private struct TodoCard: View {
@@ -286,6 +316,7 @@ private struct TodoCard: View {
     @Binding var newTitle: String
     let onAdd: () -> Void
     @Binding var showOnlyUndone: Bool
+    let onQuickAdd: (CalendarTodo) -> Void   // ← ここを必ず受け取る
     
     @Environment(\.colorScheme) private var scheme
     private var cal: Calendar { .current }
@@ -322,19 +353,24 @@ private struct TodoCard: View {
                     .font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                // ▼ List にしてカード内だけスクロール
+                // ▼ “描画だけ”に徹して、アクションは外から注入
                 List {
                     ForEach(todos) { t in
-                        TodoRow(month: month, todo: t, onToggle: onToggle, onEditDue: onEditDue)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
+                        TodoRow(
+                            month: month,
+                            todo: t,
+                            onToggle: onToggle,
+                            onEditDue: onEditDue,
+                            onQuickAdd: onQuickAdd
+                        )
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                     }
-                    .onDelete(perform: onDelete) // スワイプ削除
+                    .onDelete(perform: onDelete)
                 }
                 .listStyle(.plain)
-                .scrollContentBackground(.hidden) // リストの背景を消す
-                .frame(maxHeight: 260)            // ← 必要に応じて高さ調整
+                .scrollContentBackground(.hidden)
+                .frame(maxHeight: 260)
                 .background(Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
@@ -350,7 +386,7 @@ private struct TodoCard: View {
     private func monthTitle(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "ja_JP")
-        f.dateFormat = "M月"   // 年も入れたいなら "yyyy年M月"
+        f.dateFormat = "M月"
         return f.string(from: date)
     }
 }
@@ -360,6 +396,7 @@ private struct TodoRow: View {
     let todo: CalendarTodo
     let onToggle: (UUID) -> Void
     let onEditDue: (UUID, Date?) -> Void
+    let onQuickAdd: (CalendarTodo) -> Void
     
     @State private var showDuePicker = false
     @State private var tempDue: Date = Date()
@@ -427,6 +464,7 @@ private struct TodoRow: View {
         }
         .contentShape(Rectangle())
         .padding(.vertical, 6)
+        .onTapGesture { onQuickAdd(todo) }
     }
     
     private func isOverdue(_ d: Date) -> Bool {

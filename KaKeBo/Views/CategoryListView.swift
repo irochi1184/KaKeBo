@@ -1,3 +1,10 @@
+//
+//  Views/CategoryListView.swift
+//  KaKeBo
+//
+//  Created by 有田健一郎 on 2025/09/21.
+//
+
 import SwiftUI
 
 struct CategoryListView: View {
@@ -30,7 +37,7 @@ struct CategoryListView: View {
                     Button {
                         showAdd = true
                     } label: {
-                        Image(systemName: "plus.circle.fill")
+                        Image(systemName: "plus")
                     }
                 }
             }
