@@ -14,4 +14,8 @@ struct RecurringTodoTemplate: Identifiable, Codable, Hashable {
     var dayOfMonth: Int
     /// その月に展開する/しないの切替（将来の一時停止用）
     var isActive: Bool = true
+    
+    var defaultCategoryId: UUID? = nil
+    var defaultAmount: Int? = nil
+    var defaultMemo: String? = nil
 }
