@@ -18,6 +18,11 @@ struct AddTransactionView: View {
     @State private var memo: String = ""
     @State private var selectedCategoryId: UUID?
     
+    // ▼ キーボード可視状態
+    @State private var isKeyboardVisible = false
+    // ▼ メモのフォーカス管理（キーボードの「閉じる」ボタン用）
+    @FocusState private var memoFocused: Bool
+    
     init(
         defaultCategoryId: UUID? = nil,
         defaultAmount: Int? = nil,
@@ -39,7 +44,19 @@ struct AddTransactionView: View {
                 .navigationTitle("新規追加")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
-                .safeAreaInset(edge: .bottom) { keypadBar } // ← これも外出し
+                // ▼ キーボードが見えてない時だけ電卓を出す
+                .safeAreaInset(edge: .bottom) {
+                    if !isKeyboardVisible {
+                        NumericKeypad(amount: $amount, maxDigits: 9, style: .attached, isIncome: type == .income)
+                    }
+                }
+                // ▼ キーボードの出入りを監視して isKeyboardVisible を更新
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                    withAnimation(.easeInOut(duration: 0.2)) { isKeyboardVisible = true }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                    withAnimation(.easeInOut(duration: 0.2)) { isKeyboardVisible = false }
+                }
         }
     }
     
@@ -81,6 +98,7 @@ struct AddTransactionView: View {
                     .foregroundStyle(.secondary)
                 TextField("例：昼食／スタバ など", text: $memo)
                     .textFieldStyle(.roundedBorder)
+                    .focused($memoFocused) // ← フォーカス監視
             }
         }
     }
@@ -102,8 +120,7 @@ struct AddTransactionView: View {
             }
         }()
         
-        return NumericKeypad(amount: $amount, maxDigits: 9)
-            .tint(type == .income ? .green : .accentColor)
+        return NumericKeypad(amount: $amount, maxDigits: 9, isIncome: type == .income)
             .padding(.top, 8)
             .padding(.horizontal)
             .padding(.bottom, 8)
@@ -120,6 +137,11 @@ struct AddTransactionView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Button("保存") { save() }
                 .disabled(store.categories.isEmpty || amount == 0 || selectedCategoryId == nil)
+        }
+        // ▼ キーボード上に「閉じる」ボタン
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button("閉じる") { memoFocused = false }
         }
     }
     

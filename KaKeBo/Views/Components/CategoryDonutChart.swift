@@ -63,35 +63,6 @@ struct CategoryDonutChart: View {
             }
             .frame(height: 220)
             
-//            Chart(breakdown, id: \.id) { c in
-//                let share = Double(c.amount) / max(1.0, Double(total))
-//                
-//                SectorMark(
-//                    angle: .value("金額", c.amount),
-//                    innerRadius: .ratio(0.6),
-//                    outerRadius: .ratio(1.0)
-//                )
-//                .foregroundStyle(c.color)
-//                .accessibilityLabel(Text("\(c.name)"))
-//                .accessibilityValue(Text(yen(c.amount)))
-//                
-//                // 十分大きい扇だけ、白い注釈を中に表示
-//                .annotation(position: .overlay, alignment: .center) {
-//                    if share >= insideThreshold {
-//                        VStack(spacing: 2) {
-//                            Text(c.name)
-//                                .font(.caption2.weight(.semibold))
-//                            Text(yen(c.amount))
-//                                .font(.caption2)
-//                                .monospacedDigit()
-//                        }
-//                        .shadow(radius: 1)
-//                        .allowsHitTesting(false)
-//                    }
-//                }
-//            }
-//            .chartLegend(.hidden)
-            
             // レジェンド（上位のみ）
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())]) {
                 ForEach(breakdown.prefix(6)) { item in
