@@ -57,7 +57,14 @@ private struct StatPill: View {
                 .background(Circle().fill(base.gradient))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.caption).foregroundStyle(.secondary)
-                Text(currency(value)).font(.subheadline.weight(.semibold))
+//                Text(currency(value)).font(.subheadline.weight(.semibold))
+                Text(currency(value))
+                    .font(.headline.weight(.semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .allowsTightening(true)
+                    .fixedSize(horizontal: false, vertical: true) // 高さだけ固定
             }
             Spacer()
         }
