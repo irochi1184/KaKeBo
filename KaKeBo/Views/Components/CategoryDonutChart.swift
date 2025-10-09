@@ -20,52 +20,82 @@ struct CategoryDonutChart: View {
     let currentTotal: Int
     let previousTotal: Int
     var minShareToShowLabel: Double = 0.08
+    var title: String = "カテゴリ別（今月）"
+    var isExpense: Bool = true // 表示バッジの文言/色に反映
+    
+    @Environment(\.colorScheme) private var scheme
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            
-            // 見出し + 先月比バッジ
-            HStack {
-                Text("カテゴリ別（今月）")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            // 見出し行
+            HStack(alignment: .firstTextBaseline) {
+                HStack(spacing: 8) {
+                    // タイプチップ（支出/収入）
+                    Label(isExpense ? "支出" : "収入",
+                          systemImage: isExpense ? "arrow.down.circle" : "arrow.up.circle")
+                    .font(.caption.weight(.semibold))
+                    .padding(.vertical, 4).padding(.horizontal, 8)
+                    .background(
+                        Capsule().fill((isExpense ? Color.red : Color.green).opacity(0.15))
+                    )
+                    .foregroundStyle(isExpense ? .red : .green)
+                    
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                
                 Spacer()
-                DiffBadge(current: currentTotal, previous: previousTotal, mode: .expense) // ← ここ！
+                
+                DiffBadge(
+                    current: currentTotal,
+                    previous: previousTotal,
+                    mode: isExpense ? .expense : .balance
+                )
             }
             
-            Chart(breakdown) { (item: CategorySlice) in
+            // ドーナツ
+            Chart(breakdown) { item in
                 SectorMark(
-                    angle: .value("支出", item.value),
-                    innerRadius: .ratio(0.6),
+                    angle: .value("金額", item.value),
+                    innerRadius: .ratio(0.62),
                     outerRadius: .ratio(1.0)
                 )
                 .foregroundStyle(item.color)
-                .accessibilityLabel(Text("\(item.name)"))
-//                .accessibilityValue(Text(yen(item.amount)))
                 .annotation(position: .overlay, alignment: .center) {
                     if share(of: item) >= minShareToShowLabel {
+                        // 読みやすいラベル（ぼかし＋白字）
                         VStack(spacing: 2) {
                             Text(item.name)
                                 .font(.caption2.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                             Text(currency(item.value))
                                 .font(.caption2)
                                 .monospacedDigit()
                         }
-                        .font(.caption2.weight(.semibold))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.white)
-                        .padding(.vertical, 2).padding(.horizontal, 6)
+                        .padding(.vertical, 3).padding(.horizontal, 6)
                         .background(.ultraThinMaterial, in: Capsule())
-                        .shadow(radius: 1)
+                        .overlay(Capsule().stroke(.white.opacity(0.15)))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                         .allowsHitTesting(false)
                     }
                 }
             }
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
             .frame(height: 220)
+            .chartLegend(.hidden)
+            .chartPlotStyle { plot in
+                // プロット面も透けるように
+                plot.background(.clear)
+            }
+            .padding(.bottom, 15)
             
-            // レジェンド（上位のみ）
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())]) {
-                ForEach(breakdown.prefix(6)) { item in
+            // レジェンド（上位）
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(breakdown) { item in
                     HStack(spacing: 8) {
                         Circle().fill(item.color).frame(width: 10, height: 10)
                         Text(item.name).font(.caption)
@@ -122,16 +152,16 @@ private struct DiffBadge: View {
                 if v > 0 {
                     // 支出: 赤（悪化） / 収支: 緑（改善）
                     let color: Color = (mode == .expense) ? .red : .green
-                    return ("支出先月比 +\(Int(v))%", color, "arrow.up.right")
+                    return ("先月比 +\(Int(v))%", color, "arrow.up.right")
                 } else if v < 0 {
                     let color: Color = (mode == .expense) ? .green : .red
-                    return ("支出先月比 \(Int(v))%", color, "arrow.down.right")
+                    return ("先月比 \(Int(v))%", color, "arrow.down.right")
                 } else {
-                    return ("支出先月比 ±0%", .secondary, "arrow.right")
+                    return ("先月比 ±0%", .secondary, "arrow.right")
                 }
             } else {
                 // 前月0円などで %が出せない時
-                return ("支出先月比 —", .secondary, "minus")
+                return ("先月比", .secondary, "minus")
             }
         }()
         
@@ -144,6 +174,128 @@ private struct DiffBadge: View {
         .padding(.vertical, 4).padding(.horizontal, 8)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(bg.gradient.opacity(0.85)))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(.white.opacity(0.1), lineWidth: 1))
+    }
+}
+
+struct CategoryDonutPager: View {
+    // 支出
+    let expense: [CategorySlice]
+    let expenseCurrentTotal: Int
+    let expensePreviousTotal: Int
+    // 収入
+    let income: [CategorySlice]
+    let incomeCurrentTotal: Int
+    let incomePreviousTotal: Int
+    
+    @State private var page = 0
+    
+    var body: some View {
+        let pagerHeight = max(requiredHeight(forCount: expense.count),
+                              requiredHeight(forCount: income.count))
+        
+        VStack(spacing: 8) {
+            
+            // ▼ お好みで：セグメントでも切り替え可能に
+//            Picker("", selection: $page) {
+//                Text("支出").tag(0)
+//                Text("収入").tag(1)
+//            }
+//            .pickerStyle(.segmented)
+//            .padding(.horizontal)
+            
+            ZStack {
+                TabView(selection: $page) {
+                    // 支出
+                    VStack(spacing: 0) {
+                        CategoryDonutChart(
+                            breakdown: expense,
+                            currentTotal: expenseCurrentTotal,
+                            previousTotal: expensePreviousTotal,
+                            title: "カテゴリ別",
+                            isExpense: true
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    }
+                    .tag(0)
+                    
+                    // 収入
+                    VStack(spacing: 0) {
+                        CategoryDonutChart(
+                            breakdown: income,
+                            currentTotal: incomeCurrentTotal,
+                            previousTotal: incomePreviousTotal,
+                            title: "カテゴリ別",
+                            isExpense: false
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    }
+                    .tag(1)
+                }
+                // ドット非表示
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                
+                // ▼ 左右の矢印オーバーレイ
+                HStack {
+                    // 左
+                    Button {
+                        withAnimation(.interactiveSpring()) { page = max(page - 1, 0) }
+                    } label: {
+                        Image(systemName: "chevron.left.circle.fill")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .opacity(page == 0 ? 0.25 : 0.9)
+                            .padding(4)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .disabled(page == 0)
+                    .accessibilityLabel("前のページ")
+                    
+                    Spacer(minLength: 0)
+                    
+                    // 右
+                    Button {
+                        withAnimation(.interactiveSpring()) { page = min(page + 1, 1) }
+                    } label: {
+                        Image(systemName: "chevron.right.circle.fill")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .opacity(page == 1 ? 0.25 : 0.9)
+                            .padding(0)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .disabled(page == 1)
+                    .accessibilityLabel("次のページ")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 55) // ★ ここで上からの距離を固定
+                .allowsHitTesting(true) // ← これで矢印がタップ可能に
+                .zIndex(10)
+            }
+            .frame(height: pagerHeight)   // ← 動的高さ
+        }
+        .padding(.top, 6)
+        .glassCard()
+    }
+    
+    // MARK: - 高さ見積り
+    private func requiredHeight(forCount count: Int) -> CGFloat {
+        // 構成: ヘッダ(タイトル+先月比) + ドーナツ + レジェンド行数
+        let header: CGFloat = 44            // タイトル行の目安
+        let chart: CGFloat  = 220           // ドーナツ高さ
+        let legend = legendHeight(forCount: count)
+        let paddings: CGFloat = 12 + 4     // VStackの上下マージン目安
+        let total = header + chart + legend + paddings
+        
+        // 下限/上限（上限超えたら中スクロールさせる想定）
+        return min(max(total, 320), 520)
+    }
+    
+    private func legendHeight(forCount count: Int) -> CGFloat {
+        // 2列グリッド。行数 = ceil(count/2)
+        let rows = Int(ceil(Double(count) / 2.0))
+        let rowHeight: CGFloat = 20         // caption行の目安
+        let rowSpacing: CGFloat = 8
+        return CGFloat(rows) * rowHeight + CGFloat(max(0, rows-1)) * rowSpacing
     }
 }
 

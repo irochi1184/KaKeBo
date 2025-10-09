@@ -31,13 +31,16 @@ struct HomeView: View {
                     .padding(.horizontal)
                     
                     // 円グラフ：カテゴリ別支出比率（選択月）
-                    if !categoryBreakdown.isEmpty {
-                        CategoryDonutChart(
-                            breakdown: categoryBreakdown,
-                            currentTotal: monthExpense,
-                            previousTotal: prevMonthExpense
+                    if !expenseBreakdown.isEmpty {
+                        CategoryDonutPager(
+                            expense: expenseBreakdown,                    // 既存の支出ブレイクダウン
+                            expenseCurrentTotal: monthExpense,            // 今月の支出合計
+                            expensePreviousTotal: prevMonthExpense,       // 先月の支出合計
+                            income: incomeBreakdown,                      // 新規：収入ブレイクダウン
+                            incomeCurrentTotal: monthIncome,              // 今月の収入合計
+                            incomePreviousTotal: prevMonthIncome          // 先月の収入合計
                         )
-                        .luxCard()
+                        .glassCard()
                         .padding(.horizontal)
                     }
                     
@@ -114,7 +117,7 @@ extension HomeView {
     }
     
     // 円グラフ：カテゴリ別支出（選択月）
-    private var categoryBreakdown: [CategorySlice] {
+    private var expenseBreakdown: [CategorySlice] {
         let cal = Calendar.current
         let expenseTx = store.transactions.filter {
             $0.type == .expense && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
@@ -127,6 +130,18 @@ extension HomeView {
         }
         .sorted { $0.value > $1.value }
     }
+    
+    private var incomeBreakdown: [CategorySlice] {
+        let cal = Calendar.current
+        let tx = store.transactions.filter { $0.type == .income && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
+        var dict: [UUID: Int] = [:]
+        tx.forEach { dict[$0.categoryId, default: 0] += $0.amount }
+        return dict.compactMap { (id, sum) in
+            guard let cat = store.categories.first(where: { $0.id == id }) else { return nil }
+            return CategorySlice(id: id, name: cat.name, color: cat.color, value: sum)
+        }.sorted { $0.value > $1.value }
+    }
+
     
     // 棒グラフ：日別支出（選択月）
     private var dailySeries: [DailyPoint] {
@@ -177,5 +192,12 @@ extension HomeView {
             .filter { $0.type == .expense && cal.isDate($0.date, equalTo: prev, toGranularity: .month) }
             .reduce(0) { $0 + $1.amount }
     }
-
+    
+    private var prevMonthIncome: Int {
+        let cal = Calendar.current
+        let prev = cal.date(byAdding: .month, value: -1, to: selectedMonth) ?? selectedMonth
+        return store.transactions
+            .filter { $0.type == .income && cal.isDate($0.date, equalTo: prev, toGranularity: .month) }
+            .reduce(0) { $0 + $1.amount }
+    }
 }
