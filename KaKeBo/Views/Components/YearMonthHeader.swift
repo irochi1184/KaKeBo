@@ -82,6 +82,7 @@ private struct MonthPickerView: View {
     @Binding var selected: Date
     @State private var year: Int
     @State private var month: Int
+    @Environment(\.dismiss) private var dismiss   // ← 追加
     
     init(selected: Binding<Date>) {
         _selected = selected
@@ -98,9 +99,8 @@ private struct MonthPickerView: View {
             
             HStack {
                 Picker("年", selection: $year) {
-                    // 必要に応じて範囲調整
                     ForEach((2000...2100), id: \.self) { y in
-                        Text("\(String(y))年").tag(y) // 数値フォーマッタを使わず直接文字列化することでカンマを抑止
+                        Text("\(String(y))年").tag(y)
                     }
                 }
                 .pickerStyle(.wheel)
@@ -117,8 +117,9 @@ private struct MonthPickerView: View {
             Button {
                 let cal = Calendar.current
                 if let newDate = cal.date(from: DateComponents(year: year, month: month, day: 1)) {
-                    selected = newDate
+                    selected = newDate          // ← 年月を反映
                 }
+                dismiss()                        // ← そのまま閉じる
             } label: {
                 Text("決定")
                     .frame(maxWidth: .infinity, minHeight: 44)

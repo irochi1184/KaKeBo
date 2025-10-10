@@ -18,18 +18,24 @@ struct CalendarScreen: View {
     // どのシートを出すか（単一ソース・オブ・トゥルース）
     @State private var sheet: Sheet?
     
+    // CalendarScreen 内（struct の先頭付近）にある enum Sheet を“この形”に置き換え
     enum Sheet: Identifiable, Equatable {
         case detail(Date)
         case add(Date)
-        case addPrefilled(date: Date, categoryId: UUID?, amount: Int?, memo: String?) // ← 追加
+        case addPrefilled(date: Date, categoryId: UUID?, amount: Int?, memo: String?)
+        case todoAdd
+        
         var id: String {
             switch self {
-            case .detail(let d): return "detail-\(d.timeIntervalSince1970)"
-            case .add(let d): return "add-\(d.timeIntervalSince1970)"
-            case .addPrefilled(let date, _, _, _): return "addp-\(date.timeIntervalSince1970)"
+            case .detail(let d):         return "detail-\(d.timeIntervalSince1970)"
+            case .add(let d):            return "add-\(d.timeIntervalSince1970)"
+            case .addPrefilled(let d, _, _, _):
+                return "addp-\(d.timeIntervalSince1970)"
+            case .todoAdd:               return "todoAdd"
             }
         }
     }
+
     
     // ★ 月別ToDo（この画面ローカルで保持・保存）
     @State private var todos: [CalendarTodo] = []
@@ -39,24 +45,6 @@ struct CalendarScreen: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                
-                // 年月ヘッダー
-                HStack(spacing: 12) {
-                    Button { month = cal.date(byAdding: .month, value: -1, to: month) ?? month } label: {
-                        Image(systemName: "chevron.left.circle.fill").font(.title3).symbolRenderingMode(.hierarchical)
-                    }
-                    Spacer()
-                    Text(title(month))
-                        .font(.headline.weight(.semibold))
-                        .padding(.vertical, 4).padding(.horizontal, 10)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.thinMaterial))
-                    Spacer()
-                    Button { month = cal.date(byAdding: .month, value: 1, to: month) ?? month } label: {
-                        Image(systemName: "chevron.right.circle.fill").font(.title3).symbolRenderingMode(.hierarchical)
-                    }
-                }
-                .padding(.horizontal)
-                
                 // 曜日ヘッダー
                 HStack {
                     ForEach(weekdaySymbolsJP, id: \.self) { w in
@@ -82,30 +70,39 @@ struct CalendarScreen: View {
                 )
                 .padding(.horizontal)
                 
-                TodoCard(
+                TodoListCard(
                     month: month,
-                    todos: filteredTodos,                 // ← 未完のみ切り替え対応
+                    todos: filteredTodos,
                     onToggle: { id in toggleTodo(id) },
                     onDelete: { offsets in deleteTodos(offsets) },
                     onEditDue: { id, newDate in setDue(id, newDate) },
-                    newTitle: $newTodoTitle,
-                    onAdd: { addTodo() },
-                    showOnlyUndone: $showOnlyUndone,
-                    onQuickAdd: { tapped in handleQuickAdd(tapped) } // ← プリセット起動
+                    onQuickAdd: { tapped in handleQuickAdd(tapped) },
+                    onTapAdd: {    // 追加ボタンでシートを出す
+                        sheet = .todoAdd
+                    },
+                    showOnlyUndone: $showOnlyUndone
                 )
                 .padding(.horizontal)
                 
                 Spacer(minLength: 8)
             }
-            .navigationTitle("カレンダー")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    YearMonthHeader(
+                        month: $month,
+                        title: title(month)  // "yyyy年M月"
+                    )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .allowsTightening(true)
+                }
+                
+                // 右上の「支出追加」ボタンはそのまま
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        sheet = .add(.now)        // 右上＋は今日で追加
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+                        sheet = .add(.now)
+                    } label: { Image(systemName: "plus") }
                 }
             }
             .sheet(item: $sheet) { s in
@@ -132,6 +129,16 @@ struct CalendarScreen: View {
                         defaultMemo: initialMemo
                     )
                     .environmentObject(store)
+                case .todoAdd:
+                    TodoAddSheet(
+                        onAdd: { title, due in
+                            let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !t.isEmpty else { return }
+                            todos.insert(.init(title: t, done: false, due: due), at: 0)
+                            saveTodos()
+                        },
+                        defaultMonth: month
+                    )
                 }
             }
             .onAppear { loadTodos(for: month) }                                  // ★ 初回ロード
@@ -307,19 +314,17 @@ struct CalendarScreen: View {
 
 }
 
-private struct TodoCard: View {
+// CalendarScreen.swift の末尾などに追加
+private struct TodoListCard: View {
     let month: Date
     let todos: [CalendarTodo]
     let onToggle: (UUID) -> Void
     let onDelete: (IndexSet) -> Void
     let onEditDue: (UUID, Date?) -> Void
-    @Binding var newTitle: String
-    let onAdd: () -> Void
+    let onQuickAdd: (CalendarTodo) -> Void
+    let onTapAdd: () -> Void
     @Binding var showOnlyUndone: Bool
-    let onQuickAdd: (CalendarTodo) -> Void   // ← ここを必ず受け取る
-    
     @Environment(\.colorScheme) private var scheme
-    private var cal: Calendar { .current }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -327,33 +332,37 @@ private struct TodoCard: View {
                 Label("\(monthTitle(month))のToDo", systemImage: "checklist")
                     .font(.headline)
                 Spacer()
-                Toggle(isOn: $showOnlyUndone) {
-                    Text("未完のみ").font(.caption)
-                }
-                .toggleStyle(.switch)
-                .labelsHidden()
-            }
-            
-            // 追加バー
-            HStack(spacing: 8) {
-                TextField("新しいToDo（例：電気代の支払い）", text: $newTitle)
-                    .textFieldStyle(.roundedBorder)
-                Button(action: onAdd) {
-                    Image(systemName: "plus")
-                        .font(.headline)
-                        .padding(8)
-                        .background(Circle().fill(Color.accentColor.opacity(0.15)))
+                Toggle(isOn: $showOnlyUndone) { Text("未完のみ").font(.caption) }
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                Button {
+                    onTapAdd()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .frame(width: 34, height: 34)
+                            .overlay(
+                                Circle().stroke(.white.opacity(0.25), lineWidth: 0.8)
+                            )
+                            .shadow(color: .black.opacity(0.1), radius: 3, y: 2)
+                        
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.primary)
+                    }
                 }
                 .buttonStyle(.plain)
-                .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityLabel("新規追加")
+                .hoverEffect(.highlight) // iPadなどで反応あり
+                .buttonStyle(.plain)
+                .accessibilityLabel("ToDoを追加")
             }
             
             if todos.isEmpty {
                 Text("この月のToDoはまだありません")
                     .font(.callout).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                // ▼ “描画だけ”に徹して、アクションは外から注入
                 List {
                     ForEach(todos) { t in
                         TodoRow(
@@ -371,8 +380,6 @@ private struct TodoCard: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .frame(maxHeight: 260)
-                .background(Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
         .padding(12)
@@ -384,12 +391,11 @@ private struct TodoCard: View {
     }
     
     private func monthTitle(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ja_JP")
-        f.dateFormat = "M月"
+        let f = DateFormatter(); f.locale = .init(identifier: "ja_JP"); f.dateFormat = "M月"
         return f.string(from: date)
     }
 }
+
 
 private struct TodoRow: View {
     let month: Date
@@ -498,7 +504,6 @@ private struct DuePopover: View {
     
     var body: some View {
         VStack(spacing: 12) {
-            Text("期日を選択").font(.headline)
             DatePicker(
                 "",
                 selection: $tempDate,
@@ -528,3 +533,66 @@ private struct DuePopover: View {
         .padding(16)
     }
 }
+
+// 追加ビュー
+private struct TodoAddSheet: View {
+    let onAdd: (String, Date?) -> Void
+    let defaultMonth: Date
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var title: String = ""
+    @State private var withDue: Bool = true
+    @State private var due: Date
+    
+    private var cal: Calendar { .current }
+    
+    init(onAdd: @escaping (String, Date?) -> Void, defaultMonth: Date) {
+        self.onAdd = onAdd
+        self.defaultMonth = defaultMonth
+        // 月初を初期日付に
+        let start = Calendar.current.date(from: Calendar.current.dateComponents([.year,.month], from: defaultMonth))!
+        _due = State(initialValue: start)
+    }
+    
+    private var monthRange: ClosedRange<Date> {
+        let start = cal.date(from: cal.dateComponents([.year, .month], from: defaultMonth))!
+        let end = cal.date(byAdding: DateComponents(month: 1, day: -1), to: start)!
+        return start...end
+    }
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("タイトル（例：電気代の支払い）", text: $title)
+                        .textInputAutocapitalization(.never)
+                }
+                Section {
+                    Toggle("期日を設定", isOn: $withDue)
+                    if withDue {
+                        DatePicker(
+                            "期日",
+                            selection: $due,
+                            in: monthRange,
+                            displayedComponents: .date
+                        )
+                    }
+                }
+            }
+            .navigationTitle("ToDoを追加")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("閉じる") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("追加") {
+                        onAdd(title, withDue ? due : nil)
+                        dismiss()
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
