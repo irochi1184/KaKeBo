@@ -12,10 +12,14 @@ struct HomeView: View {
     @EnvironmentObject var store: DataStore
     @State private var showAdd = false
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.horizontalSizeClass) private var hSize   // ← 追加！
+    @Environment(\.horizontalSizeClass) private var hSize
     
-    // ← 追加：選択中の月（常に月初に正規化して扱う）
-    @State private var selectedMonth: Date = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: Date())) ?? Date()
+    @State private var selectedMonth: Date = {
+        let cal = Calendar.current
+        let comps = cal.dateComponents([ .year, .month ], from: Date())
+        return cal.date(from: comps) ?? Date()
+    }()
+    @State private var editingTx: Transaction? = nil
     
     var body: some View {
         NavigationStack {
@@ -52,9 +56,19 @@ struct HomeView: View {
                     }
                     
                     // 最近の取引（選択月から）
-                    RecentTransactionsSection(transactions: recentTransactions, categories: store.categories)
+                    if !allThisMonthTransactions.isEmpty {
+                        TransactionListCard(
+                            transactions: allThisMonthTransactions,
+                            categories: store.categories,
+                            onEdit: { tx in editingTx = tx },
+                            onDeleteIDs: { ids in
+                                // DataStore に用意（次の項目）
+                                store.deleteTransactions(with: ids)
+                            }
+                        )
                         .luxCard()
                         .padding(.horizontal)
+                    }
                     
                     Spacer(minLength: 24)
                 }
@@ -91,6 +105,11 @@ struct HomeView: View {
                 AddTransactionView(defaultCategoryId: store.categories.first?.id)
                     .environmentObject(store)
             }
+            .sheet(item: $editingTx) { tx in
+                EditTransactionView(transaction: tx)    // ← 次で作る編集画面
+                    .environmentObject(store)
+            }
+
             .onChange(of: selectedMonth) {
                 selectedMonth = monthStart(selectedMonth)
             }
@@ -158,14 +177,21 @@ extension HomeView {
     }
     
     // 最近の取引（選択月から上位10件）
-    private var recentTransactions: [Transaction] {
+//    private var recentTransactions: [Transaction] {
+//        let cal = Calendar.current
+//        return store.transactions
+//            .filter { cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
+//            .sorted { $0.date > $1.date }
+//            .prefix(10)
+//            .map { $0 }
+//    }
+    private var allThisMonthTransactions: [Transaction] {
         let cal = Calendar.current
         return store.transactions
             .filter { cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
             .sorted { $0.date > $1.date }
-            .prefix(10)
-            .map { $0 }
     }
+
     
     // 表示用
     private func monthTitle(_ date: Date) -> String {
@@ -199,5 +225,97 @@ extension HomeView {
         return store.transactions
             .filter { $0.type == .income && cal.isDate($0.date, equalTo: prev, toGranularity: .month) }
             .reduce(0) { $0 + $1.amount }
+    }
+}
+
+private struct TransactionRow: View {
+    let tx: Transaction
+    let category: Category
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(category.color.opacity(0.12))
+                Image(systemName: category.symbolName)
+                    .foregroundStyle(category.color)
+            }
+            .frame(width: 36, height: 36)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(category.name).font(.subheadline.weight(.medium))
+                if !tx.memo.isEmpty {
+                    Text(tx.memo).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(currency(tx.amount))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(tx.type == .income ? .green : .primary)
+                Text(dateStr(tx.date))
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+    
+    private func currency(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
+    }
+    private func dateStr(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ja_JP")
+        f.dateFormat = "M/d(EEE)"
+        return f.string(from: d)
+    }
+}
+
+private struct TransactionListCard: View {
+    let transactions: [Transaction]
+    let categories: [Category]
+    let onEdit: (Transaction) -> Void
+    let onDeleteIDs: ([UUID]) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("履歴")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            
+            // ← List の代わりに LazyVStack
+            LazyVStack(spacing: 0) {
+                ForEach(transactions, id: \.id) { tx in
+                    if let cat = categories.first(where: { $0.id == tx.categoryId }) {
+                        Button { onEdit(tx) } label: {
+                            TransactionRow(tx: tx, category: cat)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(.thinMaterial) // なくてもOK
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                onDeleteIDs([tx.id])
+                            } label: {
+                                Label("削除", systemImage: "trash")
+                            }
+                        }
+                        
+                        Divider().opacity(0.12)
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(.secondary.opacity(0.12), lineWidth: 1)
+            )
+        }
     }
 }

@@ -95,10 +95,30 @@ final class DataStore: ObservableObject {
 }
 
 extension DataStore {
-    func deleteTransaction(id: UUID) {
-        if let idx = transactions.firstIndex(where: { $0.id == id }) {
-            transactions.remove(at: idx)
-            save()
+    func upsertTransaction(_ tx: Transaction) {
+        if let i = transactions.firstIndex(where: { $0.id == tx.id }) {
+            transactions[i] = tx
+        } else {
+            transactions.insert(tx, at: 0)
         }
+        saveTransactions()
+    }
+    
+    /// ID配列でまとめて削除して保存
+    func deleteTransactions(with ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        transactions.removeAll { ids.contains($0.id) }
+        saveTransactions()
+    }
+    
+    func deleteTransaction(id: UUID) {
+        deleteTransactions(with: [id])
+    }
+    
+    func updateTransaction(_ tx: Transaction) {
+        // 既存更新だけに限定したい場合はこちらを使ってもOK
+        guard let idx = transactions.firstIndex(where: { $0.id == tx.id }) else { return }
+        transactions[idx] = tx
+        saveTransactions()
     }
 }

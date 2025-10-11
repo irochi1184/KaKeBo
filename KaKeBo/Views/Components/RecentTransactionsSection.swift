@@ -11,7 +11,7 @@ struct RecentTransactionsSection: View {
     @EnvironmentObject var store: DataStore
     let transactions: [Transaction]
     let categories: [Category]
-    
+//    
     // 行高さ（見た目に合わせて微調整OK）
     private let rowHeight: CGFloat = 20
     // 最大高さ（カード内でスクロールさせたくないなら少し大きめでもOK）
