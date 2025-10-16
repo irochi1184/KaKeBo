@@ -135,8 +135,11 @@ struct AddTransactionView: View {
             Button("閉じる") { dismiss() }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button("保存") { save() }
-                .disabled(store.categories.isEmpty || amount == 0 || selectedCategoryId == nil)
+            let isEnabled = !(store.categories.isEmpty || amount == 0 || selectedCategoryId == nil)
+            
+            SaveButton(isEnabled: isEnabled) {
+                save()
+            }
         }
         // ▼ キーボード上に「閉じる」ボタン
         ToolbarItemGroup(placement: .keyboard) {
@@ -163,5 +166,22 @@ struct AddTransactionView: View {
         )
         store.addTransaction(tx)
         dismiss()
+    }
+}
+
+
+struct SaveButton: View {
+    let isEnabled: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        if isEnabled {
+            Button("保存", action: action)
+                .buttonStyle(.borderedProminent)  // 有効 = 青
+        } else {
+            Button("保存", action: {})            // 無効時は何もしない
+                .buttonStyle(.bordered)           // 無効 = 枠のみ
+                .disabled(true)
+        }
     }
 }
