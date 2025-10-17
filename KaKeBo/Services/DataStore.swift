@@ -230,4 +230,118 @@ extension DataStore {
         transactions.removeAll { ids.contains($0.categoryId) }
         save()
     }
+    
+    /// 固定費テンプレートの保存領域（SettingsView でも使う）
+    static let fixedTemplatesKey = "kakebo.fixed.templates"
+    static let fixedPostedKeyPrefix = "kakebo.fixed.posted." // + "yyyy-MM" に対して Set<UUID> を保持
+    
+    /// 今月&今日までに“自動計上すべき”固定費を transactions に反映する
+    /// - すでに当月分を計上済みのテンプレートはスキップ（Settings の手動計上からも共通利用可）
+    func applyFixedExpensesForCurrentMonth() {
+        let cal = Calendar.current
+        let start = cal.date(from: cal.dateComponents([.year, .month], from: Date()))!
+        let end = cal.date(byAdding: .month, value: 1, to: start)!   // 翌月初
+        let today = cal.startOfDay(for: Date())
+        
+        // テンプレ取得
+        let templates = (try? JSONDecoder().decode([FixedExpenseTemplate].self,
+                                                   from: UserDefaults.standard.data(forKey: Self.fixedTemplatesKey) ?? Data())) ?? []
+        
+        guard templates.contains(where: { $0.isActive }) else { return }
+        
+        // 当月の「計上済みテンプレID集合」を読み出し
+        let monthKey = monthKeyString(for: start)  // "yyyy-MM"
+        var posted: Set<UUID> = {
+            if let data = UserDefaults.standard.data(forKey: Self.fixedPostedKeyPrefix + monthKey),
+               let ids = try? JSONDecoder().decode([UUID].self, from: data) {
+                return Set(ids)
+            }
+            return Set()
+        }()
+        
+        var didAppend = false
+        
+        for t in templates where t.isActive && !posted.contains(t.id) {
+            // 当月の“計上日”
+            let due = computeDue(for: t, in: start)
+            // 今日までに到来したものだけ自動計上（＝未来日はまだ）
+            if due <= today && due >= start && due < end {
+                // カテゴリがまだあるかチェック
+                guard let _ = categories.first(where: { $0.id == t.categoryId }) else { continue }
+                // 取引追加（支出）
+                let tx = Transaction(
+                    date: due,
+                    amount: t.amount,
+                    type: .expense,
+                    memo: t.memo ?? t.title,
+                    categoryId: t.categoryId
+                )
+                transactions.insert(tx, at: 0)
+                posted.insert(t.id)
+                didAppend = true
+            }
+        }
+        
+        if didAppend {
+            saveTransactions()
+            // 計上済み更新
+            let data = try? JSONEncoder().encode(Array(posted))
+            UserDefaults.standard.set(data, forKey: Self.fixedPostedKeyPrefix + monthKey)
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+    }
+    
+    /// 指定テンプレートを“今月”で即時計上（手動ボタン用）
+    func postFixedExpenseNow(_ t: FixedExpenseTemplate) {
+        let cal = Calendar.current
+        let start = cal.date(from: cal.dateComponents([.year, .month], from: Date()))!
+        let due = computeDue(for: t, in: start)
+        
+        guard let _ = categories.first(where: { $0.id == t.categoryId }) else { return }
+        let tx = Transaction(
+            date: due,
+            amount: t.amount,
+            type: .expense,
+            memo: t.memo ?? t.title,
+            categoryId: t.categoryId
+        )
+        transactions.insert(tx, at: 0)
+        saveTransactions()
+        
+        // 当月の posted 印も付ける
+        let monthKey = monthKeyString(for: start)
+        var posted: Set<UUID> = {
+            if let data = UserDefaults.standard.data(forKey: Self.fixedPostedKeyPrefix + monthKey),
+               let ids = try? JSONDecoder().decode([UUID].self, from: data) {
+                return Set(ids)
+            }
+            return Set()
+        }()
+        posted.insert(t.id)
+        let data = try? JSONEncoder().encode(Array(posted))
+        UserDefaults.standard.set(data, forKey: Self.fixedPostedKeyPrefix + monthKey)
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+    
+    /// 31日対応（0=月末）
+    private func computeDue(for tpl: FixedExpenseTemplate, in monthStart: Date) -> Date {
+        let cal = Calendar.current
+        if tpl.dayOfMonth == 0 {
+            let end = cal.date(byAdding: DateComponents(month: 1, day: -1), to: monthStart)!
+            return cal.startOfDay(for: end)
+        } else {
+            let range = cal.range(of: .day, in: .month, for: monthStart)!
+            let day = min(tpl.dayOfMonth, range.count)
+            return cal.startOfDay(for:
+                                    cal.date(from: DateComponents(year: cal.component(.year, from: monthStart),
+                                                                  month: cal.component(.month, from: monthStart),
+                                                                  day: day)) ?? monthStart
+            )
+        }
+    }
+    
+    private func monthKeyString(for monthStart: Date) -> String {
+        let f = DateFormatter(); f.locale = .init(identifier: "ja_JP"); f.dateFormat = "yyyy-MM"
+        return f.string(from: monthStart)
+    }
 }
