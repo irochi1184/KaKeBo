@@ -114,6 +114,8 @@ struct HomeView: View {
                 selectedMonth = monthStart(selectedMonth)
             }
 
+        }.onAppear {
+            store.applyFixedExpensesForCurrentMonth()
         }
     }
 }

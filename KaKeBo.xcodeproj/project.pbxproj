@@ -6,11 +6,68 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		73931F4E2EA0E7910089855D /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 73931F4D2EA0E7910089855D /* WidgetKit.framework */; };
+		73931F502EA0E7910089855D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 73931F4F2EA0E7910089855D /* SwiftUI.framework */; };
+		73931F612EA0E7980089855D /* KaKeBoWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 73931F4B2EA0E7910089855D /* KaKeBoWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		73931F5F2EA0E7980089855D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 739DEFC92E7FD6A000C4F358 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 73931F4A2EA0E7910089855D;
+			remoteInfo = KaKeBoWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		73931F622EA0E7980089855D /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				73931F612EA0E7980089855D /* KaKeBoWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		73931F4B2EA0E7910089855D /* KaKeBoWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KaKeBoWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		73931F4D2EA0E7910089855D /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		73931F4F2EA0E7910089855D /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		73931F682EA2B4200089855D /* KaKeBoWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KaKeBoWidgetExtension.entitlements; sourceTree = "<group>"; };
 		739DEFD12E7FD6A000C4F358 /* KaKeBo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KaKeBo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		73931F652EA0E7980089855D /* Exceptions for "KaKeBoWidget" folder in "KaKeBoWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 73931F4A2EA0E7910089855D /* KaKeBoWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		73931F512EA0E7910089855D /* KaKeBoWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				73931F652EA0E7980089855D /* Exceptions for "KaKeBoWidget" folder in "KaKeBoWidgetExtension" target */,
+			);
+			path = KaKeBoWidget;
+			sourceTree = "<group>";
+		};
+		73931F6F2EA2BB970089855D /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		739DEFD32E7FD6A000C4F358 /* KaKeBo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = KaKeBo;
@@ -19,6 +76,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		73931F482EA0E7910089855D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				73931F502EA0E7910089855D /* SwiftUI.framework in Frameworks */,
+				73931F4E2EA0E7910089855D /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		739DEFCE2E7FD6A000C4F358 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -29,10 +95,23 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		73931F4C2EA0E7910089855D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				73931F4D2EA0E7910089855D /* WidgetKit.framework */,
+				73931F4F2EA0E7910089855D /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		739DEFC82E7FD6A000C4F358 = {
 			isa = PBXGroup;
 			children = (
+				73931F6F2EA2BB970089855D /* Shared */,
+				73931F682EA2B4200089855D /* KaKeBoWidgetExtension.entitlements */,
 				739DEFD32E7FD6A000C4F358 /* KaKeBo */,
+				73931F512EA0E7910089855D /* KaKeBoWidget */,
+				73931F4C2EA0E7910089855D /* Frameworks */,
 				739DEFD22E7FD6A000C4F358 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +120,7 @@
 			isa = PBXGroup;
 			children = (
 				739DEFD12E7FD6A000C4F358 /* KaKeBo.app */,
+				73931F4B2EA0E7910089855D /* KaKeBoWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,6 +128,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		73931F4A2EA0E7910089855D /* KaKeBoWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 73931F662EA0E7980089855D /* Build configuration list for PBXNativeTarget "KaKeBoWidgetExtension" */;
+			buildPhases = (
+				73931F472EA0E7910089855D /* Sources */,
+				73931F482EA0E7910089855D /* Frameworks */,
+				73931F492EA0E7910089855D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				73931F512EA0E7910089855D /* KaKeBoWidget */,
+				73931F6F2EA2BB970089855D /* Shared */,
+			);
+			name = KaKeBoWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = KaKeBoWidgetExtension;
+			productReference = 73931F4B2EA0E7910089855D /* KaKeBoWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		739DEFD02E7FD6A000C4F358 /* KaKeBo */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 739DEFDE2E7FD6A300C4F358 /* Build configuration list for PBXNativeTarget "KaKeBo" */;
@@ -55,12 +158,15 @@
 				739DEFCD2E7FD6A000C4F358 /* Sources */,
 				739DEFCE2E7FD6A000C4F358 /* Frameworks */,
 				739DEFCF2E7FD6A000C4F358 /* Resources */,
+				73931F622EA0E7980089855D /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				73931F602EA0E7980089855D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
+				73931F6F2EA2BB970089855D /* Shared */,
 				739DEFD32E7FD6A000C4F358 /* KaKeBo */,
 			);
 			name = KaKeBo;
@@ -80,6 +186,9 @@
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					73931F4A2EA0E7910089855D = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
 					739DEFD02E7FD6A000C4F358 = {
 						CreatedOnToolsVersion = 26.0;
 					};
@@ -100,11 +209,19 @@
 			projectRoot = "";
 			targets = (
 				739DEFD02E7FD6A000C4F358 /* KaKeBo */,
+				73931F4A2EA0E7910089855D /* KaKeBoWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		73931F492EA0E7910089855D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		739DEFCF2E7FD6A000C4F358 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -115,6 +232,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		73931F472EA0E7910089855D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		739DEFCD2E7FD6A000C4F358 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -124,7 +248,77 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		73931F602EA0E7980089855D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 73931F4A2EA0E7910089855D /* KaKeBoWidgetExtension */;
+			targetProxy = 73931F5F2EA0E7980089855D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		73931F632EA0E7980089855D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = KaKeBoWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XX3ULK22EF;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KaKeBoWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = KaKeBoWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo.KaKeBoWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		73931F642EA0E7980089855D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = KaKeBoWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XX3ULK22EF;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KaKeBoWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = KaKeBoWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo.KaKeBoWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		739DEFDC2E7FD6A300C4F358 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -251,6 +445,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = KaKeBo/KaKeBo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XX3ULK22EF;
@@ -285,6 +480,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = KaKeBo/KaKeBo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XX3ULK22EF;
@@ -317,6 +513,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		73931F662EA0E7980089855D /* Build configuration list for PBXNativeTarget "KaKeBoWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				73931F632EA0E7980089855D /* Debug */,
+				73931F642EA0E7980089855D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		739DEFCC2E7FD6A000C4F358 /* Build configuration list for PBXProject "KaKeBo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

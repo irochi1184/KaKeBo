@@ -1,5 +1,5 @@
 //
-//  Views/SettingsView.swift
+//  Views/Settings/SettingsView.swift
 //  KaKeBo
 //
 //  Created by 有田健一郎 on 2025/09/22.
@@ -25,6 +25,7 @@ struct SettingsView: View {
     enum Sheet: Identifiable {
         case categories
         case recurringTodos
+        case fixedExpenses
         var id: String { "sheet-\(self)" }
     }
     
@@ -78,7 +79,7 @@ struct SettingsView: View {
                 }
                 Section("カテゴリ") {
                     Button {
-                        sheet = .categories                 // ← ここだけ
+                        sheet = .categories
                     } label: {
                         HStack {
                             Label("カテゴリを管理", systemImage: "square.grid.2x2")
@@ -97,6 +98,18 @@ struct SettingsView: View {
                             Label("毎月のToDoを管理", systemImage: "calendar.badge.clock")
                             Spacer()
                             Text("\(recurringCount)件")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Section("固定費（毎月の定額支出）") {
+                    Button {
+                        sheet = .fixedExpenses
+                    } label: {
+                        HStack {
+                            Label("固定費を管理", systemImage: "yensign.circle")
+                            Spacer()
+                            Text(fixedCountText)
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -124,10 +137,21 @@ struct SettingsView: View {
                     // iPad/Macでも確実に画面っぽく出るように
                     .presentationDetents([.large, .medium])
                     .presentationDragIndicator(.visible)
+                    
                 case .recurringTodos:
                     NavigationStack {
                         RecurringTodoSettingsView()
                             .navigationTitle("毎月のToDo")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
+                    
+                case .fixedExpenses:
+                    NavigationStack {
+                        FixedExpenseSettingsView()          // ← 新規（次章）
+                            .environmentObject(store)
+                            .navigationTitle("固定費")
                             .navigationBarTitleDisplayMode(.inline)
                     }
                     .presentationDetents([.large, .medium])
@@ -145,4 +169,11 @@ struct SettingsView: View {
             await ReminderManager.cancel(id: ReminderManager.dailyId)
         }
     }
+    
+    private var fixedCountText: String {
+        let data = UserDefaults.standard.data(forKey: DataStore.fixedTemplatesKey) ?? Data()
+        let count = (try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data))?.count ?? 0
+        return "\(count)件"
+    }
+
 }

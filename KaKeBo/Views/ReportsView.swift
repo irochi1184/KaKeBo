@@ -32,7 +32,7 @@ struct ReportsView: View {
                 HStack(spacing: 12) {
                     YearPicker(selectedYear: $year, availableYears: availableYears)
                     Spacer()
-                    ShareLink(item: csvData(), preview: SharePreview("\(year)年レポート", image: Image(systemName: "doc")))
+                    ShareLink(item: csvData(), preview: SharePreview("\(String(year))年レポート", image: Image(systemName: "doc")))
                     {
                         Image(systemName: "square.and.arrow.up")
                             .font(.headline)
