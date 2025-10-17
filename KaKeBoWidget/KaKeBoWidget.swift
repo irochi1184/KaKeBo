@@ -175,6 +175,146 @@ private func nextMidnightPlus5m(from: Date = Date()) -> Date {
     return nextReload
 }
 
+// --- Lightweight category reader (Widget side) ---
+private struct WCategory: Decodable, Identifiable {
+    let id: UUID
+    let name: String
+    let symbolName: String
+    let colorHex: String
+}
+
+private struct WCategoryStore {
+    let categories: [UUID: WCategory]
+    init() {
+        guard let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.id) else {
+            self.categories = [:]
+            return
+        }
+        let url = base.appendingPathComponent("categories.json")
+        if let data = try? Data(contentsOf: url),
+           let list = try? JSONDecoder().decode([WCategory].self, from: data) {
+            var dict: [UUID: WCategory] = [:]
+            list.forEach { dict[$0.id] = $0 }
+            self.categories = dict
+        } else {
+            self.categories = [:]
+        }
+    }
+}
+
+private func colorFromHex(_ hex: String) -> Color {
+    // Expect formats like "#RRGGBB" or "RRGGBB"
+    var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+    if s.hasPrefix("#") { s.removeFirst() }
+    guard s.count == 6, let val = Int(s, radix: 16) else { return .gray }
+    let r = Double((val >> 16) & 0xFF) / 255.0
+    let g = Double((val >> 8) & 0xFF) / 255.0
+    let b = Double(val & 0xFF) / 255.0
+    return Color(red: r, green: g, blue: b)
+}
+
+private struct WSlice: Identifiable {
+    let id: UUID
+    let name: String
+    let value: Int
+    let color: Color
+}
+
+// Removed unused widgetPalette
+
+// Helper to build expense slices for current month
+private func expenseSlicesThisMonth() -> [WSlice] {
+    let store = WStore()
+    let catStore = WCategoryStore()
+    let cal = Calendar.current
+    let start = cal.date(from: cal.dateComponents([.year, .month], from: Date()))!
+    let expenseTx = store.transactions.filter {
+        cal.isDate($0.date, equalTo: start, toGranularity: .month) &&
+        $0.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "expense"
+    }
+    var byCat: [UUID: Int] = [:]
+    for tx in expenseTx { byCat[tx.categoryId, default: 0] += tx.amount }
+    let sorted = byCat.sorted { $0.value > $1.value }
+    return sorted.enumerated().map { (idx, pair) in
+        let cat = catStore.categories[pair.key]
+        let name = cat?.name ?? "カテゴリ"
+        let color = colorFromHex(cat?.colorHex ?? "")
+        return WSlice(id: pair.key, name: name, value: pair.value, color: color)
+    }
+}
+
+private func currency(_ n: Int) -> String {
+    let f = NumberFormatter()
+    f.numberStyle = .decimal
+    f.groupingSeparator = ","
+    return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
+}
+
+private struct BackgroundModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        Group {
+            if #available(iOS 17.0, *) {
+                content.containerBackground(.background, for: .widget)
+            } else {
+                content.background(Color(.secondarySystemBackground))
+            }
+        }
+    }
+}
+
+// --- Added DonutView for donut chart ---
+private struct DonutView: View {
+    let slices: [WSlice]
+    let lineWidth: CGFloat
+    
+    private struct Arc: Identifiable {
+        let id: UUID
+        let start: CGFloat
+        let end: CGFloat
+        let color: Color
+    }
+    
+    private var arcs: [Arc] {
+        let total = max(1, slices.reduce(0) { $0 + $1.value })
+        var acc: CGFloat = 0
+        return slices.map { s in
+            let frac = CGFloat(s.value) / CGFloat(total)
+            let start = acc
+            let end = acc + frac
+            acc = end
+            return Arc(id: s.id, start: start, end: end, color: s.color)
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                Circle().stroke(Color.secondary.opacity(0.15), lineWidth: lineWidth)
+                ForEach(arcs) { a in
+                    Circle()
+                        .trim(from: a.start, to: a.end)
+                        .stroke(a.color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                }
+            }
+            .rotationEffect(.degrees(-90))
+            
+            // Simple legend for top 2 slices
+            let top2 = Array(slices.prefix(3))
+            VStack(spacing: 2) {
+                ForEach(top2, id: \.id) { s in
+                    HStack(spacing: 3) {
+                        Circle().fill(s.color).frame(width: 6, height: 6)
+                        Text(s.name).font(.system(size: 10, design: .default))
+                        Spacer()
+                        Text(currency(s.value)).font(.system(size: 10, design: .default)).monospacedDigit()
+                    }
+                }
+                Text("・・・").font(.system(size: 6, design: .default))
+            }
+        }
+    }
+}
+
 struct KaKeBoWidgetEntryView: View {
     var entry: SimpleEntry
     @Environment(\.widgetFamily) private var family
@@ -184,6 +324,8 @@ struct KaKeBoWidgetEntryView: View {
             switch family {
             case .systemSmall:
                 smallLayout
+            case .systemMedium:
+                mediumLayout
             default:
                 regularLayout
             }
@@ -243,6 +385,34 @@ struct KaKeBoWidgetEntryView: View {
         }
     }
     
+    // --- Added mediumLayout with donut chart ---
+    private var mediumLayout: some View {
+        HStack(alignment: .center, spacing: 10) {
+            // Left: reuse compact info similar to small
+            VStack(alignment: .leading, spacing: 6) {
+                Text("今月の収支").font(.caption).foregroundStyle(.secondary)
+                Text(currency(entry.payload.balance))
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .foregroundStyle(entry.payload.balance >= 0 ? .green : .red)
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                VStack(spacing: 4) {
+                    pill(title: "支出", value: entry.payload.expense, icon: "arrow.down.left.circle.fill", base: .red)
+                    pill(title: "収入", value: entry.payload.income, icon: "arrow.up.right.circle.fill", base: .green)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Right: donut
+            VStack(alignment: .center) {
+                DonutView(slices: expenseSlicesThisMonth(), lineWidth: 12)
+                    .frame(width: 130, height: 130)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(3)
+    }
+    
     private func pill(title: String, value: Int, icon: String, base: Color) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon).foregroundStyle(.white)
@@ -274,18 +444,6 @@ struct KaKeBoWidgetEntryView: View {
     }()
 }
 
-private struct BackgroundModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        Group {
-            if #available(iOS 17.0, *) {
-                content.containerBackground(.background, for: .widget)
-            } else {
-                content.background(Color(.secondarySystemBackground))
-            }
-        }
-    }
-}
-
 struct KaKeBoWidget: Widget {
     let kind: String = "KaKeBoWidget"
 
@@ -298,11 +456,3 @@ struct KaKeBoWidget: Widget {
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
-
-#Preview(as: .systemSmall) {
-    KaKeBoWidget()
-} timeline: {
-    SimpleEntry(date: .now, payload: .init(income: 120000, expense: 80000))
-    SimpleEntry(date: .now.addingTimeInterval(3600), payload: .init(income: 120000, expense: 90000))
-}
-
