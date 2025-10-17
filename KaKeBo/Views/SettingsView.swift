@@ -78,7 +78,7 @@ struct SettingsView: View {
                 }
                 Section("カテゴリ") {
                     Button {
-                        sheet = .categories                 // ← ここだけ
+                        sheet = .categories
                     } label: {
                         HStack {
                             Label("カテゴリを管理", systemImage: "square.grid.2x2")

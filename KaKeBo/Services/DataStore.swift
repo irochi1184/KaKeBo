@@ -61,13 +61,25 @@ final class DataStore: ObservableObject {
 
     private func seed() {
         categories = [
-            Category(name: "食費", symbolName: "cart", color: .green),
-            Category(name: "交通", symbolName: "tram.fill", color: .blue),
-            Category(name: "娯楽", symbolName: "gamecontroller.fill", color: .purple),
-            Category(name: "収入", symbolName: "banknote", color: .orange),
+            // 支出（頻度順）
+            Category(name: "食費",     symbolName: "fork.knife",                 color: .red),
+            Category(name: "日用品費", symbolName: "bag.fill",                   color: .orange),
+            Category(name: "水道光熱費", symbolName: "lightbulb.fill",           color: .blue),
+            Category(name: "交通費",   symbolName: "tram.fill",                  color: .teal),
+            Category(name: "通信料",   symbolName: "wifi",                       color: .indigo),
+            Category(name: "住宅費",   symbolName: "house.fill",                 color: .brown),
+            Category(name: "医療費",   symbolName: "cross.case.fill",            color: .pink),
+            Category(name: "被服費",   symbolName: "tshirt.fill",                color: .purple),
+            Category(name: "交際費",   symbolName: "gift.fill",                  color: .mint),
+            Category(name: "娯楽費",   symbolName: "gamecontroller.fill",        color: .green),
+            
+            // 収入
+            Category(name: "給与",     symbolName: "banknote",                   color: .green),
+            Category(name: "その他収入", symbolName: "yensign.circle.fill",       color: .cyan),
         ]
         save()
     }
+
 
     // MARK: - CRUD
     func addTransaction(_ tx: Transaction) {
@@ -204,5 +216,18 @@ extension DataStore {
         guard let idx = transactions.firstIndex(where: { $0.id == tx.id }) else { return }
         transactions[idx] = tx
         saveTransactions()
+    }
+    
+    func moveCategories(from offsets: IndexSet, to destination: Int) {
+        categories.move(fromOffsets: offsets, toOffset: destination)
+        saveCategories()
+    }
+    
+    /// 複数IDまとめて削除（カテゴリ＆紐づく取引）
+    func deleteCategories(with ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        categories.removeAll { ids.contains($0.id) }
+        transactions.removeAll { ids.contains($0.categoryId) }
+        save()
     }
 }
