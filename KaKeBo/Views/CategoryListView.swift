@@ -113,7 +113,6 @@ struct CategoryEditorView: View {
     @State private var color: Color = .blue
     private var editingId: UUID? = nil
     
-    // Category? を受け取り、State を初期化
     init(category: Category?) {
         if let c = category {
             _name = State(initialValue: c.name)
@@ -136,12 +135,24 @@ struct CategoryEditorView: View {
                     HStack {
                         Text("アイコン")
                         Spacer()
-                        Image(systemName: symbolName).foregroundStyle(color)
+                        Image(systemName: symbolName)
+                            .foregroundStyle(color)
                     }
                 }
             }
             .navigationTitle(editingId == nil ? "カテゴリ追加" : "カテゴリ編集")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // 新規追加時のみ「閉じる」を表示
+                if editingId == nil {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("閉じる") {
+                            dismiss()
+                        }
+                    }
+                }
+                
+                // 右上：保存ボタン（共通）
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("保存") {
                         let cat = Category(
@@ -157,6 +168,7 @@ struct CategoryEditorView: View {
                         }
                         dismiss()
                     }
+                    .buttonStyle(.borderedProminent)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
