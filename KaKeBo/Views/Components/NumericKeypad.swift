@@ -14,81 +14,98 @@ struct NumericKeypad: View {
     var maxDigits: Int = 9
     var showLeadingZero: Bool = false
     var style: Style = .attached
-    var isIncome: Bool = false       // ← ★ 追加：緑/赤の切替フラグ
+    var isIncome: Bool = false
+    // サイズ調整用
+    var sizeScale: CGFloat = 1.0               // 例: 0.8 で2割小さく
+    var preferredHeightRatio: CGFloat? = nil    // 例: 0.33 で画面高の1/3
+    var onHeightChange: ((CGFloat) -> Void)? = nil
+    var onTapClose: (() -> Void)? = nil
     
     @Environment(\.colorScheme) private var scheme
-    
-    private let digits: [String] = [
-        "1","2","3",
-        "4","5","6",
-        "7","8","9",
-        "00","0","⌫"
-    ]
+    private let digits = ["1","2","3","4","5","6","7","8","9","00","0","⌫"]
     
     var body: some View {
-        VStack(spacing: 12) {
+        content
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { onHeightChange?(proxy.size.height) }
+                        .onChange(of: proxy.size.height) { oldValue, newValue in
+                            onHeightChange?(newValue)
+                        }
+                }
+            )
+    }
+    
+    @ViewBuilder
+    private var content: some View {
+        VStack(spacing: 12 * sizeScale) {
             // 金額表示
             Text("¥ " + formatted(amount))
-                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .font(.system(size: 34 * sizeScale, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .allowsTightening(true)
                 .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.horizontal, 16)
-                .foregroundStyle(labelColor) // ← ★ 金額表示も色味合わせ
+                .padding(.horizontal, 16 * sizeScale)
+                .foregroundStyle(labelColor)
             
             // クイック加算
-            HStack(spacing: 8) {
+            HStack(spacing: 8 * sizeScale) {
                 ForEach([1000, 3000, 5000, 10000], id: \.self) { add in
                     Button {
-                        applyQuickAdd(add)
-                        haptic(.light)
+                        applyQuickAdd(add); haptic(.light)
                     } label: {
                         Text("+\(decimal(add))")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.system(size: 13 * sizeScale, weight: .semibold, design: .default))
                             .monospacedDigit()
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6 * sizeScale)
+                            .padding(.horizontal, 10 * sizeScale)
                             .background(Capsule().fill(chipBackground))
-                            .overlay(Capsule().stroke(chipBorder, lineWidth: 1))
+                            .overlay(Capsule().stroke(chipBorder, lineWidth: 1 * sizeScale))
                             .foregroundStyle(chipLabel)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 16 * sizeScale)
             
             // テンキー
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10 * sizeScale), count: 3),
+                      spacing: 10 * sizeScale) {
                 ForEach(digits, id: \.self) { key in
                     KeyButton(
                         title: key,
                         prominent: key == "⌫",
-                        tint: keyButtonTint,         // ← ★ 色パラメータ渡す
-                        action: {
-                            tap(key)
-                            haptic(.soft)
-                        },
+                        tint: keyButtonTint,
+                        action: { tap(key); haptic(.soft) },
                         longPress: {
-                            if key == "⌫" {
-                                amount = 0
-                                haptic(.rigid)
-                            }
+                            if key == "⌫" { amount = 0; haptic(.rigid) }
                         }
                     )
-                    .frame(height: 54)
+                    .frame(height: 54 * sizeScale) // ★ ボタン高さを縮小
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+                      .padding(.horizontal, 16 * sizeScale)
+                      .padding(.bottom, 8 * sizeScale)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 10 * sizeScale)
         .background(containerBackground)
         .overlay(topHairline, alignment: .top)
         .clipShape(containerShape)
         .shadow(color: shadowColor, radius: shadowRadius, y: shadowY)
         .padding(containerPadding)
+        
+        // ★ 親から比率を指定されたら、その高さに合わせる
+        .frame(height: preferredHeightRatio.map { UIScreen.main.bounds.height * $0 })
+        .overlay(alignment: .topTrailing) {
+            if let onTapClose {
+                CloseKeyboardButton { onTapClose() }
+                    .padding(.top, 8)
+                    .padding(.trailing, 10)
+            }
+        }
     }
     
     // MARK: - カラー系定義
@@ -219,17 +236,20 @@ private struct KeyButton: View {
     let action: () -> Void
     var longPress: (() -> Void)? = nil
     
+    var sizeScale: CGFloat = 1.0
+    
     var body: some View {
         Button(action: action) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 12 * sizeScale)
                     .fill(.thinMaterial)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(tint.opacity(0.7), lineWidth: 1.2)
+                        RoundedRectangle(cornerRadius: 12 * sizeScale)
+                            .stroke(tint.opacity(0.7), lineWidth: 1.2 * sizeScale)
                     )
                 Text(title)
-                    .font(.system(size: title == "⌫" ? 22 : 24, weight: prominent ? .semibold : .medium))
+                    .font(.system(size: (title == "⌫" ? 22 : 24) * sizeScale,
+                                  weight: prominent ? .semibold : .medium))
                     .foregroundStyle(.primary)
             }
         }

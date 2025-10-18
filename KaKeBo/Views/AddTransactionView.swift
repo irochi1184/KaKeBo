@@ -10,7 +10,7 @@ import SwiftUI
 struct AddTransactionView: View {
     @EnvironmentObject var store: DataStore
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var scheme   // ← 追加
+    @Environment(\.colorScheme) private var scheme
     
     @State private var date: Date = Date()
     @State private var amount: Int = 0
@@ -22,6 +22,9 @@ struct AddTransactionView: View {
     @State private var isKeyboardVisible = false
     // ▼ メモのフォーカス管理（キーボードの「閉じる」ボタン用）
     @FocusState private var memoFocused: Bool
+    @State private var showCustomKeypad = true
+    @State private var keypadHeight: CGFloat = 0
+    @StateObject private var kb = KeyboardHeightReader()
     
     init(
         defaultCategoryId: UUID? = nil,
@@ -46,16 +49,52 @@ struct AddTransactionView: View {
                 .toolbar { toolbarContent }
                 // ▼ キーボードが見えてない時だけ電卓を出す
                 .safeAreaInset(edge: .bottom) {
-                    if !isKeyboardVisible {
-                        NumericKeypad(amount: $amount, maxDigits: 9, style: .attached, isIncome: type == .income)
+                    if showCustomKeypad {
+                        NumericKeypad(
+                            amount: $amount,
+                            maxDigits: 9,
+                            style: .attached,
+                            isIncome: type == .income,
+                            sizeScale: 0.85,
+                            preferredHeightRatio: 0.33,
+                            onHeightChange: { h in keypadHeight = h }  // ← ここで高さ受け取り
+                        )
                     }
                 }
-                // ▼ キーボードの出入りを監視して isKeyboardVisible を更新
+                .overlay(alignment: .bottomTrailing) {
+                    if showCustomKeypad {
+                        // ツールバーと同じ見た目にしたければ、共通化したボタンを使う
+                        CloseKeyboardButton {
+                            showCustomKeypad = false
+                        }
+                        .padding(.trailing, 12)
+                        .padding(.bottom, keypadHeight + 8)  // ← キーボードの“上”に浮かせる
+                    }
+                }
+                // システムキーボード時の「閉じる」をツールバー無しで重ねる
+                .overlay(alignment: .bottomTrailing) {
+                    // メモにフォーカス & キーボードが出ている時のみ表示
+                    if memoFocused && kb.height > 0 {
+                        CloseKeyboardButton {
+                            memoFocused = false       // ← システムKBを閉じる
+                            showCustomKeypad = false  // ← 念のため自作も閉じる
+                        }
+                        .padding(.trailing, 12)
+                        .padding(.bottom, 8) // “キーボードの上” に浮かせる
+                        .animation(.easeInOut(duration: 0.2), value: kb.height)
+                    }
+                }
+                // ▼ システムキーボードが出たら自作キーボードは閉じる（メモ編集などのとき）
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                    withAnimation(.easeInOut(duration: 0.2)) { isKeyboardVisible = true }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isKeyboardVisible = true
+                        showCustomKeypad = false
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                    withAnimation(.easeInOut(duration: 0.2)) { isKeyboardVisible = false }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isKeyboardVisible = false
+                    }
                 }
         }
     }
@@ -70,7 +109,7 @@ struct AddTransactionView: View {
                 CategorySelector(selectedCategoryId: $selectedCategoryId)
                     .environmentObject(store)
                 
-                Spacer(minLength: 60) // 電卓に重ならないよう余白
+                Spacer(minLength: showCustomKeypad ? 60 : 0) // 電卓に重ならないよう余白
             }
             .padding(.top, 12)
             .padding(.horizontal)
@@ -80,7 +119,7 @@ struct AddTransactionView: View {
     private var metaSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             TypePillSelector(type: $type)
-            
+            // ▼ 日付
             VStack(alignment: .leading, spacing: 6) {
                 Text("日付")
                     .font(.footnote.weight(.semibold))
@@ -91,7 +130,35 @@ struct AddTransactionView: View {
                     .labelsHidden()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            
+            // ▼ 金額入力欄
+            VStack(alignment: .leading, spacing: 6) {
+                Text("金額").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                
+                // 疑似入力欄
+                HStack {
+                    Spacer()
+                    Text(currency(amount))
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                }
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.secondary.opacity(0.1))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.secondary.opacity(0.2))
+                )
+                .contentShape(Rectangle())                  // 余白までタップ可
+                .onTapGesture {
+                    // メモのフォーカスを外してシステムKBを閉じる → 自作キーパッドを出す
+                    memoFocused = false
+                    withAnimation(.easeInOut(duration: 0.2)) { showCustomKeypad = true }
+                }
+                .accessibilityAddTraits(.isButton)
+            }
+            // ▼ メモ入力欄
             VStack(alignment: .leading, spacing: 6) {
                 Text("メモ（任意）")
                     .font(.footnote.weight(.semibold))
@@ -101,6 +168,14 @@ struct AddTransactionView: View {
                     .focused($memoFocused) // ← フォーカス監視
             }
         }
+    }
+    
+    // 通貨整形
+    private func currency(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
     }
     
     private var bgGradient: LinearGradient {
@@ -141,11 +216,6 @@ struct AddTransactionView: View {
                 save()
             }
         }
-        // ▼ キーボード上に「閉じる」ボタン
-        ToolbarItemGroup(placement: .keyboard) {
-            Spacer()
-            Button("閉じる") { memoFocused = false }
-        }
     }
     
     // MARK: - Actions
@@ -179,9 +249,34 @@ struct SaveButton: View {
             Button("保存", action: action)
                 .buttonStyle(.borderedProminent)  // 有効 = 青
         } else {
-            Button("保存", action: {})            // 無効時は何もしない
-                .buttonStyle(.bordered)           // 無効 = 枠のみ
+            Button("保存", action: {})
+                .buttonStyle(.bordered)
                 .disabled(true)
         }
+    }
+}
+
+struct CloseKeyboardButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Label("閉じる", systemImage: "keyboard.chevron.compact.down")
+                .imageScale(.medium)
+                .font(.body.weight(.semibold))
+                .padding(.vertical, 9)
+                .padding(.horizontal, 13)
+                .frame(minHeight: 42)
+                .background(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous) // 14 → 16
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 0.8)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())                           // 余白もヒット領域に
+        .shadow(color: .black.opacity(0.14), radius: 12, y: 3) // 少しだけ強めに
     }
 }
