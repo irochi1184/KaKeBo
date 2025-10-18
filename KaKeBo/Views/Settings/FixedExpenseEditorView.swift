@@ -12,6 +12,7 @@ struct FixedExpenseEditorView: View {
     let categories: [Category]
     let onSave: (FixedExpenseTemplate) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
     
     @State private var title: String = ""
     @State private var amount: Int = 0
@@ -20,103 +21,258 @@ struct FixedExpenseEditorView: View {
     @State private var memo: String = ""
     @State private var isActive: Bool = true
     
+    // UI用：金額テキスト（フォーマット & 入力受け）
+    @State private var amountText: String = ""
+    
+    // カテゴリ選択シート
+    @State private var showCategorySheet = false
+    // 日付選択シート
+    @State private var showDaySheet = false
+    
     init(initial: FixedExpenseTemplate?, categories: [Category], onSave: @escaping (FixedExpenseTemplate) -> Void) {
         self.initial = initial
         self.categories = categories
         self.onSave = onSave
         if let t = initial {
-            _title = State(initialValue: t.title)
-            _amount = State(initialValue: t.amount)
-            _dayOfMonth = State(initialValue: t.dayOfMonth)
-            _categoryId = State(initialValue: t.categoryId)
-            _memo = State(initialValue: t.memo ?? "")
-            _isActive = State(initialValue: t.isActive)
+            _title       = State(initialValue: t.title)
+            _amount      = State(initialValue: t.amount)
+            _dayOfMonth  = State(initialValue: t.dayOfMonth)
+            _categoryId  = State(initialValue: t.categoryId)
+            _memo        = State(initialValue: t.memo ?? "")
+            _isActive    = State(initialValue: t.isActive)
+            _amountText  = State(initialValue: Self.currency(t.amount))
         } else {
-            _categoryId = State(initialValue: categories.first?.id)
+            _categoryId  = State(initialValue: categories.first?.id)
+            _amountText  = State(initialValue: "")
         }
     }
     
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("名称（例：家賃）", text: $title)
-                    amountField
-                    dayPicker
-                    categoryPicker
-                    TextField("メモ（任意）", text: $memo)
+            ScrollView {
+                VStack(spacing: 16) {
+                    card {
+                        labeledField("名称") {
+                            TextField("家賃 / 駐車場 / 電気代 …", text: $title)
+                                .textInputAutocapitalization(.none)
+                        }
+                        dividerHairline
+                        labeledField("金額") {
+                            HStack(spacing: 8) {
+                                TextField("¥80,000", text: $amountText)
+                                    .textInputAutocapitalization(.none)
+                                    .keyboardType(.numberPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .font(.title3.weight(.semibold))
+                                    .monospacedDigit()
+                                    .onChange(of: amountText) { _, new in
+                                        let digits = new.filter(\.isNumber)
+                                        amount = Int(digits) ?? 0
+                                    }
+                            }
+                        }
+                    }
+                    
+                    card {
+                        Button {
+                            showDaySheet = true
+                        } label: {
+                            rowButton(title: "支払日",
+                                      subtitle: dayOfMonth == 0 ? "毎月・月末" : "毎月 \(dayOfMonth) 日",
+                                      iconName: "calendar",
+                                      trailing: "chevron.right")
+                        }
+                        dividerHairline
+                        Button {
+                            showCategorySheet = true
+                        } label: {
+                            rowButton(
+                                title: "カテゴリ",
+                                subtitle: selectedCategory?.name ?? "未選択",
+                                iconView: AnyView(                              // ← AnyView で包む
+                                    Group {
+                                        if let c = selectedCategory {
+                                            Circle().fill(c.color.opacity(0.16))
+                                                .frame(width: 24, height: 24)
+                                                .overlay(Image(systemName: c.symbolName).foregroundStyle(c.color))
+                                        } else {
+                                            Image(systemName: "tag").foregroundStyle(.secondary)
+                                        }
+                                    }
+                                                 ),
+                                trailing: "chevron.right"
+                            )
+                        }
+                    }
+                    
+                    card {
+                        labeledField("メモ（任意）") {
+                            TextField("例：口座引き落とし / 請求書払い など", text: $memo)
+                                .textInputAutocapitalization(.none)
+                        }
+                        dividerHairline
+                        HStack {
+                            Label("有効にする", systemImage: isActive ? "checkmark.circle.fill" : "circle")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Toggle("", isOn: $isActive).labelsHidden()
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    
+                    Spacer(minLength: 8)
                 }
-                Section {
-                    Toggle("有効にする", isOn: $isActive)
-                }
+                .padding(.horizontal)
+                .padding(.top, 12)
             }
+            .background(gradientBG.ignoresSafeArea())
             .navigationTitle(initial == nil ? "固定費を追加" : "固定費を編集")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("閉じる") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("保存") {
+                        amountText = Self.currency(amount) // 仕上げで整形
                         if let t = currentTemplate() {
                             onSave(t)
                             dismiss()
                         }
                     }
+                    .buttonStyle(.borderedProminent)
                     .disabled(!canSave)
                 }
             }
-        }
-    }
-    
-    private var amountField: some View {
-        HStack {
-            Text("金額")
-            Spacer()
-            TextField("0", value: $amount, formatter: intFormatter)
-                .keyboardType(.numberPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 120)
-        }
-    }
-    
-    private var dayPicker: some View {
-        HStack {
-            Text("日付")
-            Spacer()
-            Picker("", selection: $dayOfMonth) {
-                Text("月末").tag(0)
-                ForEach(1...31, id: \.self) { d in
-                    Text("\(d)日").tag(d)
+            .sheet(isPresented: $showCategorySheet) { categoryPickerSheet }
+            .sheet(isPresented: $showDaySheet) { dayPickerSheet }
+            .onAppear {
+                // 初回にフォーマット整える
+                if amount > 0 && amountText.isEmpty {
+                    amountText = Self.currency(amount)
                 }
             }
-            .pickerStyle(.menu)
         }
     }
     
-    private var categoryPicker: some View {
-        HStack {
-            Text("カテゴリ")
+    // MARK: - Cards & Rows
+    
+    @ViewBuilder
+    private func card<Content: View>(pad: CGFloat = 12, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) { content() }
+            .padding(pad)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.16), lineWidth: 0.8)
+                    )
+            )
+            .shadow(color: .black.opacity(scheme == .dark ? 0.25 : 0.06), radius: 14, y: 6)
+    }
+    
+    private var dividerHairline: some View {
+        Divider().opacity(0.6).padding(.vertical, 8)
+    }
+    
+    @ViewBuilder
+    private func labeledField<Content: View>(
+        _ title: String,
+        @ViewBuilder field: () -> Content
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
             Spacer()
-            Picker("", selection: Binding(
-                get: { categoryId ?? categories.first?.id ?? UUID() },
-                set: { categoryId = $0 }
-            )) {
-                ForEach(categories) { c in
-                    HStack {
-                        Image(systemName: c.symbolName).foregroundStyle(c.color)
+            field()
+        }
+    }
+    
+    @ViewBuilder
+    private func rowButton(
+        title: String,
+        subtitle: String,
+        iconName: String? = nil,
+        iconView: AnyView? = nil,
+        trailing: String? = nil
+    ) -> some View {
+        HStack(spacing: 12) {
+            if let iconView {
+                iconView
+            } else if let iconName {
+                Image(systemName: iconName).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                Text(subtitle).font(.subheadline.weight(.semibold))
+            }
+            Spacer()
+            if let trailing {
+                Image(systemName: trailing).foregroundStyle(.tertiary)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+    
+    // MARK: - Pickers in Sheets
+    
+    private var categoryPickerSheet: some View {
+        NavigationStack {
+            List(categories) { c in
+                Button {
+                    categoryId = c.id
+                    showCategorySheet = false
+                } label: {
+                    HStack(spacing: 12) {
+                        Circle().fill(c.color.opacity(0.16))
+                            .frame(width: 28, height: 28)
+                            .overlay(Image(systemName: c.symbolName).foregroundStyle(c.color))
                         Text(c.name)
+                        Spacer()
+                        if c.id == categoryId { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
                     }
-                    .tag(c.id)
                 }
+                .buttonStyle(.plain)
             }
-            .pickerStyle(.menu)
+            .navigationTitle("カテゴリを選択")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("閉じる") { showCategorySheet = false } }
+            }
         }
+        .presentationDetents([.medium, .large])
     }
     
-    private var intFormatter: NumberFormatter {
-        let f = NumberFormatter()
-        f.numberStyle = .none
-        return f
+    private var dayPickerSheet: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Picker("支払日", selection: $dayOfMonth) {
+                    Text("月末").tag(0)
+                    ForEach(1...31, id: \.self) { d in
+                        Text("\(d) 日").tag(d)
+                    }
+                }
+                .pickerStyle(.wheel)
+                .frame(maxHeight: 180)
+                
+                Text(dayOfMonth == 0 ? "毎月の最終日に計上" : "毎月 \(dayOfMonth) 日に計上")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("支払日を選択")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完了") { showDaySheet = false } } }
+        }
+        .presentationDetents([.height(260), .large])
+    }
+    
+    // MARK: - Utils
+    
+    private var selectedCategory: Category? {
+        guard let id = categoryId else { return nil }
+        return categories.first(where: { $0.id == id })
     }
     
     private var canSave: Bool {
@@ -134,5 +290,20 @@ struct FixedExpenseEditorView: View {
             memo: memo.isEmpty ? nil : memo,
             isActive: isActive
         )
+    }
+    
+    private var gradientBG: LinearGradient {
+        let colors: [Color] = (scheme == .dark)
+        ? [Color.black, Color(white: 0.12)]
+        : [Color(white: 0.98), Color(white: 0.94)]
+        return LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom)
+    }
+    
+    // 通貨整形（3桁区切り・円マーク）
+    private static func currency(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
     }
 }
