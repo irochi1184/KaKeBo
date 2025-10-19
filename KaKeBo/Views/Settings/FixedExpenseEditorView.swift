@@ -263,9 +263,10 @@ struct FixedExpenseEditorView: View {
             }
             .padding()
             .navigationTitle("支払日を選択")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完了") { showDaySheet = false } } }
         }
-        .presentationDetents([.height(260), .large])
+        .presentationDetents([.height(300), .large])
     }
     
     // MARK: - Utils
