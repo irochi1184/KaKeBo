@@ -118,9 +118,11 @@ struct EditTransactionView: View {
         }
         .sheet(isPresented: $showAddCategory) {
             NavigationStack {
-                CategoryEditorView(category: (nil as Category?))
-                    .environmentObject(store)
-                    .navigationTitle("カテゴリ追加")
+                CategoryEditorView(category: nil) { newCat in
+                    selectedCategoryId = newCat.id
+                }
+                .environmentObject(store)
+                .navigationTitle("カテゴリ追加")
             }
         }
     }
