@@ -25,6 +25,7 @@ struct AddTransactionView: View {
     @State private var showCustomKeypad = true
     @State private var keypadHeight: CGFloat = 0
     @StateObject private var kb = KeyboardHeightReader()
+    @State private var showAddCategory = false
     
     init(
         defaultCategoryId: UUID? = nil,
@@ -106,13 +107,23 @@ struct AddTransactionView: View {
             VStack(spacing: 18) {
                 metaSection.luxCard()
                 
-                CategorySelector(selectedCategoryId: $selectedCategoryId)
-                    .environmentObject(store)
+                CategorySelector(
+                    selectedCategoryId: $selectedCategoryId,
+                    onTapAdd: { showAddCategory = true }
+                )
+                .environmentObject(store)
                 
                 Spacer(minLength: showCustomKeypad ? 60 : 0) // 電卓に重ならないよう余白
             }
             .padding(.top, 12)
             .padding(.horizontal)
+        }
+        .sheet(isPresented: $showAddCategory) {
+            NavigationStack {
+                CategoryEditorView(category: (nil as Category?))
+                    .environmentObject(store)
+                    .navigationTitle("カテゴリ追加")
+            }
         }
     }
     
