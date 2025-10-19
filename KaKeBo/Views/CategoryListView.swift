@@ -112,8 +112,10 @@ struct CategoryEditorView: View {
     @State private var symbolName: String = "tag.fill"
     @State private var color: Color = .blue
     private var editingId: UUID? = nil
+    var onSaved: ((Category) -> Void)? = nil
     
-    init(category: Category?) {
+    init(category: Category?, onSaved: ((Category) -> Void)? = nil) {
+        self.onSaved = onSaved
         if let c = category {
             _name = State(initialValue: c.name)
             _symbolName = State(initialValue: c.symbolName)
@@ -166,6 +168,7 @@ struct CategoryEditorView: View {
                         } else {
                             store.updateCategory(cat)
                         }
+                        onSaved?(cat)
                         dismiss()
                     }
                     .buttonStyle(.borderedProminent)

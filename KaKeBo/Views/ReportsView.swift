@@ -272,8 +272,24 @@ private struct MonthlyBarsAndCumLine: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading)
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 6)) { v in
+                AxisGridLine().foregroundStyle(.secondary.opacity(0.2))
+                AxisTick()
+                AxisValueLabel {
+                    if let val = v.as(Double.self) {
+                        Text(yAxisLabel(val))
+                    }
+                }
+            }
         }
+    }
+    
+    private func yAxisLabel(_ v: Double) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        f.maximumFractionDigits = 0
+        return f.string(from: NSNumber(value: v)) ?? "\(Int(v))"
     }
     
     private func cumulative(monthlyIncome: [Int], monthlyExpense: [Int]) -> [Int] {

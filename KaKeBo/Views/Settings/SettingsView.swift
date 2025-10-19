@@ -6,23 +6,27 @@
 //
 
 import SwiftUI
+import UserNotifications
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject var store: DataStore
     
     @AppStorage("reminder.enabled") private var enabled: Bool = true
     @AppStorage("reminder.time") private var timeRaw: Double = defaultTime.timeIntervalSinceReferenceDate
+    // ▼ リマインダー統一：Settings 内で共有する ToDo ストア（今日の件数評価などに使う）
+    @StateObject private var todoStore = TodoStore()
     
     @Environment(\.dismiss) private var dismiss
-    @State private var notifAuthorized = false
     @State private var sheet: Sheet?
     
     @AppStorage("kakebo.recurring.templates") private var templatesData: Data = Data()
     @State private var templates: [RecurringTodoTemplate] = []
-    @State private var newTitle: String = ""
-    @State private var newDay: Int = 0 // 0=月末, 1...31
+    @State private var showNotifAlert = false
+    @State private var notifMessage: String = "現在通知の許可設定ができていません。iOSの「設定」アプリから通知を許可してください。"
     
     enum Sheet: Identifiable {
+        case reminders
         case categories
         case recurringTodos
         case fixedExpenses
@@ -46,37 +50,53 @@ struct SettingsView: View {
             templates = items
         }
     }
-    
     private func saveTemplates() {
         templatesData = (try? JSONEncoder().encode(templates)) ?? Data()
     }
-    
     private var recurringCount: Int {
         (try? JSONDecoder().decode([RecurringTodoTemplate].self, from: templatesData))?.count ?? 0
+    }
+    private var fixedCountText: String {
+        let data = UserDefaults.standard.data(forKey: DataStore.fixedTemplatesKey) ?? Data()
+        let count = (try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data))?.count ?? 0
+        return "\(count)件"
+    }
+    private var reminderCountText: String {
+        let data = UserDefaults.standard.data(forKey: ReminderStore.storageKey) ?? Data()
+        let rules = (try? JSONDecoder().decode([ReminderRule].self, from: data)) ?? []
+        let enabled = rules.filter { $0.enabled }.count
+        return "有効 \(enabled)/\(rules.count) 件"
     }
     
     var body: some View {
         NavigationStack {
             Form {
+                // リマインダー（他と同じボタン→シート方式に統一）
                 Section("リマインダー") {
-                    Toggle("毎日通知する", isOn: $enabled)
-                        .onChange(of: enabled) { _, _ in
-                            Task { await applyScheduling() }
-                        }
-                    
-                    DatePicker(
-                        "時刻",
-                        selection: .init(
-                            get: { selectedTime },
-                            set: { newVal in
-                                timeRaw = newVal.timeIntervalSinceReferenceDate
-                                Task { await applyScheduling() }
+                    Button {
+                        Task {
+                            if await hasNotificationPermission() {
+                                sheet = .reminders
+                            } else {
+                                // 必要ならここで一度だけプロンプト:
+                                // let ok = await ReminderManager.requestAuthorization()
+                                // if ok { sheet = .reminders } else { showNotifAlert = true }
+                                
+                                notifMessage = "現在通知の許可設定ができていません。iOSの「設定」アプリ > 通知 > KaKeBo からオンにしてください。"
+                                showNotifAlert = true
                             }
-                        ),
-                        displayedComponents: .hourAndMinute
-                    )
-                    .disabled(!enabled)
+                        }
+                    } label: {
+                        HStack {
+                            Label("リマインダーを管理", systemImage: "bell.badge")
+                            Spacer()
+                            Text(reminderCountText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
+                
                 Section("カテゴリ") {
                     Button {
                         sheet = .categories
@@ -90,6 +110,7 @@ struct SettingsView: View {
                         }
                     }
                 }
+                
                 Section("毎月のToDo") {
                     Button {
                         sheet = .recurringTodos
@@ -98,10 +119,12 @@ struct SettingsView: View {
                             Label("毎月のToDoを管理", systemImage: "calendar.badge.clock")
                             Spacer()
                             Text("\(recurringCount)件")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
+                
                 Section("固定費（毎月の定額支出）") {
                     Button {
                         sheet = .fixedExpenses
@@ -110,7 +133,8 @@ struct SettingsView: View {
                             Label("固定費を管理", systemImage: "yensign.circle")
                             Spacer()
                             Text(fixedCountText)
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -118,23 +142,31 @@ struct SettingsView: View {
             .navigationTitle("設定")
             .onAppear {
                 loadTemplates()
+                // 今日の月データだけロード（通知の条件評価で使用）
+                let monthStart = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: Date()))!
+                todoStore.load(for: monthStart)
             }
             .onChange(of: templates) { _, _ in saveTemplates() }
-            .task {
-                notifAuthorized = await ReminderManager.requestAuthorization()
-                if enabled { await applyScheduling() }
-            }
             .sheet(item: $sheet) { s in
                 switch s {
+                case .reminders:
+                    NavigationStack {
+                        ReminderSettingsView()
+                            .environmentObject(store)
+                            .environmentObject(todoStore)
+                            .navigationTitle("リマインダー")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
+                    
                 case .categories:
-                    // カテゴリ画面を “中で” NavigationStack 付きで出すと安定
                     NavigationStack {
                         CategoryListView()
                             .environmentObject(store)
                             .navigationTitle("カテゴリ")
                             .navigationBarTitleDisplayMode(.inline)
                     }
-                    // iPad/Macでも確実に画面っぽく出るように
                     .presentationDetents([.large, .medium])
                     .presentationDragIndicator(.visible)
                     
@@ -149,7 +181,7 @@ struct SettingsView: View {
                     
                 case .fixedExpenses:
                     NavigationStack {
-                        FixedExpenseSettingsView()          // ← 新規（次章）
+                        FixedExpenseSettingsView()
                             .environmentObject(store)
                             .navigationTitle("固定費")
                             .navigationBarTitleDisplayMode(.inline)
@@ -158,6 +190,12 @@ struct SettingsView: View {
                     .presentationDragIndicator(.visible)
                 }
             }
+        }
+        .alert("通知が許可されていません", isPresented: $showNotifAlert) {
+            Button("設定を開く") { openAppSettings() }
+            Button("閉じる", role: .cancel) { }
+        } message: {
+            Text(notifMessage)
         }
     }
     
@@ -170,10 +208,25 @@ struct SettingsView: View {
         }
     }
     
-    private var fixedCountText: String {
-        let data = UserDefaults.standard.data(forKey: DataStore.fixedTemplatesKey) ?? Data()
-        let count = (try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data))?.count ?? 0
-        return "\(count)件"
+    private func openAppSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
     }
-
+    
+    /// 現在の通知権限を“問い合わせのみ”で確認（プロンプトは出さない）
+    private func hasNotificationPermission() async -> Bool {
+        await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            UNUserNotificationCenter.current().getNotificationSettings { s in
+                let ok: Bool = {
+                    switch s.authorizationStatus {
+                    case .authorized, .provisional, .ephemeral: return true
+                    default: return false
+                    }
+                }()
+                cont.resume(returning: ok)
+            }
+        }
+    }
+    
 }

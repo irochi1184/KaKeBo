@@ -36,10 +36,7 @@ struct CalendarScreen: View {
         }
     }
 
-    
-    // ★ 月別ToDo（この画面ローカルで保持・保存）
-    @State private var todos: [CalendarTodo] = []
-    @State private var newTodoTitle: String = ""
+    @StateObject private var todoStore = TodoStore()
     @State private var showOnlyUndone: Bool = false
     
     var body: some View {
@@ -60,28 +57,32 @@ struct CalendarScreen: View {
                     incomeBuckets: incomeBuckets,
                     maxExpense: maxExpenseInMonth,
                     maxIncome: maxIncomeInMonth,
-                    todoCounts: todoDueCounts,
+                    todoCounts: todoStore.dueCounts(in: month),
                     onTapDay: { day in
-                        sheet = .detail(day)      // ← 1タップは必ず詳細
+                        sheet = .detail(day)
                     },
                     onLongPressDay: { day in
-                        sheet = .add(day)         // ← 長押しは追加
+                        sheet = .add(day)
                     }
                 )
                 .padding(.horizontal)
                 
                 TodoListCard(
                     month: month,
-                    todos: filteredTodos,
-                    onToggle: { id in toggleTodo(id) },
-                    onDelete: { offsets in deleteTodos(offsets) },
-                    onEditDue: { id, newDate in setDue(id, newDate) },
-                    onQuickAdd: { tapped in handleQuickAdd(tapped) },
-                    onTapAdd: {    // 追加ボタンでシートを出す
-                        sheet = .todoAdd
+                    todos: showOnlyUndone ? todoStore.todos.filter{ !$0.done } : todoStore.todos,
+                    onToggle: { id in todoStore.toggle(id); todoStore.save(for: month) },
+                    onDelete: { offsets in
+                        let base = showOnlyUndone ? todoStore.todos.filter{ !$0.done } : todoStore.todos
+                        let ids = offsets.map { base[$0].id }
+                        todoStore.delete(ids: ids)
+                        todoStore.save(for: month)
                     },
+                    onEditDue: { id, newDate in todoStore.setDue(id, newDate); todoStore.save(for: month) },
+                    onQuickAdd: { tapped in handleQuickAdd(tapped) }, // 既存のまま
+                    onTapAdd: { sheet = .todoAdd },
                     showOnlyUndone: $showOnlyUndone
                 )
+                .environmentObject(todoStore)
                 .padding(.horizontal)
                 
                 Spacer(minLength: 8)
@@ -108,7 +109,9 @@ struct CalendarScreen: View {
             .sheet(item: $sheet) { s in
                 switch s {
                 case .detail(let date):
-                    DayDetailSheet(date: date).environmentObject(store)
+                    DayDetailSheet(date: date)
+                        .environmentObject(store)
+                        .environmentObject(todoStore)
                     
                 case .add(let date):
                     AddTransactionView(
@@ -134,17 +137,15 @@ struct CalendarScreen: View {
                         onAdd: { title, due in
                             let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !t.isEmpty else { return }
-                            todos.insert(.init(title: t, done: false, due: due), at: 0)
-                            saveTodos()
+                            todoStore.add(title: t, due: due)
+                            todoStore.save(for: month)
                         },
                         defaultMonth: month
                     )
                 }
             }
-            .onAppear { loadTodos(for: month) }                                  // ★ 初回ロード
-            .onChange(of: month) {                                               // ★ 月が変わったらロード
-                loadTodos(for: month)
-            }
+            .onAppear { todoStore.load(for: month) }
+            .onChange(of: month) { todoStore.load(for: month) }
         }
     }
     
@@ -190,95 +191,9 @@ struct CalendarScreen: View {
         return f.shortStandaloneWeekdaySymbols
     }
     
-    // MARK: - ToDo 永続化（UserDefaultsに月キーで保存）
-    private func key(for month: Date) -> String {
-        let f = DateFormatter(); f.locale = .init(identifier:"ja_JP"); f.dateFormat = "yyyy-MM"
-        return "kakebo.todos.\(f.string(from: month))"
-    }
-    private func loadTodos(for month: Date) {
-        let k = key(for: month)
-        if let data = UserDefaults.standard.data(forKey: k),
-           let items = try? JSONDecoder().decode([CalendarTodo].self, from: data) {
-            todos = items
-        } else {
-            todos = []
-        }
-        ensureRecurringTodos(for: month)
-    }
-    private func saveTodos() {
-        let k = key(for: month)
-        if let data = try? JSONEncoder().encode(todos) {
-            UserDefaults.standard.set(data, forKey: k)
-        }
-    }
-    
-    // MARK: - ToDo 操作
-    private var filteredTodos: [CalendarTodo] {
-        showOnlyUndone ? todos.filter { !$0.done } : todos
-    }
-    private func addTodo() {
-        let title = newTodoTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
-        todos.insert(.init(title: title, done: false, due: nil), at: 0)
-        newTodoTitle = ""
-        saveTodos()
-    }
-    private func toggleTodo(_ id: UUID) {
-        guard let i = todos.firstIndex(where: {$0.id == id}) else { return }
-        todos[i].done.toggle()
-        saveTodos()
-    }
-    private func deleteTodos(_ offsets: IndexSet) {
-        let ids = offsets.map { filteredTodos[$0].id }
-        todos.removeAll { ids.contains($0.id) }
-        saveTodos()
-    }
-    private func setDue(_ id: UUID, _ due: Date?) {
-        guard let i = todos.firstIndex(where: {$0.id == id}) else { return }
-        todos[i].due = due
-        saveTodos()
-    }
-    // ▼ ToDoの件数を“日付ごと”に集計（未完了のみ）
-    private var todoDueCounts: [Date: Int] {
-        var dict: [Date: Int] = [:]
-        let start = cal.date(from: cal.dateComponents([.year, .month], from: month))!
-        let end   = cal.date(byAdding: DateComponents(month: 1, day: -1), to: start)!
-        
-        // この月のToDoだけを対象（UserDefaultsに保存している想定なら loadTodos(for:) 済み）
-        for t in todos where t.done == false {
-            if let d = t.due {
-                // 当該月内だけカウント
-                if d >= start && d <= end {
-                    let key = cal.startOfDay(for: d)
-                    dict[key, default: 0] += 1
-                }
-            }
-        }
-        return dict
-    }
-    
     @AppStorage("kakebo.recurring.templates") private var templatesData: Data = Data()
     private var templates: [RecurringTodoTemplate] {
         (try? JSONDecoder().decode([RecurringTodoTemplate].self, from: templatesData)) ?? []
-    }
-    
-    private func ensureRecurringTodos(for month: Date) {
-        guard !templates.isEmpty else { return }
-        let active = templates.filter { $0.isActive }
-        
-        for t in active {
-            let due = computeDue(for: t, in: month)
-            
-            if let idx = todos.firstIndex(where: { $0.templateId == t.id }) {
-                todos[idx].due = due
-                todos[idx].title = t.title
-            } else {
-                todos.append(CalendarTodo(title: t.title, done: false, due: due, templateId: t.id))
-            }
-            
-            Task { await ReminderManager.scheduleMonthly(template: t, due: due, hour: 8) }
-        }
-        saveTodos()
     }
     
     // 31日→30/28日対応、0=月末
@@ -488,7 +403,7 @@ private struct TodoRow: View {
     }
 }
 
-private struct DuePopover: View {
+struct DuePopover: View {
     let month: Date
     @Binding var tempDate: Date
     let onSave: (Date) -> Void
