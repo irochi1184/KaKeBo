@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import UserNotifications
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject var store: DataStore
@@ -20,6 +22,8 @@ struct SettingsView: View {
     
     @AppStorage("kakebo.recurring.templates") private var templatesData: Data = Data()
     @State private var templates: [RecurringTodoTemplate] = []
+    @State private var showNotifAlert = false
+    @State private var notifMessage: String = "現在通知の許可設定ができていません。iOSの「設定」アプリから通知を許可してください。"
     
     enum Sheet: Identifiable {
         case reminders
@@ -70,7 +74,18 @@ struct SettingsView: View {
                 // リマインダー（他と同じボタン→シート方式に統一）
                 Section("リマインダー") {
                     Button {
-                        sheet = .reminders
+                        Task {
+                            if await hasNotificationPermission() {
+                                sheet = .reminders
+                            } else {
+                                // 必要ならここで一度だけプロンプト:
+                                // let ok = await ReminderManager.requestAuthorization()
+                                // if ok { sheet = .reminders } else { showNotifAlert = true }
+                                
+                                notifMessage = "現在通知の許可設定ができていません。iOSの「設定」アプリ > 通知 > KaKeBo からオンにしてください。"
+                                showNotifAlert = true
+                            }
+                        }
                     } label: {
                         HStack {
                             Label("リマインダーを管理", systemImage: "bell.badge")
@@ -176,6 +191,12 @@ struct SettingsView: View {
                 }
             }
         }
+        .alert("通知が許可されていません", isPresented: $showNotifAlert) {
+            Button("設定を開く") { openAppSettings() }
+            Button("閉じる", role: .cancel) { }
+        } message: {
+            Text(notifMessage)
+        }
     }
     
     private func applyScheduling() async {
@@ -184,6 +205,27 @@ struct SettingsView: View {
             await ReminderManager.scheduleDaily(hour: comps.hour ?? 21, minute: comps.minute ?? 0)
         } else {
             await ReminderManager.cancel(id: ReminderManager.dailyId)
+        }
+    }
+    
+    private func openAppSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+    }
+    
+    /// 現在の通知権限を“問い合わせのみ”で確認（プロンプトは出さない）
+    private func hasNotificationPermission() async -> Bool {
+        await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            UNUserNotificationCenter.current().getNotificationSettings { s in
+                let ok: Bool = {
+                    switch s.authorizationStatus {
+                    case .authorized, .provisional, .ephemeral: return true
+                    default: return false
+                    }
+                }()
+                cont.resume(returning: ok)
+            }
         }
     }
     
