@@ -11,6 +11,7 @@ import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
     
     @AppStorage("reminder.enabled") private var enabled: Bool = true
     @AppStorage("reminder.time") private var timeRaw: Double = defaultTime.timeIntervalSinceReferenceDate
@@ -26,10 +27,7 @@ struct SettingsView: View {
     @State private var notifMessage: String = "現在通知の許可設定ができていません。iOSの「設定」アプリから通知を許可してください。"
     
     enum Sheet: Identifiable {
-        case reminders
-        case categories
-        case recurringTodos
-        case fixedExpenses
+        case reminders, categories, recurringTodos, fixedExpenses, theme
         var id: String { "sheet-\(self)" }
     }
     
@@ -138,6 +136,18 @@ struct SettingsView: View {
                         }
                     }
                 }
+                Section("テーマ") {
+                    Button {
+                        sheet = .theme
+                    } label: {
+                        HStack {
+                            Label("テーマ管理", systemImage: "paintpalette")
+                            Spacer()
+                            Text("Homeのみ適用")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
             .navigationTitle("設定")
             .onAppear {
@@ -188,6 +198,16 @@ struct SettingsView: View {
                     }
                     .presentationDetents([.large, .medium])
                     .presentationDragIndicator(.visible)
+                    
+                case .theme:
+                    NavigationStack {
+                        ThemeSettingsView()
+                            .navigationTitle("テーマ管理")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
+
                 }
             }
         }
