@@ -93,9 +93,17 @@ struct HomeView: View {
                     .layoutPriority(1)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAdd = true } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("新規追加")
-                        .tint(themeStore.theme.accentColor(for: scheme))
+                    let accent = themeStore.theme.accentColor(for: scheme)
+                    Button {
+                        showAdd = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(accent)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent.opacity(0.2))
+                    .accessibilityLabel("新規追加")
                 }
             }
             .sheet(isPresented: $showAdd) {

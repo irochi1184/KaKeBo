@@ -9,6 +9,7 @@ import SwiftUI
 
 struct EditTransactionView: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     
@@ -116,6 +117,7 @@ struct EditTransactionView: View {
             .padding(.top, 12)
             .padding(.horizontal)
         }
+        .background(themeStore.theme.backgroundColor(for: scheme))
         .sheet(isPresented: $showAddCategory) {
             NavigationStack {
                 CategoryEditorView(category: nil) { newCat in
@@ -177,7 +179,17 @@ struct EditTransactionView: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
                 TextField("例：昼食／スタバ など", text: $memo)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(themeStore.theme.backgroundColor(for: scheme))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(.secondary.opacity(0.2), lineWidth: 1)
+                    )
                     .focused($memoFocused)
             }
         }
@@ -214,9 +226,11 @@ struct EditTransactionView: View {
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button("保存") { save() }
-                .buttonStyle(.borderedProminent)
-                .disabled(store.categories.isEmpty || amount == 0 || selectedCategoryId == nil)
+            let isEnabled = !(store.categories.isEmpty || amount == 0 || selectedCategoryId == nil)
+            
+            SaveButton(isEnabled: isEnabled, accent: themeStore.theme.accentColor(for: scheme)) {
+                save()
+            }
         }
     }
     

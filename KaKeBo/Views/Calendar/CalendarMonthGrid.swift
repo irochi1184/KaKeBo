@@ -16,6 +16,7 @@ struct CalendarMonthGrid: View {
     let maxExpense: Int
     let maxIncome:  Int
     let todoCounts: [Date: Int]
+    let accent: Color
     let onTapDay: (Date) -> Void
     let onLongPressDay: (Date) -> Void
     
@@ -36,7 +37,8 @@ struct CalendarMonthGrid: View {
                         maxExpense: maxExpense,
                         maxIncome: maxIncome,
                         isToday: cal.isDateInToday(day),
-                        todoCount: todoCounts[k] ?? 0
+                        todoCount: todoCounts[k] ?? 0,
+                        accent: accent
                     )
                     .onTapGesture { onTapDay(day) }
                     .onLongPressGesture(minimumDuration: 0.3) { onLongPressDay(day) }
@@ -84,6 +86,7 @@ private struct DayCell: View {
     let maxIncome: Int
     let isToday: Bool
     let todoCount: Int
+    let accent: Color
     
     private var cal: Calendar { Calendar.current }
     
@@ -91,7 +94,7 @@ private struct DayCell: View {
         ZStack(alignment: .topLeading) {   // ← 右上から左上に変更
             // 枠
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .stroke(isToday ? .blue.opacity(0.6) : .secondary.opacity(0.15),
+                .stroke(isToday ? accent.opacity(0.6) : accent.opacity(0.15),
                         lineWidth: isToday ? 2 : 1)
             
             VStack(spacing: 4) {
@@ -127,7 +130,7 @@ private struct DayCell: View {
                     .monospacedDigit()
                     .padding(.vertical, 1.8)   // ← 縦パディングを微調整
                     .padding(.horizontal, 4.5) // ← 横パディングを微調整
-                    .background(Capsule().fill(Color.accentColor.opacity(0.9)))
+                    .background(Capsule().fill(accent.opacity(0.9)))
                     .foregroundStyle(.white)
                     .padding(.leading, 4)
                     .padding(.top, 4)

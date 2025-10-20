@@ -9,6 +9,7 @@ import SwiftUI
 
 struct AddTransactionView: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     
@@ -118,6 +119,7 @@ struct AddTransactionView: View {
             .padding(.top, 12)
             .padding(.horizontal)
         }
+        .background(themeStore.theme.backgroundColor(for: scheme))
         .sheet(isPresented: $showAddCategory) {
             NavigationStack {
                 CategoryEditorView(category: nil) { newCat in
@@ -177,8 +179,18 @@ struct AddTransactionView: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
                 TextField("例：昼食／スタバ など", text: $memo)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($memoFocused) // ← フォーカス監視
+                    .textFieldStyle(.plain)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(themeStore.theme.backgroundColor(for: scheme))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(.secondary.opacity(0.2), lineWidth: 1)
+                    )
+                    .focused($memoFocused)
             }
         }
     }
@@ -225,7 +237,7 @@ struct AddTransactionView: View {
         ToolbarItem(placement: .topBarTrailing) {
             let isEnabled = !(store.categories.isEmpty || amount == 0 || selectedCategoryId == nil)
             
-            SaveButton(isEnabled: isEnabled) {
+            SaveButton(isEnabled: isEnabled, accent: themeStore.theme.accentColor(for: scheme)) {
                 save()
             }
         }
@@ -255,12 +267,14 @@ struct AddTransactionView: View {
 
 struct SaveButton: View {
     let isEnabled: Bool
+    let accent: Color
     let action: () -> Void
     
     var body: some View {
         if isEnabled {
             Button("保存", action: action)
-                .buttonStyle(.borderedProminent)  // 有効 = 青
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
         } else {
             Button("保存", action: {})
                 .buttonStyle(.bordered)
