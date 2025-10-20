@@ -9,11 +9,38 @@ import SwiftUI
 
 struct AppTheme: Codable, Equatable {
     var name: String = "Default"
-    var accentRGBA: RGBAColor = .init(Color(UIColor.systemBlue))
+    
+    // アクセント（ライト/ダーク個別 or 共通）
+    var useSameAccentForBoth: Bool = true
+    var accentLightRGBA: RGBAColor = .init(Color(UIColor.systemBlue))
+    var accentDarkRGBA:  RGBAColor = .init(Color(UIColor.systemBlue))
+    
+    // Home 背景（ライト/ダーク個別 or 共通）
+    var useSameBackgroundForBoth: Bool = true
+    var backgroundLightRGBA: RGBAColor = .init(Color(red: 0.98, green: 0.98, blue: 0.98))
+    var backgroundDarkRGBA:  RGBAColor = .init(Color(red: 0.06, green: 0.06, blue: 0.06))
+    
+    // 外観モード（アプリの実運用に使う）※プレビューは別途手動切替
     var allowSystemDarkMode: Bool = true
     var forceDarkMode: Bool = false
-    
-    // 追加したくなったら：背景色/カード色/テキスト色などを増やせます
+}
+
+// 現在のカラースキームに応じて色を解決
+extension AppTheme {
+    func backgroundColor(for scheme: ColorScheme) -> Color {
+        if useSameBackgroundForBoth {
+            return backgroundLightRGBA.swiftUIColor
+        } else {
+            return (scheme == .dark ? backgroundDarkRGBA.swiftUIColor : backgroundLightRGBA.swiftUIColor)
+        }
+    }
+    func accentColor(for scheme: ColorScheme) -> Color {
+        if useSameAccentForBoth {
+            return accentLightRGBA.swiftUIColor
+        } else {
+            return (scheme == .dark ? accentDarkRGBA.swiftUIColor : accentLightRGBA.swiftUIColor)
+        }
+    }
 }
 
 struct RGBAColor: Codable, Equatable {

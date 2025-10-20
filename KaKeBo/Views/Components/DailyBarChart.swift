@@ -18,7 +18,7 @@ struct DailyBarChart: View {
     let series: [DailyPoint]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("日別推移（今月・支出）")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -49,6 +49,7 @@ struct DailyBarChart: View {
                 }
             }
             .frame(height: 220)
+            .luxCard()
         }
     }
     

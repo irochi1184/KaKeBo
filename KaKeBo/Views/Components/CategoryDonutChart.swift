@@ -20,93 +20,90 @@ struct CategoryDonutChart: View {
     let currentTotal: Int
     let previousTotal: Int
     var minShareToShowLabel: Double = 0.08
-    var title: String = "カテゴリ別（今月）"
     var isExpense: Bool = true // 表示バッジの文言/色に反映
     
     @Environment(\.colorScheme) private var scheme
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 見出し行
-            HStack(alignment: .firstTextBaseline) {
-                HStack(spacing: 8) {
-                    // タイプチップ（支出/収入）
-                    Label(isExpense ? "支出" : "収入",
-                          systemImage: isExpense ? "arrow.down.circle" : "arrow.up.circle")
-                    .font(.caption.weight(.semibold))
-                    .padding(.vertical, 4).padding(.horizontal, 8)
-                    .background(
-                        Capsule().fill((isExpense ? Color.red : Color.green).opacity(0.15))
-                    )
-                    .foregroundStyle(isExpense ? .red : .green)
-                    
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                
-                Spacer()
-                
-                DiffBadge(
-                    current: currentTotal,
-                    previous: previousTotal,
-                    mode: isExpense ? .expense : .balance
-                )
-            }
-            
-            // ドーナツ
-            Chart(breakdown) { item in
-                SectorMark(
-                    angle: .value("金額", item.value),
-                    innerRadius: .ratio(0.62),
-                    outerRadius: .ratio(1.0)
-                )
-                .foregroundStyle(item.color)
-                .annotation(position: .overlay, alignment: .center) {
-                    if share(of: item) >= minShareToShowLabel {
-                        // 読みやすいラベル（ぼかし＋白字）
-                        VStack(spacing: 2) {
-                            Text(item.name)
-                                .font(.caption2.weight(.semibold))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                            Text(currency(item.value))
-                                .font(.caption2)
-                                .monospacedDigit()
-                        }
-                        .padding(.vertical, 3).padding(.horizontal, 6)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .overlay(Capsule().stroke(.white.opacity(0.15)))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
-                        .allowsHitTesting(false)
-                    }
-                }
-            }
-            .chartXAxis(.hidden)
-            .chartYAxis(.hidden)
-            .frame(height: 220)
-            .chartLegend(.hidden)
-            .chartPlotStyle { plot in
-                // プロット面も透けるように
-                plot.background(.clear)
-            }
-            .padding(.bottom, 15)
-            
-            // レジェンド（上位）
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(breakdown) { item in
+
+            VStack(alignment: .leading, spacing: 12) {
+                // 見出し行
+                HStack(alignment: .firstTextBaseline) {
                     HStack(spacing: 8) {
-                        Circle().fill(item.color).frame(width: 10, height: 10)
-                        Text(item.name).font(.caption)
-                        Spacer()
-                        Text(currency(item.value))
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
+                        // タイプチップ（支出/収入）
+                        Label(isExpense ? "支出" : "収入",
+                              systemImage: isExpense ? "arrow.down.circle" : "arrow.up.circle")
+                        .font(.caption.weight(.semibold))
+                        .padding(.vertical, 4).padding(.horizontal, 8)
+                        .background(
+                            Capsule().fill((isExpense ? Color.red : Color.green).opacity(0.15))
+                        )
+                        .foregroundStyle(isExpense ? .red : .green)
+                    }
+                    
+                    Spacer()
+                    
+                    DiffBadge(
+                        current: currentTotal,
+                        previous: previousTotal,
+                        mode: isExpense ? .expense : .balance
+                    )
+                }
+                
+                // ドーナツ
+                Chart(breakdown) { item in
+                    SectorMark(
+                        angle: .value("金額", item.value),
+                        innerRadius: .ratio(0.62),
+                        outerRadius: .ratio(1.0)
+                    )
+                    .foregroundStyle(item.color)
+                    .annotation(position: .overlay, alignment: .center) {
+                        if share(of: item) >= minShareToShowLabel {
+                            // 読みやすいラベル（ぼかし＋白字）
+                            VStack(spacing: 2) {
+                                Text(item.name)
+                                    .font(.caption2.weight(.semibold))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                Text(currency(item.value))
+                                    .font(.caption2)
+                                    .monospacedDigit()
+                            }
+                            .padding(.vertical, 3).padding(.horizontal, 6)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .overlay(Capsule().stroke(.white.opacity(0.15)))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                            .allowsHitTesting(false)
+                        }
+                    }
+                }
+                .chartXAxis(.hidden)
+                .chartYAxis(.hidden)
+                .frame(height: 220)
+                .chartLegend(.hidden)
+                .chartPlotStyle { plot in
+                    // プロット面も透けるように
+                    plot.background(.clear)
+                }
+                .padding(.bottom, 15)
+                
+                // レジェンド（上位）
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    ForEach(breakdown) { item in
+                        HStack(spacing: 8) {
+                            Circle().fill(item.color).frame(width: 10, height: 10)
+                            Text(item.name).font(.caption)
+                            Spacer()
+                            Text(currency(item.value))
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
-        }
+//            .luxCard()
     }
     
     // MARK: - Helpers
@@ -193,15 +190,10 @@ struct CategoryDonutPager: View {
         let pagerHeight = max(requiredHeight(forCount: expense.count),
                               requiredHeight(forCount: income.count))
         
-        VStack(spacing: 8) {
-            
-            // ▼ お好みで：セグメントでも切り替え可能に
-//            Picker("", selection: $page) {
-//                Text("支出").tag(0)
-//                Text("収入").tag(1)
-//            }
-//            .pickerStyle(.segmented)
-//            .padding(.horizontal)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("カテゴリ別グラフ")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
             
             ZStack {
                 TabView(selection: $page) {
@@ -211,7 +203,6 @@ struct CategoryDonutPager: View {
                             breakdown: expense,
                             currentTotal: expenseCurrentTotal,
                             previousTotal: expensePreviousTotal,
-                            title: "カテゴリ別",
                             isExpense: true
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -224,7 +215,6 @@ struct CategoryDonutPager: View {
                             breakdown: income,
                             currentTotal: incomeCurrentTotal,
                             previousTotal: incomePreviousTotal,
-                            title: "カテゴリ別",
                             isExpense: false
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -260,7 +250,7 @@ struct CategoryDonutPager: View {
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(.secondary)
                             .opacity(page == 1 ? 0.25 : 0.9)
-                            .padding(0)
+                            .padding(4)
                             .background(.ultraThinMaterial, in: Circle())
                     }
                     .disabled(page == 1)
@@ -272,9 +262,8 @@ struct CategoryDonutPager: View {
                 .zIndex(10)
             }
             .frame(height: pagerHeight)   // ← 動的高さ
+            .luxCard()
         }
-        .padding(.top, 6)
-        .glassCard()
     }
     
     // MARK: - 高さ見積り
