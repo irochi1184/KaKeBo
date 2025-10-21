@@ -10,6 +10,7 @@ import Charts
 
 struct HomeView: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
     @State private var showAdd = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var hSize
@@ -32,6 +33,7 @@ struct HomeView: View {
                         expense: monthExpense,
                         balance: monthBalance
                     )
+                    .luxCard()
                     .padding(.horizontal)
                     
                     // 円グラフ：カテゴリ別支出比率（選択月）
@@ -44,7 +46,7 @@ struct HomeView: View {
                             incomeCurrentTotal: monthIncome,              // 今月の収入合計
                             incomePreviousTotal: prevMonthIncome          // 先月の収入合計
                         )
-                        .glassCard()
+                        .luxCard()
                         .padding(.horizontal)
                     }
                     
@@ -75,19 +77,15 @@ struct HomeView: View {
                 .padding(.top, 0)
             }
             .background(
-                LinearGradient(
-                    colors: scheme == .dark
-                    ? [Color.black, Color(white: 0.15)]
-                    : [Color(white: 0.98), Color(white: 0.94)],
-                    startPoint: .top, endPoint: .bottom
-                ).ignoresSafeArea()
+                themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea()
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     YearMonthHeader(
                         month: $selectedMonth,
-                        title: monthTitleForToolbar(selectedMonth, compact: hSize == .compact)
+                        title: monthTitleForToolbar(selectedMonth, compact: hSize == .compact),
+                        accent: themeStore.theme.accentColor(for: scheme)
                     )
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -95,10 +93,17 @@ struct HomeView: View {
                     .layoutPriority(1)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    let accent = themeStore.theme.accentColor(for: scheme)
                     Button {
                         showAdd = true
-                    } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("新規追加")
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(accent)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent.opacity(0.2))
+                    .accessibilityLabel("新規追加")
                 }
             }
             .sheet(isPresented: $showAdd) {
@@ -194,7 +199,6 @@ extension HomeView {
             .sorted { $0.date > $1.date }
     }
 
-    
     // 表示用
     private func monthTitle(_ date: Date) -> String {
         let f = DateFormatter()
@@ -285,7 +289,7 @@ private struct TransactionListCard: View {
     let onDeleteIDs: ([UUID]) -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("履歴")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)

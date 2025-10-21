@@ -13,25 +13,26 @@ struct MonthlyHeaderCard: View {
     let balance: Int
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("今月の収支")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(currency(balance))
-                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                    .foregroundStyle(balance >= 0 ? Color.green : Color.red)
-                    .contentTransition(.numericText()) // iOS17+
+        VStack(alignment: .leading, spacing: 6) {
+            Text("今月の収支")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            VStack(spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Spacer()
+                    Text(currency(balance))
+                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                        .foregroundStyle(balance >= 0 ? Color.green : Color.red)
+                        .contentTransition(.numericText()) // iOS17+
+                }
+                
+                HStack(spacing: 12) {
+                    StatPill(title: "支出", value: expense, icon: "arrow.down.left.circle.fill", base: .red)
+                    StatPill(title: "収入", value: income, icon: "arrow.up.right.circle.fill", base: .green)
+                }
             }
-            
-            HStack(spacing: 12) {
-                StatPill(title: "支出", value: expense, icon: "arrow.down.left.circle.fill", base: .red)
-                StatPill(title: "収入", value: income, icon: "arrow.up.right.circle.fill", base: .green)
-            }
+            .luxCard()
         }
-        .luxCard()
-        .padding(.horizontal)
     }
     
     private func currency(_ n: Int) -> String {

@@ -7,8 +7,6 @@
 
 import SwiftUI
 
-import SwiftUI
-
 struct DayDetailSheet: View {
     @EnvironmentObject var store: DataStore
     @Environment(\.dismiss) private var dismiss
@@ -16,11 +14,12 @@ struct DayDetailSheet: View {
     private var dayTodos: [CalendarTodo] { todoStore.todos(on: date) }
     
     let date: Date
+    let accent: Color
     private var cal: Calendar { .current }
     
     @State private var editingTx: Transaction? = nil
     @State private var showAdd = false
-    @State private var showAddTodoAlert = false
+    @State private var showAddTodoSheet = false
     @State private var pendingNewTitle: String = ""
     
     private var dayTx: [Transaction] {
@@ -77,6 +76,7 @@ struct DayDetailSheet: View {
                                         } label: {
                                             Label("削除", systemImage: "trash")
                                         }
+                                        .tint(.red)
                                     }
                                 }
                             }
@@ -96,6 +96,7 @@ struct DayDetailSheet: View {
                                 DayTodoRow(
                                     date: date,
                                     todo: t,
+                                    accent: accent,
                                     onToggle: { id in
                                         todoStore.toggle(id)
                                         todoStore.save(for: date)
@@ -121,10 +122,11 @@ struct DayDetailSheet: View {
                     } footer: {
                         Button {
                             pendingNewTitle = ""
-                            showAddTodoAlert = true
+                            showAddTodoSheet = true
                         } label: {
                             Label("この日にToDoを追加", systemImage: "plus.circle.fill")
                         }
+                        .tint(accent)
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -142,8 +144,11 @@ struct DayDetailSheet: View {
                         showAdd = true
                     } label: {
                         Image(systemName: "plus")
-                            .imageScale(.large)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(accent)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent.opacity(0.2))
                 }
             }
             // 編集シート
@@ -160,17 +165,21 @@ struct DayDetailSheet: View {
                 )
                 .environmentObject(store)
             }
-            .alert("ToDoを追加", isPresented: $showAddTodoAlert) {
-                TextField("タイトル", text: $pendingNewTitle)
-                Button("追加") {
-                    let t = pendingNewTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !t.isEmpty else { return }
-                    todoStore.add(title: t, due: date) // この日を既定の期日に
-                    todoStore.save(for: date)
-                }
-                Button("キャンセル", role: .cancel) {}
-            } message: {
-                Text("この日のToDoを追加します")
+            .sheet(isPresented: $showAddTodoSheet) {
+                AddTodoMiniSheet(
+                    accent: accent,
+                    title: $pendingNewTitle,
+                    onAdd: {
+                        let t = pendingNewTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !t.isEmpty else { return }
+                        todoStore.add(title: t, due: date)
+                        todoStore.save(for: date)
+                        showAddTodoSheet = false
+                    },
+                    onCancel: { showAddTodoSheet = false }
+                )
+                .presentationDetents([.height(200)])   // ← “アラート風”の小ぶりサイズ
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -198,6 +207,7 @@ struct DayDetailSheet: View {
     private struct DayTodoRow: View {
         let date: Date
         let todo: CalendarTodo
+        let accent: Color
         let onToggle: (UUID) -> Void
         let onEditDue: (UUID, Date?) -> Void
         let onRename: (UUID, String) -> Void
@@ -218,7 +228,7 @@ struct DayDetailSheet: View {
                     Image(systemName: todo.done ? "checkmark.circle.fill" : "circle")
                         .font(.title3)
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(todo.done ? .green : .secondary)
+                        .foregroundStyle(accent)
                 }
                 .buttonStyle(.plain)
                 
@@ -298,6 +308,7 @@ struct DayDetailSheet: View {
             .popover(isPresented: $showDuePicker, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
                 DuePopover(
                     month: date,
+                    accent: accent,
                     tempDate: $tempDue,
                     onSave: { newDate in
                         onEditDue(todo.id, newDate)
@@ -334,3 +345,38 @@ struct DayDetailSheet: View {
     }
 }
 
+private struct AddTodoMiniSheet: View {
+    let accent: Color
+    @Binding var title: String
+    let onAdd: () -> Void
+    let onCancel: () -> Void
+    @FocusState private var focused: Bool
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("ToDoを追加")
+                .font(.headline)
+            
+            TextField("タイトル（例：電気代の支払い）", text: $title)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .submitLabel(.done)
+                .onAppear { focused = true }
+            
+            HStack {
+                Button("キャンセル", role: .cancel) { onCancel() }
+                    .tint(.red)
+                Spacer()
+                Button {
+                    onAdd()
+                } label: {
+                    Text("追加")
+                        .frame(minWidth: 60, minHeight: 30)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+            }
+        }
+        .padding(16)
+    }
+}

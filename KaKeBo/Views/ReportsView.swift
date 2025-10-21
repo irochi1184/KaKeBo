@@ -17,6 +17,7 @@ struct YoYSummary {
 
 struct ReportsView: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
     @Environment(\.colorScheme) private var scheme
     
     // 表示対象の年（初期は今年）
@@ -25,12 +26,14 @@ struct ReportsView: View {
     @State private var stackedBars: Bool = true
     
     var body: some View {
+        let accent = themeStore.theme.accentColor(for: scheme)
         ScrollView {
             VStack(spacing: 16) {
                 
                 // MARK: Year selector + Export
                 HStack(spacing: 12) {
                     YearPicker(selectedYear: $year, availableYears: availableYears)
+                        .tint(accent)
                     Spacer()
                     ShareLink(item: csvData(), preview: SharePreview("\(String(year))年レポート", image: Image(systemName: "doc")))
                     {
@@ -39,6 +42,7 @@ struct ReportsView: View {
                             .padding(10)
                             .background(Circle().fill(.thinMaterial))
                     }
+                    .tint(accent)
                 }
                 .padding(.horizontal)
                 
@@ -50,6 +54,7 @@ struct ReportsView: View {
                     savingsRate: yearSavingsRate,
                     avgExpense: avgExpensePerMonth
                 )
+                .luxCard()
                 .padding(.horizontal)
                 
                 // MARK: 月別 収入/支出 バー + 累積残高 ライン
@@ -60,6 +65,7 @@ struct ReportsView: View {
                         Toggle(isOn: $stackedBars) {
                             Text(stackedBars ? "積み上げ" : "並列")
                         }
+                        .tint(accent)
                         .toggleStyle(.switch)
                         .labelsHidden()
                     }
@@ -68,7 +74,8 @@ struct ReportsView: View {
                     MonthlyBarsAndCumLine(
                         monthlyIncome: monthlyIncome,
                         monthlyExpense: monthlyExpense,
-                        stacked: stackedBars
+                        stacked: stackedBars,
+                        accent: accent
                     )
                     .frame(height: 240)
                 }
@@ -125,10 +132,9 @@ struct ReportsView: View {
             }
             .padding(.top, 12)
         }
-        .background(LinearGradient(
-            colors: scheme == .dark ? [Color.black, Color(white: 0.12)] : [Color(white: 0.98), Color(white: 0.94)],
-            startPoint: .top, endPoint: .bottom
-        ).ignoresSafeArea())
+        .background(
+            themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea()
+        )
         .navigationTitle("レポート")
         .onAppear {
             // データが今年に無ければ、最新年に寄せる
@@ -213,6 +219,7 @@ private struct MonthlyBarsAndCumLine: View {
     let monthlyIncome: [Int]   // 1..12
     let monthlyExpense: [Int]  // 1..12
     let stacked: Bool
+    let accent: Color
     
     var body: some View {
         Chart {
@@ -255,13 +262,13 @@ private struct MonthlyBarsAndCumLine: View {
                     y: .value("累積残高", cum[m-1])
                 )
                 .interpolationMethod(.catmullRom)
-                .foregroundStyle(.blue)
+                .foregroundStyle(accent)
                 .lineStyle(StrokeStyle(lineWidth: 2.0))
                 PointMark(
                     x: .value("月", m),
                     y: .value("累積残高", cum[m-1])
                 )
-                .foregroundStyle(.blue)
+                .foregroundStyle(accent)
             }
         }
         .chartXAxis {

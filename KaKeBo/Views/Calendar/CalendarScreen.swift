@@ -9,13 +9,13 @@ import SwiftUI
 
 struct CalendarScreen: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     public var cal: Calendar { .current }
-    
-    // 年月
+    @StateObject private var keyboard = KeyboardHeightReader()
+
     @State private var month: Date = Calendar.current.date(from:Calendar.current.dateComponents([.year,.month], from: .now)
     ) ?? .now
-    
-    // どのシートを出すか（単一ソース・オブ・トゥルース）
     @State private var sheet: Sheet?
     
     // CalendarScreen 内（struct の先頭付近）にある enum Sheet を“この形”に置き換え
@@ -40,36 +40,44 @@ struct CalendarScreen: View {
     @State private var showOnlyUndone: Bool = false
     
     var body: some View {
+        let accent = themeStore.theme.accentColor(for: scheme)
         NavigationStack {
             VStack(spacing: 12) {
-                // 曜日ヘッダー
-                HStack {
-                    ForEach(weekdaySymbolsJP, id: \.self) { w in
-                        Text(w).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                Group {
+                    if keyboard.height == 0 {
+                        // 曜日ヘッダー
+                        HStack {
+                            ForEach(weekdaySymbolsJP, id: \.self) { w in
+                                Text(w)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        
+                        // 月グリッド
+                        CalendarMonthGrid(
+                            month: month,
+                            expenseBuckets: expenseBuckets,
+                            incomeBuckets: incomeBuckets,
+                            maxExpense: maxExpenseInMonth,
+                            maxIncome: maxIncomeInMonth,
+                            todoCounts: todoStore.dueCounts(in: month),
+                            accent: accent,
+                            onTapDay: { day in sheet = .detail(day) },
+                            onLongPressDay: { day in sheet = .add(day) }
+                        )
+                        .padding(.horizontal)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
-                .padding(.horizontal, 8)
-                
-                // 月グリッド
-                CalendarMonthGrid(
-                    month: month,
-                    expenseBuckets: expenseBuckets,
-                    incomeBuckets: incomeBuckets,
-                    maxExpense: maxExpenseInMonth,
-                    maxIncome: maxIncomeInMonth,
-                    todoCounts: todoStore.dueCounts(in: month),
-                    onTapDay: { day in
-                        sheet = .detail(day)
-                    },
-                    onLongPressDay: { day in
-                        sheet = .add(day)
-                    }
-                )
-                .padding(.horizontal)
                 
                 TodoListCard(
                     month: month,
                     todos: showOnlyUndone ? todoStore.todos.filter{ !$0.done } : todoStore.todos,
+                    accent: accent,
                     onToggle: { id in todoStore.toggle(id); todoStore.save(for: month) },
                     onDelete: { offsets in
                         let base = showOnlyUndone ? todoStore.todos.filter{ !$0.done } : todoStore.todos
@@ -78,7 +86,8 @@ struct CalendarScreen: View {
                         todoStore.save(for: month)
                     },
                     onEditDue: { id, newDate in todoStore.setDue(id, newDate); todoStore.save(for: month) },
-                    onQuickAdd: { tapped in handleQuickAdd(tapped) }, // 既存のまま
+                    onQuickAdd: { tapped in handleQuickAdd(tapped) },
+                    onRename: { id, newTitle in todoStore.rename(id, newTitle); todoStore.save(for: month) },
                     onTapAdd: { sheet = .todoAdd },
                     showOnlyUndone: $showOnlyUndone
                 )
@@ -87,29 +96,39 @@ struct CalendarScreen: View {
                 
                 Spacer(minLength: 8)
             }
+            .background(
+                themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea()
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     YearMonthHeader(
                         month: $month,
-                        title: title(month)  // "yyyy年M月"
+                        title: title(month),
+                        accent: accent
                     )
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                     .allowsTightening(true)
                 }
                 
-                // 右上の「支出追加」ボタンはそのまま
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         sheet = .add(.now)
-                    } label: { Image(systemName: "plus") }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(accent)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent.opacity(0.2))
+                    .accessibilityLabel("新規追加")
                 }
             }
             .sheet(item: $sheet) { s in
                 switch s {
                 case .detail(let date):
-                    DayDetailSheet(date: date)
+                    DayDetailSheet(date: date, accent: accent)
                         .environmentObject(store)
                         .environmentObject(todoStore)
                     
@@ -134,6 +153,7 @@ struct CalendarScreen: View {
                     .environmentObject(store)
                 case .todoAdd:
                     TodoAddSheet(
+                        accent: accent,
                         onAdd: { title, due in
                             let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !t.isEmpty else { return }
@@ -146,6 +166,12 @@ struct CalendarScreen: View {
             }
             .onAppear { todoStore.load(for: month) }
             .onChange(of: month) { todoStore.load(for: month) }
+        }
+        .safeAreaInset(edge: .bottom) {
+            // キーボードの重なり分だけ下に “空き” を作る
+            Color.clear
+                .frame(height: max(0, keyboard.height))
+                .animation(.snappy, value: keyboard.height)
         }
     }
     
@@ -233,10 +259,12 @@ struct CalendarScreen: View {
 private struct TodoListCard: View {
     let month: Date
     let todos: [CalendarTodo]
+    let accent: Color
     let onToggle: (UUID) -> Void
     let onDelete: (IndexSet) -> Void
     let onEditDue: (UUID, Date?) -> Void
     let onQuickAdd: (CalendarTodo) -> Void
+    let onRename: (UUID, String) -> Void
     let onTapAdd: () -> Void
     @Binding var showOnlyUndone: Bool
     @Environment(\.colorScheme) private var scheme
@@ -248,6 +276,7 @@ private struct TodoListCard: View {
                     .font(.headline)
                 Spacer()
                 Toggle(isOn: $showOnlyUndone) { Text("未完のみ").font(.caption) }
+                    .tint(accent)
                     .toggleStyle(.switch)
                     .labelsHidden()
                 Button {
@@ -255,7 +284,7 @@ private struct TodoListCard: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(.ultraThinMaterial)
+                            .fill(accent.opacity(0.20))
                             .frame(width: 34, height: 34)
                             .overlay(
                                 Circle().stroke(.white.opacity(0.25), lineWidth: 0.8)
@@ -264,12 +293,12 @@ private struct TodoListCard: View {
                         
                         Image(systemName: "plus")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(accent)
                     }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("新規追加")
-                .hoverEffect(.highlight) // iPadなどで反応あり
+                .hoverEffect(.highlight)
                 .buttonStyle(.plain)
                 .accessibilityLabel("ToDoを追加")
             }
@@ -278,14 +307,30 @@ private struct TodoListCard: View {
                 Text("この月のToDoはまだありません")
                     .font(.callout).foregroundStyle(.secondary)
             } else {
+                // 並び替え：期日なしが先頭、その後は期日が新しい順（降順）
+                let sortedTodos = todos.sorted {
+                    switch ($0.due, $1.due) {
+                    case (nil, nil):
+                        return false // どちらもなし → 元の順
+                    case (nil, _):
+                        return true  // 左がなし → 左を前に
+                    case (_, nil):
+                        return false // 右がなし → 右を後ろに
+                    case let (d1?, d2?):
+                        return d1 > d2 // 両方ある → 新しい順（降順）
+                    }
+                }
+                
                 List {
-                    ForEach(todos) { t in
+                    ForEach(sortedTodos) { t in
                         TodoRow(
                             month: month,
                             todo: t,
+                            accent: accent,
                             onToggle: onToggle,
                             onEditDue: onEditDue,
-                            onQuickAdd: onQuickAdd
+                            onQuickAdd: onQuickAdd,
+                            onRename: onRename
                         )
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
@@ -295,6 +340,11 @@ private struct TodoListCard: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .frame(maxHeight: 260)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(scheme == .dark ? Color.white.opacity(0.06) : .white)
+                        .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.06), radius: 10, y: 5)
+                )
             }
         }
         .padding(12)
@@ -311,16 +361,21 @@ private struct TodoListCard: View {
     }
 }
 
-
 private struct TodoRow: View {
     let month: Date
     let todo: CalendarTodo
+    let accent: Color
     let onToggle: (UUID) -> Void
     let onEditDue: (UUID, Date?) -> Void
     let onQuickAdd: (CalendarTodo) -> Void
+    let onRename: (UUID, String) -> Void
     
     @State private var showDuePicker = false
     @State private var tempDue: Date = Date()
+    
+    @State private var isRenaming = false
+    @State private var tempTitle: String = ""
+    @FocusState private var titleFocused: Bool
     
     private var cal: Calendar { .current }
     
@@ -330,28 +385,53 @@ private struct TodoRow: View {
                 Image(systemName: todo.done ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(todo.done ? .green : .secondary)
+                    .foregroundStyle(accent)
             }
             .buttonStyle(.plain)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(todo.title)
-                    .font(.subheadline.weight(.medium))
-                    .strikethrough(todo.done, pattern: .solid, color: .secondary)
-                    .foregroundStyle(todo.done ? .secondary : .primary)
                 
+                // ▼ タイトル（タップで編集）
+                if isRenaming {
+                    HStack(spacing: 8) {
+                        TextField("タイトル", text: $tempTitle)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($titleFocused)
+                            .submitLabel(.done)
+                            .onSubmit { commitRename() }
+                        
+                        Button {
+                            commitRename()
+                        } label: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .imageScale(.large)
+                                .foregroundStyle(accent)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .onAppear {
+                        tempTitle = todo.title
+                        titleFocused = true
+                    }
+                } else {
+                    Text(todo.title)
+                        .font(.subheadline.weight(.medium))
+                        .strikethrough(todo.done, pattern: .solid, color: .secondary)
+                        .foregroundStyle(todo.done ? .secondary : .primary)
+                        .onTapGesture {    // ← タイトルをタップで編集開始
+                            isRenaming = true
+                        }
+                }
+                
+                // ▼ 期日バッジ
                 HStack(spacing: 6) {
                     Image(systemName: "calendar.badge.clock")
                         .foregroundStyle(.secondary)
                     
-                    // 期日ラベル（期限超過は赤 / 当日は青ドットを追加）
                     HStack(spacing: 6) {
                         if let due = todo.due {
-                            // 当日ドット
                             if cal.isDateInToday(due) {
-                                Circle()
-                                    .fill(Color.blue)
-                                    .frame(width: 6, height: 6)
+                                Circle().fill(Color.blue).frame(width: 6, height: 6)
                             }
                             Text(dueLabel(due))
                                 .font(.caption)
@@ -372,6 +452,7 @@ private struct TodoRow: View {
                     .popover(isPresented: $showDuePicker, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
                         DuePopover(
                             month: month,
+                            accent: accent,
                             tempDate: $tempDue,
                             onSave: { newDate in onEditDue(todo.id, newDate); showDuePicker = false },
                             onClear: { onEditDue(todo.id, nil); showDuePicker = false }
@@ -385,7 +466,16 @@ private struct TodoRow: View {
         }
         .contentShape(Rectangle())
         .padding(.vertical, 6)
-        .onTapGesture { onQuickAdd(todo) }
+        .onTapGesture { onQuickAdd(todo) } // 行全体タップは従来どおりQuickAdd（タイトル部分は上書きされない）
+    }
+    
+    private func commitRename() {
+        let t = tempTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty, t != todo.title {
+            onRename(todo.id, t)
+        }
+        isRenaming = false
+        titleFocused = false
     }
     
     private func isOverdue(_ d: Date) -> Bool {
@@ -405,6 +495,7 @@ private struct TodoRow: View {
 
 struct DuePopover: View {
     let month: Date
+    let accent: Color
     @Binding var tempDate: Date
     let onSave: (Date) -> Void
     let onClear: () -> Void
@@ -433,6 +524,7 @@ struct DuePopover: View {
                     onClear()
                 } label: {
                     Label("クリア", systemImage: "xmark.circle")
+                        .foregroundStyle(.red)
                 }
                 
                 Spacer()
@@ -441,16 +533,20 @@ struct DuePopover: View {
                     onSave(tempDate)
                 } label: {
                     Label("保存", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.white)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(accent)
             }
         }
+        .tint(accent)
         .padding(16)
     }
 }
 
 // 追加ビュー
 private struct TodoAddSheet: View {
+    let accent: Color
     let onAdd: (String, Date?) -> Void
     let defaultMonth: Date
     @Environment(\.dismiss) private var dismiss
@@ -461,7 +557,8 @@ private struct TodoAddSheet: View {
     
     private var cal: Calendar { .current }
     
-    init(onAdd: @escaping (String, Date?) -> Void, defaultMonth: Date) {
+    init(accent: Color,onAdd: @escaping (String, Date?) -> Void, defaultMonth: Date) {
+        self.accent = accent
         self.onAdd = onAdd
         self.defaultMonth = defaultMonth
         // 月初を初期日付に
@@ -484,6 +581,7 @@ private struct TodoAddSheet: View {
                 }
                 Section {
                     Toggle("期日を設定", isOn: $withDue)
+                        .tint(accent)
                     if withDue {
                         DatePicker(
                             "期日",
@@ -491,23 +589,46 @@ private struct TodoAddSheet: View {
                             in: monthRange,
                             displayedComponents: .date
                         )
+                        .tint(accent)
                     }
                 }
             }
             .navigationTitle("ToDoを追加")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("閉じる") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("追加") {
-                        onAdd(title, withDue ? due : nil)
+                    let canAdd = !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    BarPrimaryButton(title: "追加", isEnabled: canAdd, accent: accent) {
+                        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !t.isEmpty else { return }
+                        onAdd(t, withDue ? due : nil)
                         dismiss()
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
+        .presentationDetents([.height(350)])
     }
 }
 
+struct BarPrimaryButton: View {
+    let title: String
+    let isEnabled: Bool
+    let accent: Color
+    let action: () -> Void
+    
+    var body: some View {
+        if isEnabled {
+            Button(title, action: action)
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+        } else {
+            Button(title, action: {})
+                .buttonStyle(.bordered)
+                .disabled(true) // ← 見た目も無効化
+        }
+    }
+}

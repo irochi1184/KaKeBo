@@ -11,12 +11,16 @@ struct YearMonthHeader: View {
     @Binding var month: Date
     let title: String
     
+    /// テーマ管理で決めたアクセント色
+    var accent: Color = .accentColor
+    
     @State private var showPicker = false
     @Environment(\.locale) private var locale
     
     var body: some View {
         HStack(spacing: 16) {
             
+            // 前月へ
             Button {
                 withAnimation(.snappy) {
                     month = Calendar.current.date(byAdding: .month, value: -1, to: month) ?? month
@@ -25,41 +29,42 @@ struct YearMonthHeader: View {
                 Image(systemName: "chevron.left.circle.fill")
                     .font(.callout)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(accent)
             }
             
-            // 中央タイトルボタン（色はシステムブルー or アクセントに合わせる）
+            // 中央タイトル（背景はテーマ色の薄い色）
             Button {
                 showPicker = true
             } label: {
                 HStack(spacing: 6) {
                     Text(title)
                         .font(.headline.weight(.semibold))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(accent)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .allowsTightening(true)
+                    
                     Image(systemName: "chevron.down")
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(accent)
                 }
                 .padding(.vertical, 2)
                 .padding(.horizontal, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.thinMaterial)
+                        .fill(accent.opacity(0.15))
                 )
             }
             .buttonStyle(.plain)
-            // iPad等は popover、iPhone等は sheet として出る
             .popover(isPresented: $showPicker, arrowEdge: .top) {
-                MonthPickerView(selected: $month)
-                    .presentationDetents([.medium]) // iPhoneでの見え方
+                MonthPickerView(selected: $month, accent: accent)
+                    .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
                     .environment(\.locale, Locale(identifier: "ja_JP"))
                     .padding()
             }
             
+            // 次月へ
             Button {
                 withAnimation(.snappy) {
                     month = Calendar.current.date(byAdding: .month, value: 1, to: month) ?? month
@@ -68,11 +73,11 @@ struct YearMonthHeader: View {
                 Image(systemName: "chevron.right.circle.fill")
                     .font(.callout)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(accent)
             }
         }
-        .frame(maxWidth: .infinity)           // ← ヘッダーを中央に
-        .contentShape(Rectangle())            // タップ余白を広く
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
     }
 }
@@ -82,14 +87,16 @@ private struct MonthPickerView: View {
     @Binding var selected: Date
     @State private var year: Int
     @State private var month: Int
-    @Environment(\.dismiss) private var dismiss   // ← 追加
+    @Environment(\.dismiss) private var dismiss
+    var accent: Color = .accentColor
     
-    init(selected: Binding<Date>) {
+    init(selected: Binding<Date>, accent: Color = .accentColor) {
         _selected = selected
         let cal = Calendar.current
         let comps = cal.dateComponents([.year, .month], from: selected.wrappedValue)
         _year = State(initialValue: comps.year ?? cal.component(.year, from: .now))
         _month = State(initialValue: comps.month ?? cal.component(.month, from: .now))
+        self.accent = accent
     }
     
     var body: some View {
@@ -117,14 +124,19 @@ private struct MonthPickerView: View {
             Button {
                 let cal = Calendar.current
                 if let newDate = cal.date(from: DateComponents(year: year, month: month, day: 1)) {
-                    selected = newDate          // ← 年月を反映
+                    selected = newDate
                 }
-                dismiss()                        // ← そのまま閉じる
+                dismiss()
             } label: {
                 Text("決定")
-                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .frame(maxWidth: .infinity, minHeight: 35)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .background(accent)
+                    .cornerRadius(12)
             }
             .buttonStyle(.borderedProminent)
+            .tint(accent)
         }
     }
 }

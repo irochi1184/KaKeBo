@@ -11,6 +11,8 @@ import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     
     @AppStorage("reminder.enabled") private var enabled: Bool = true
     @AppStorage("reminder.time") private var timeRaw: Double = defaultTime.timeIntervalSinceReferenceDate
@@ -24,14 +26,17 @@ struct SettingsView: View {
     @State private var templates: [RecurringTodoTemplate] = []
     @State private var showNotifAlert = false
     @State private var notifMessage: String = "現在通知の許可設定ができていません。iOSの「設定」アプリから通知を許可してください。"
+    @State private var showPaywall = false
+    @State private var showShareSheet = false
     
     enum Sheet: Identifiable {
-        case reminders
-        case categories
-        case recurringTodos
-        case fixedExpenses
+        case reminders, categories, recurringTodos, fixedExpenses, theme, help
         var id: String { "sheet-\(self)" }
     }
+    // 外部URL
+    private let appleWidgetURL = URL(string: "https://support.apple.com/ja-jp/HT207122")!
+    // KaKeBoの App Store URL
+    private let appStoreURL = URL(string: "https://apps.apple.com/app/id6754249349")!
     
     private static var defaultTime: Date {
         var comps = DateComponents()
@@ -69,77 +74,127 @@ struct SettingsView: View {
     }
     
     var body: some View {
+        let accent = themeStore.theme.accentColor(for: scheme)
         NavigationStack {
+            PremiumBanner(accent: accent) {
+                showPaywall = true
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            
             Form {
-                // リマインダー（他と同じボタン→シート方式に統一）
-                Section("リマインダー") {
-                    Button {
+                Section { // ← 1セクションにまとめる
+                    // リマインダー
+                    SettingsRowButton(
+                        title: "リマインダーを管理",
+                        systemImage: "bell.badge",
+                        accent: accent,
+                        trailingText: reminderCountText
+                    ) {
                         Task {
                             if await hasNotificationPermission() {
                                 sheet = .reminders
                             } else {
-                                // 必要ならここで一度だけプロンプト:
-                                // let ok = await ReminderManager.requestAuthorization()
-                                // if ok { sheet = .reminders } else { showNotifAlert = true }
-                                
                                 notifMessage = "現在通知の許可設定ができていません。iOSの「設定」アプリ > 通知 > KaKeBo からオンにしてください。"
                                 showNotifAlert = true
                             }
                         }
-                    } label: {
-                        HStack {
-                            Label("リマインダーを管理", systemImage: "bell.badge")
-                            Spacer()
-                            Text(reminderCountText)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
                     }
-                }
-                
-                Section("カテゴリ") {
-                    Button {
+                    
+                    // カテゴリ
+                    SettingsRowButton(
+                        title: "カテゴリを管理",
+                        systemImage: "square.grid.2x2",
+                        accent: accent,
+                        trailingText: "\(store.categories.count)件"
+                    ) {
                         sheet = .categories
-                    } label: {
-                        HStack {
-                            Label("カテゴリを管理", systemImage: "square.grid.2x2")
-                            Spacer()
-                            Text("\(store.categories.count)件")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
                     }
-                }
-                
-                Section("毎月のToDo") {
-                    Button {
+                    
+                    // 毎月のToDo
+                    SettingsRowButton(
+                        title: "毎月のToDoを管理",
+                        systemImage: "calendar.badge.clock",
+                        accent: accent,
+                        trailingText: "\(recurringCount)件"
+                    ) {
                         sheet = .recurringTodos
-                    } label: {
-                        HStack {
-                            Label("毎月のToDoを管理", systemImage: "calendar.badge.clock")
-                            Spacer()
-                            Text("\(recurringCount)件")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
                     }
+                    
+                    // 固定費
+                    SettingsRowButton(
+                        title: "固定費を管理",
+                        systemImage: "yensign.circle",
+                        accent: accent,
+                        trailingText: fixedCountText
+                    ) {
+                        sheet = .fixedExpenses
+                    }
+                    
+                    // テーマ
+                    SettingsRowButton(
+                        title: "テーマ管理",
+                        systemImage: "paintpalette",
+                        accent: accent,
+                        trailingText: nil
+                    ) {
+                        sheet = .theme
+                    }
+                } header: {
+                    Text("各種設定")
                 }
                 
-                Section("固定費（毎月の定額支出）") {
-                    Button {
-                        sheet = .fixedExpenses
-                    } label: {
-                        HStack {
-                            Label("固定費を管理", systemImage: "yensign.circle")
-                            Spacer()
-                            Text(fixedCountText)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                // ===== サポート =====
+                Section {
+                    // 使い方・よくある質問（シート表示）
+                    SettingsRowButton(
+                        title: "使い方・よくある質問",
+                        systemImage: "questionmark.circle",
+                        accent: accent,
+                        trailingText: nil
+                    ) { sheet = .help }
+                    
+                    // ウィジェットの使い方（Appleのページへ）
+                    SettingsRowButton(
+                        title: "ウィジェットの使い方",
+                        systemImage: "apps.iphone",
+                        accent: accent,
+                        trailingText: "Apple公式"
+                    ) {
+                        UIApplication.shared.open(appleWidgetURL)
+                    }
+                    
+                    // 友達にKaKeBoを共有（共有シート）
+                    SettingsRowButton(
+                        title: "友達にKaKeBoを共有する",
+                        systemImage: "square.and.arrow.up",
+                        accent: accent,
+                        trailingText: nil
+                    ) {
+                        showShareSheet = true
+                    }
+                    
+                    // バグ報告・ご意見（メール）
+                    SettingsRowButton(
+                        title: "バグ報告・アプリへのご意見",
+                        systemImage: "envelope",
+                        accent: accent,
+                        trailingText: "メール"
+                    ) {
+                        let mailto = "mailto:ken.office.arita@gmail.com?subject=\(urlEncode("KaKeBoへのフィードバック"))&body=\(urlEncode(defaultFeedbackBody()))"
+                        if let url = URL(string: mailto) {
+                            UIApplication.shared.open(url)
                         }
                     }
+                } header: {
+                    Text("サポート")
                 }
             }
-            .navigationTitle("設定")
+            .scrollContentBackground(.hidden) // デフォルトのグレー背景を非表示
+            .background(
+                themeStore.theme.backgroundColor(for: scheme) // テーマの背景色
+                    .ignoresSafeArea()
+            )
             .onAppear {
                 loadTemplates()
                 // 今日の月データだけロード（通知の条件評価で使用）
@@ -188,8 +243,35 @@ struct SettingsView: View {
                     }
                     .presentationDetents([.large, .medium])
                     .presentationDragIndicator(.visible)
+                    
+                case .theme:
+                    NavigationStack {
+                        ThemeSettingsView()
+                            .navigationTitle("テーマ管理")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
+                case .help:
+                    NavigationStack {
+                        HelpFAQView()
+                            .navigationTitle("使い方・よくある質問")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
                 }
             }
+            .sheet(isPresented: $showShareSheet) {
+                ActivityView(activityItems: [appStoreURL])
+                    .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showPaywall) {
+                PremiumPaywallView(accent: accent)
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
+            }
+            .background(themeStore.theme.backgroundColor(for: scheme))
         }
         .alert("通知が許可されていません", isPresented: $showNotifAlert) {
             Button("設定を開く") { openAppSettings() }
@@ -197,6 +279,25 @@ struct SettingsView: View {
         } message: {
             Text(notifMessage)
         }
+    }
+    
+    private func defaultFeedbackBody() -> String {
+        """
+        いつも KaKeBo をご利用いただきありがとうございます。
+        以下に不具合やご要望をご記入ください。
+        
+        ▼ 内容:
+        
+        ▼ 再現手順（任意）:
+        
+        ▼ 端末情報（任意）:
+        - iOSバージョン: 
+        - 端末モデル: 
+        """
+    }
+    
+    private func urlEncode(_ s: String) -> String {
+        s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s
     }
     
     private func applyScheduling() async {
@@ -229,4 +330,43 @@ struct SettingsView: View {
         }
     }
     
+}
+
+private struct SettingsRowButton: View {
+    let title: String
+    let systemImage: String
+    let accent: Color
+    let trailingText: String?
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                // 左アイコン＋タイトル
+                Label {
+                    Text(title) // テキストはデフォルトカラー
+                } icon: {
+                    Image(systemName: systemImage)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(accent)
+                }
+                
+                Spacer()
+                
+                // 右側の補足テキスト
+                if let trailingText {
+                    Text(trailingText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                // 「>」アイコン（右矢印）
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle()) // ← 行全体をタップ領域に
+        }
+        .buttonStyle(.plain) // デフォルトの青ハイライト無効
+    }
 }

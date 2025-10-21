@@ -205,11 +205,12 @@
 				};
 			};
 			buildConfigurationList = 739DEFCC2E7FD6A000C4F358 /* Build configuration list for PBXProject "KaKeBo" */;
-			developmentRegion = en;
+			developmentRegion = ja;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
+				ja,
 			);
 			mainGroup = 739DEFC82E7FD6A000C4F358;
 			minimizedProjectReferenceProxies = 1;

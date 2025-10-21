@@ -20,7 +20,6 @@ struct RecurringTodoSettingsView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                background // ← 重い式を外出し
                 content    // ← 中身も外出し
             }
             .navigationTitle("テンプレート管理")
@@ -28,13 +27,6 @@ struct RecurringTodoSettingsView: View {
             .toolbar { toolbar }           // ← ツールバーも分割
             .onAppear(perform: load)
         }
-    }
-    
-    private var background: some View {
-        let top = scheme == .dark ? Color.black : Color(white: 0.98)
-        let bottom = scheme == .dark ? Color(white: 0.14) : Color(white: 0.94)
-        return LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom)
-            .ignoresSafeArea()
     }
     
     private var content: some View {
