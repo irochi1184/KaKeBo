@@ -26,11 +26,17 @@ struct SettingsView: View {
     @State private var templates: [RecurringTodoTemplate] = []
     @State private var showNotifAlert = false
     @State private var notifMessage: String = "現在通知の許可設定ができていません。iOSの「設定」アプリから通知を許可してください。"
+    @State private var showPaywall = false
+    @State private var showShareSheet = false
     
     enum Sheet: Identifiable {
-        case reminders, categories, recurringTodos, fixedExpenses, theme
+        case reminders, categories, recurringTodos, fixedExpenses, theme, help
         var id: String { "sheet-\(self)" }
     }
+    // 外部URL
+    private let appleWidgetURL = URL(string: "https://support.apple.com/ja-jp/HT207122")!
+    // KaKeBoの App Store URL
+    private let appStoreURL = URL(string: "https://apps.apple.com/app/id6754249349")!
     
     private static var defaultTime: Date {
         var comps = DateComponents()
@@ -70,6 +76,12 @@ struct SettingsView: View {
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
         NavigationStack {
+            PremiumBanner(accent: accent) {
+                showPaywall = true
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            
             Form {
                 Section { // ← 1セクションにまとめる
                     // リマインダー
@@ -130,6 +142,52 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("各種設定")
+                }
+                
+                // ===== サポート =====
+                Section {
+                    // 使い方・よくある質問（シート表示）
+                    SettingsRowButton(
+                        title: "使い方・よくある質問",
+                        systemImage: "questionmark.circle",
+                        accent: accent,
+                        trailingText: nil
+                    ) { sheet = .help }
+                    
+                    // ウィジェットの使い方（Appleのページへ）
+                    SettingsRowButton(
+                        title: "ウィジェットの使い方",
+                        systemImage: "apps.iphone",
+                        accent: accent,
+                        trailingText: "Apple公式"
+                    ) {
+                        UIApplication.shared.open(appleWidgetURL)
+                    }
+                    
+                    // 友達にKaKeBoを共有（共有シート）
+                    SettingsRowButton(
+                        title: "友達にKaKeBoを共有する",
+                        systemImage: "square.and.arrow.up",
+                        accent: accent,
+                        trailingText: nil
+                    ) {
+                        showShareSheet = true
+                    }
+                    
+                    // バグ報告・ご意見（メール）
+                    SettingsRowButton(
+                        title: "バグ報告・アプリへのご意見",
+                        systemImage: "envelope",
+                        accent: accent,
+                        trailingText: "メール"
+                    ) {
+                        let mailto = "mailto:ken.office.arita@gmail.com?subject=\(urlEncode("KaKeBoへのフィードバック"))&body=\(urlEncode(defaultFeedbackBody()))"
+                        if let url = URL(string: mailto) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                } header: {
+                    Text("サポート")
                 }
             }
             .scrollContentBackground(.hidden) // デフォルトのグレー背景を非表示
@@ -194,8 +252,24 @@ struct SettingsView: View {
                     }
                     .presentationDetents([.large, .medium])
                     .presentationDragIndicator(.visible)
-
+                case .help:
+                    NavigationStack {
+                        HelpFAQView()
+                            .navigationTitle("使い方・よくある質問")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
                 }
+            }
+            .sheet(isPresented: $showShareSheet) {
+                ActivityView(activityItems: [appStoreURL])
+                    .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showPaywall) {
+                PremiumPaywallView(accent: accent)
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
             }
             .background(themeStore.theme.backgroundColor(for: scheme))
         }
@@ -205,6 +279,25 @@ struct SettingsView: View {
         } message: {
             Text(notifMessage)
         }
+    }
+    
+    private func defaultFeedbackBody() -> String {
+        """
+        いつも KaKeBo をご利用いただきありがとうございます。
+        以下に不具合やご要望をご記入ください。
+        
+        ▼ 内容:
+        
+        ▼ 再現手順（任意）:
+        
+        ▼ 端末情報（任意）:
+        - iOSバージョン: 
+        - 端末モデル: 
+        """
+    }
+    
+    private func urlEncode(_ s: String) -> String {
+        s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s
     }
     
     private func applyScheduling() async {
