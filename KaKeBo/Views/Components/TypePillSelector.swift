@@ -12,9 +12,9 @@ struct TypePillSelector: View {
     
     var body: some View {
         HStack(spacing: 10) {
-            pill(title: "支出", isOn: type == .expense, base: .red)
+            pill(title: "支出", isOn: type == .expense, base: .red.opacity(0.8))
                 .onTapGesture { withAnimation(.snappy) { type = .expense } }
-            pill(title: "収入", isOn: type == .income, base: .green)
+            pill(title: "収入", isOn: type == .income, base: .green.opacity(0.8))
                 .onTapGesture { withAnimation(.snappy) { type = .income } }
         }
         .accessibilityElement(children: .contain)

@@ -9,6 +9,8 @@ import SwiftUI
 
 struct RootTabView: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     @State private var showSettings = false
     
     var body: some View {
@@ -24,5 +26,6 @@ struct RootTabView: View {
             SettingsView()
                 .tabItem { Label("設定", systemImage: "gearshape.fill") }
         }
+        .tint(themeStore.theme.accentColor(for: scheme))
     }
 }

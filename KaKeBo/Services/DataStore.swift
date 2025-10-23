@@ -60,23 +60,18 @@ final class DataStore: ObservableObject {
     }
 
     private func seed() {
+        let presetsByName = Dictionary(uniqueKeysWithValues: PresetCategory.all.map { ($0.name, $0) })
+        
         categories = [
-            // 支出（頻度順）
-            Category(name: "食費",     symbolName: "fork.knife",                 color: .red),
-            Category(name: "日用品費", symbolName: "bag.fill",                   color: .orange),
-            Category(name: "水道光熱費", symbolName: "lightbulb.fill",           color: .blue),
-            Category(name: "交通費",   symbolName: "tram.fill",                  color: .teal),
-            Category(name: "通信料",   symbolName: "wifi",                       color: .indigo),
-            Category(name: "住宅費",   symbolName: "house.fill",                 color: .brown),
-            Category(name: "医療費",   symbolName: "cross.case.fill",            color: .pink),
-            Category(name: "被服費",   symbolName: "tshirt.fill",                color: .purple),
-            Category(name: "交際費",   symbolName: "gift.fill",                  color: .mint),
-            Category(name: "娯楽費",   symbolName: "gamecontroller.fill",        color: .green),
-            
-            // 収入
-            Category(name: "給与",     symbolName: "banknote",                   color: .green),
-            Category(name: "その他収入", symbolName: "yensign.circle.fill",       color: .cyan),
-        ]
+            "食費", "日用品費", "水道光熱費", "交通費", "通信料", "住宅費", "医療費",
+            "交際費", "娯楽費", "給与", "その他収入"
+        ].map { name in
+            if let preset = presetsByName[name] {
+                return Category(name: preset.name, symbolName: preset.symbol, color: preset.color)
+            } else {
+                return Category(name: name, symbolName: "tag.fill", color: .gray)
+            }
+        }
         save()
     }
 

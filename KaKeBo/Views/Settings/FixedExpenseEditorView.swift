@@ -13,6 +13,7 @@ struct FixedExpenseEditorView: View {
     let onSave: (FixedExpenseTemplate) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject var themeStore: ThemeStore
     
     @State private var title: String = ""
     @State private var amount: Int = 0
@@ -133,15 +134,16 @@ struct FixedExpenseEditorView: View {
                     Button("閉じる") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("保存") {
+                    SaveButton(
+                        isEnabled: canSave,
+                        accent: themeStore.theme.accentColor(for: scheme)
+                    ) {
                         amountText = Self.currency(amount) // 仕上げで整形
                         if let t = currentTemplate() {
                             onSave(t)
                             dismiss()
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canSave)
                 }
             }
             .sheet(isPresented: $showCategorySheet) { categoryPickerSheet }
@@ -198,19 +200,20 @@ struct FixedExpenseEditorView: View {
         iconView: AnyView? = nil,
         trailing: String? = nil
     ) -> some View {
+        let accent = themeStore.theme.accentColor(for: scheme)
         HStack(spacing: 12) {
             if let iconView {
                 iconView
             } else if let iconName {
-                Image(systemName: iconName).foregroundStyle(.secondary)
+                Image(systemName: iconName).foregroundStyle(accent)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                Text(subtitle).font(.subheadline.weight(.semibold))
+                Text(title).font(.footnote.weight(.semibold)).foregroundStyle(accent)
+                Text(subtitle).font(.subheadline).foregroundStyle(accent)
             }
             Spacer()
             if let trailing {
-                Image(systemName: trailing).foregroundStyle(.tertiary)
+                Image(systemName: trailing).foregroundStyle(accent)
             }
         }
         .contentShape(Rectangle())

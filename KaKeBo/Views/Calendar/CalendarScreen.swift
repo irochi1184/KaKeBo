@@ -335,7 +335,20 @@ private struct TodoListCard: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                     }
-                    .onDelete(perform: onDelete)
+                    .onDelete { offsets in
+                        // 1) 元配列 todos の id→index マップを作る
+                        let indexMap: [UUID: Int] = Dictionary(
+                            uniqueKeysWithValues: todos.enumerated().map { ($0.element.id, $0.offset) }
+                        )
+                        // 2) 表示中(sorted)のインデックス → 元配列インデックスへ変換
+                        let original = IndexSet(
+                            offsets.compactMap { idx in
+                                indexMap[sortedTodos[idx].id]
+                            }
+                        )
+                        // 3) 既存の onDelete(IndexSet) を元配列のインデックスで呼ぶ
+                        onDelete(original)
+                    }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)

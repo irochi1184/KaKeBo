@@ -9,6 +9,7 @@ import SwiftUI
 
 struct FixedExpenseSettingsView: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var purchase: PurchaseManager
     @State private var templates: [FixedExpenseTemplate] = []
     @State private var editing: FixedExpenseTemplate? = nil
     @State private var isAdding = false
@@ -17,25 +18,47 @@ struct FixedExpenseSettingsView: View {
     @State private var quickAddExpanded = false
     @State private var showConfirm = false
     @State private var confirmMessage = ""
+    @State private var showPaywall = false
+    
+    // 無料プランで登録可能な数
+    private let freeLimit = 5
     
     var body: some View {
         List {
             // クイック追加
             Section {
                 DisclosureGroup(isExpanded: $quickAddExpanded) {
-                    QuickFixedButtons { tpl in
-                        templates.append(tpl)
-                        saveTemplates()
-                    }
+                    QuickFixedButtons(
+                        onPick: { tpl in
+                            // 制限チェック（クイック追加）
+                            if canAddMore {
+                                templates.append(tpl)
+                                saveTemplates()
+                            } else {
+                                showPaywall = true
+                            }
+                        }
+                    )
                     .padding(.vertical, 8)
                 } label: {
                     Label("クイック追加", systemImage: "plus.circle")
                 }
+                // 無料ユーザー向けロック説明
+                if !purchase.isPremiumActive {
+                    Text("無料プランでは固定費は最大 \(freeLimit) 件まで。\n6件目以降を登録するにはプレミアムプランへの加入が必要です。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                }
             }
             
-            Section("登録済み") {
+            Section {
                 if templates.isEmpty {
-                    ContentUnavailableView("固定費は未登録", systemImage: "yensign.circle", description: Text("右上の＋やクイック追加から登録してください"))
+                    ContentUnavailableView(
+                        "固定費は未登録",
+                        systemImage: "yensign.circle",
+                        description: Text("右上の＋やクイック追加から登録してください")
+                    )
                 } else {
                     ForEach(templates) { t in
                         HStack {
@@ -69,13 +92,11 @@ struct FixedExpenseSettingsView: View {
                             .labelsHidden()
                         }
                         .contentShape(Rectangle())
-                        .onTapGesture {
-                            editing = t
-                        }
+                        .onTapGesture { editing = t }
                         .swipeActions {
-                            Button {
-                                editing = t
-                            } label: { Label("編集", systemImage: "pencil") }.tint(.blue)
+                            Button { editing = t } label: {
+                                Label("編集", systemImage: "pencil")
+                            }.tint(.blue)
                             
                             Button(role: .destructive) {
                                 showDeleteAlert = t
@@ -83,12 +104,10 @@ struct FixedExpenseSettingsView: View {
                         }
                     }
                     .onDelete { idx in
-                        templates.remove(atOffsets: idx)
-                        saveTemplates()
+                        templates.remove(atOffsets: idx); saveTemplates()
                     }
                     .onMove { from, to in
-                        templates.move(fromOffsets: from, toOffset: to)
-                        saveTemplates()
+                        templates.move(fromOffsets: from, toOffset: to); saveTemplates()
                     }
                 }
             }
@@ -101,17 +120,12 @@ struct FixedExpenseSettingsView: View {
                     let afterCount = store.transactions.count
                     let diff = afterCount - beforeCount
                     
-                    // 成果に応じてメッセージ変更
-                    if diff > 0 {
-                        confirmMessage = "\(diff)件の固定費を自動計上しました"
-                    } else {
-                        confirmMessage = "今月の未計上分はありませんでした"
-                    }
+                    confirmMessage = (diff > 0)
+                    ? "\(diff)件の固定費を自動計上しました"
+                    : "今月の未計上分はありませんでした"
                     
-                    // 触覚フィードバック
                     let generator = UINotificationFeedbackGenerator()
                     generator.notificationOccurred(diff > 0 ? .success : .warning)
-                    
                     showConfirm = true
                 } label: {
                     Label("今月の未計上分を自動計上", systemImage: "checkmark.circle")
@@ -119,17 +133,19 @@ struct FixedExpenseSettingsView: View {
             }
             .alert("自動計上", isPresented: $showConfirm) {
                 Button("OK", role: .cancel) {}
-            } message: {
-                Text(confirmMessage)
-            }
-
+            } message: { Text(confirmMessage) }
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                    EditButton().disabled(templates.isEmpty)
-                    Button {
+                EditButton().disabled(templates.isEmpty)
+                Button {
+                    // 右上＋ の入口でも制限チェック
+                    if canAddMore {
                         isAdding = true
-                    } label: { Image(systemName: "plus") }
+                    } else {
+                        showPaywall = true
+                    }
+                } label: { Image(systemName: "plus") }
             }
         }
         .onAppear { loadTemplates() }
@@ -140,8 +156,8 @@ struct FixedExpenseSettingsView: View {
                 onSave: { tpl in
                     if let i = templates.firstIndex(where: { $0.id == t.id }) {
                         templates[i] = tpl
+                        saveTemplates()
                     }
-                    saveTemplates()
                 }
             )
         }
@@ -150,8 +166,14 @@ struct FixedExpenseSettingsView: View {
                 initial: nil,
                 categories: store.categories,
                 onSave: { tpl in
-                    templates.append(tpl)
-                    saveTemplates()
+                    // エディタからの保存でも制限チェック
+                    if canAddMore {
+                        templates.append(tpl); saveTemplates()
+                    } else {
+                        // 画面は閉じるが、保存はしない → すぐペイウォールへ
+                        saveTemplates()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showPaywall = true }
+                    }
                 }
             )
         }
@@ -170,6 +192,18 @@ struct FixedExpenseSettingsView: View {
         } message: {
             Text("この操作は固定費テンプレートだけを削除します。既に計上済みの家計簿データは残ります。")
         }
+        // プレミアム誘導
+        .sheet(isPresented: $showPaywall) {
+            PremiumPaywallView(accent: .accentColor)
+                .presentationDetents([.large, .medium])
+                .presentationDragIndicator(.visible)
+        }
+    }
+    
+    // MARK: - 制限判定
+    private var canAddMore: Bool {
+        if purchase.isPremiumActive { return true }
+        return templates.count < freeLimit
     }
     
     // MARK: - Storage
@@ -186,9 +220,7 @@ struct FixedExpenseSettingsView: View {
         let f = NumberFormatter(); f.numberStyle = .decimal; f.groupingSeparator = ","
         return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
     }
-    private func dayText(_ d: Int) -> String {
-        d == 0 ? "月末" : "\(d)日"
-    }
+    private func dayText(_ d: Int) -> String { d == 0 ? "月末" : "\(d)日" }
     private func colorFor(categoryId: UUID) -> Color {
         store.categories.first(where: { $0.id == categoryId })?.color ?? .secondary
     }

@@ -8,6 +8,7 @@
 import SwiftUI
 import UserNotifications
 import UIKit
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject var store: DataStore
@@ -28,6 +29,27 @@ struct SettingsView: View {
     @State private var notifMessage: String = "現在通知の許可設定ができていません。iOSの「設定」アプリから通知を許可してください。"
     @State private var showPaywall = false
     @State private var showShareSheet = false
+    // バックアップ作成／復元
+    @State private var showImporter = false
+    @State private var exportDoc: KaKeBoBackupDocument? = nil
+    @State private var showingExporter = false
+    @State private var importReportText: String? = nil
+    @State private var showImportDone = false
+    
+    struct KaKeBoBackupDocument: FileDocument {
+        static var readableContentTypes: [UTType] = [.kakeboBackup, .json]
+        static var writableContentTypes: [UTType] = [.kakeboBackup, .json]
+        
+        var data: Data
+        init(data: Data) { self.data = data }
+        init(configuration: ReadConfiguration) throws {
+            guard let d = configuration.file.regularFileContents else { throw CocoaError(.fileReadCorruptFile) }
+            self.data = d
+        }
+        func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+            FileWrapper(regularFileWithContents: data)
+        }
+    }
     
     enum Sheet: Identifiable {
         case reminders, categories, recurringTodos, fixedExpenses, theme, help
@@ -76,202 +98,98 @@ struct SettingsView: View {
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
         NavigationStack {
-            PremiumBanner(accent: accent) {
-                showPaywall = true
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            
-            Form {
-                Section { // ← 1セクションにまとめる
-                    // リマインダー
-                    SettingsRowButton(
-                        title: "リマインダーを管理",
-                        systemImage: "bell.badge",
-                        accent: accent,
-                        trailingText: reminderCountText
-                    ) {
-                        Task {
-                            if await hasNotificationPermission() {
-                                sheet = .reminders
-                            } else {
-                                notifMessage = "現在通知の許可設定ができていません。iOSの「設定」アプリ > 通知 > KaKeBo からオンにしてください。"
-                                showNotifAlert = true
-                            }
-                        }
-                    }
-                    
-                    // カテゴリ
-                    SettingsRowButton(
-                        title: "カテゴリを管理",
-                        systemImage: "square.grid.2x2",
-                        accent: accent,
-                        trailingText: "\(store.categories.count)件"
-                    ) {
-                        sheet = .categories
-                    }
-                    
-                    // 毎月のToDo
-                    SettingsRowButton(
-                        title: "毎月のToDoを管理",
-                        systemImage: "calendar.badge.clock",
-                        accent: accent,
-                        trailingText: "\(recurringCount)件"
-                    ) {
-                        sheet = .recurringTodos
-                    }
-                    
-                    // 固定費
-                    SettingsRowButton(
-                        title: "固定費を管理",
-                        systemImage: "yensign.circle",
-                        accent: accent,
-                        trailingText: fixedCountText
-                    ) {
-                        sheet = .fixedExpenses
-                    }
-                    
-                    // テーマ
-                    SettingsRowButton(
-                        title: "テーマ管理",
-                        systemImage: "paintpalette",
-                        accent: accent,
-                        trailingText: nil
-                    ) {
-                        sheet = .theme
-                    }
-                } header: {
-                    Text("各種設定")
+            VStack(spacing: 0) {
+                PremiumBanner(accent: accent) {
+                    showPaywall = true
                 }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
+                .background(themeStore.theme.backgroundColor(for: scheme).opacity(0.7))
                 
-                // ===== サポート =====
-                Section {
-                    // 使い方・よくある質問（シート表示）
-                    SettingsRowButton(
-                        title: "使い方・よくある質問",
-                        systemImage: "questionmark.circle",
-                        accent: accent,
-                        trailingText: nil
-                    ) { sheet = .help }
-                    
-                    // ウィジェットの使い方（Appleのページへ）
-                    SettingsRowButton(
-                        title: "ウィジェットの使い方",
-                        systemImage: "apps.iphone",
-                        accent: accent,
-                        trailingText: "Apple公式"
-                    ) {
-                        UIApplication.shared.open(appleWidgetURL)
-                    }
-                    
-                    // 友達にKaKeBoを共有（共有シート）
-                    SettingsRowButton(
-                        title: "友達にKaKeBoを共有する",
-                        systemImage: "square.and.arrow.up",
-                        accent: accent,
-                        trailingText: nil
-                    ) {
-                        showShareSheet = true
-                    }
-                    
-                    // バグ報告・ご意見（メール）
-                    SettingsRowButton(
-                        title: "バグ報告・アプリへのご意見",
-                        systemImage: "envelope",
-                        accent: accent,
-                        trailingText: "メール"
-                    ) {
-                        let mailto = "mailto:ken.office.arita@gmail.com?subject=\(urlEncode("KaKeBoへのフィードバック"))&body=\(urlEncode(defaultFeedbackBody()))"
-                        if let url = URL(string: mailto) {
-                            UIApplication.shared.open(url)
+                Form {
+                    settingsSection(accent: accent)
+                    supportSection(accent: accent)
+                }
+                .scrollContentBackground(.hidden)
+                .onAppear {
+                    loadTemplates()
+                    let monthStart = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: Date()))!
+                    todoStore.load(for: monthStart)
+                }
+                .onChange(of: templates) { _, _ in saveTemplates() }
+                .sheet(item: $sheet) { s in
+                    switch s {
+                    case .reminders:
+                        NavigationStack {
+                            ReminderSettingsView()
+                                .environmentObject(store)
+                                .environmentObject(todoStore)
+                                .navigationTitle("リマインダー")
+                                .navigationBarTitleDisplayMode(.inline)
                         }
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+                        
+                    case .categories:
+                        NavigationStack {
+                            CategoryListView()
+                                .environmentObject(store)
+                                .navigationTitle("カテゴリ")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+                        
+                    case .recurringTodos:
+                        NavigationStack {
+                            RecurringTodoSettingsView()
+                                .navigationTitle("毎月のToDo")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+                        
+                    case .fixedExpenses:
+                        NavigationStack {
+                            FixedExpenseSettingsView()
+                                .environmentObject(store)
+                                .navigationTitle("固定費")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+                        
+                    case .theme:
+                        NavigationStack {
+                            ThemeSettingsView()
+                                .navigationTitle("テーマ管理")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+                        
+                    case .help:
+                        NavigationStack {
+                            HelpFAQView()
+                                .navigationTitle("使い方・よくある質問")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
                     }
-                } header: {
-                    Text("サポート")
                 }
-            }
-            .scrollContentBackground(.hidden) // デフォルトのグレー背景を非表示
-            .background(
-                themeStore.theme.backgroundColor(for: scheme) // テーマの背景色
-                    .ignoresSafeArea()
-            )
-            .onAppear {
-                loadTemplates()
-                // 今日の月データだけロード（通知の条件評価で使用）
-                let monthStart = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: Date()))!
-                todoStore.load(for: monthStart)
-            }
-            .onChange(of: templates) { _, _ in saveTemplates() }
-            .sheet(item: $sheet) { s in
-                switch s {
-                case .reminders:
-                    NavigationStack {
-                        ReminderSettingsView()
-                            .environmentObject(store)
-                            .environmentObject(todoStore)
-                            .navigationTitle("リマインダー")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-                    .presentationDetents([.large, .medium])
-                    .presentationDragIndicator(.visible)
-                    
-                case .categories:
-                    NavigationStack {
-                        CategoryListView()
-                            .environmentObject(store)
-                            .navigationTitle("カテゴリ")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-                    .presentationDetents([.large, .medium])
-                    .presentationDragIndicator(.visible)
-                    
-                case .recurringTodos:
-                    NavigationStack {
-                        RecurringTodoSettingsView()
-                            .navigationTitle("毎月のToDo")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-                    .presentationDetents([.large, .medium])
-                    .presentationDragIndicator(.visible)
-                    
-                case .fixedExpenses:
-                    NavigationStack {
-                        FixedExpenseSettingsView()
-                            .environmentObject(store)
-                            .navigationTitle("固定費")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-                    .presentationDetents([.large, .medium])
-                    .presentationDragIndicator(.visible)
-                    
-                case .theme:
-                    NavigationStack {
-                        ThemeSettingsView()
-                            .navigationTitle("テーマ管理")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-                    .presentationDetents([.large, .medium])
-                    .presentationDragIndicator(.visible)
-                case .help:
-                    NavigationStack {
-                        HelpFAQView()
-                            .navigationTitle("使い方・よくある質問")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-                    .presentationDetents([.large, .medium])
-                    .presentationDragIndicator(.visible)
+                .sheet(isPresented: $showShareSheet) {
+                    ActivityView(activityItems: [appStoreURL])
+                        .presentationDetents([.medium])
                 }
+                .sheet(isPresented: $showPaywall) {
+                    PremiumPaywallView(accent: accent)
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+                }
+                .background(themeStore.theme.backgroundColor(for: scheme))
             }
-            .sheet(isPresented: $showShareSheet) {
-                ActivityView(activityItems: [appStoreURL])
-                    .presentationDetents([.medium])
-            }
-            .sheet(isPresented: $showPaywall) {
-                PremiumPaywallView(accent: accent)
-                    .presentationDetents([.large, .medium])
-                    .presentationDragIndicator(.visible)
-            }
-            .background(themeStore.theme.backgroundColor(for: scheme))
         }
         .alert("通知が許可されていません", isPresented: $showNotifAlert) {
             Button("設定を開く") { openAppSettings() }
@@ -279,6 +197,200 @@ struct SettingsView: View {
         } message: {
             Text(notifMessage)
         }
+        .fileExporter(
+            isPresented: $showingExporter,
+            document: exportDoc,
+            contentType: .kakeboBackup,
+            defaultFilename: "KaKeBo_backup_\(Self.todayString()).kakebo"
+        ) { result in
+            if case .success = result {
+                // 成功時の任意トーストなど
+                print("バックアップ保存完了")
+            }
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.kakeboBackup, .json, .commaSeparatedText, .plainText],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else {
+                    importReportText = "ファイルが選択されませんでした"
+                    showImportDone = true
+                    return
+                }
+                handleImportedURL(url)   // ← 下の修正版に差し替え
+            case .failure(let error):
+                importReportText = "ファイル選択に失敗: \(error.localizedDescription)"
+                showImportDone = true
+            }
+        }
+        .alert("バックアップ復元", isPresented: $showImportDone) {   // ← アラートをビューに戻す
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(importReportText ?? "")
+        }
+    }
+    
+    private func handleImportedURL(_ url: URL) {
+        let needsSecurity = url.startAccessingSecurityScopedResource()
+        defer { if needsSecurity { url.stopAccessingSecurityScopedResource() } }
+        
+        do {
+            let data = try Data(contentsOf: url)
+            
+            Task(priority: .userInitiated) {
+                do {
+                    // まずバックグラウンドで JSON/CSV を軽くバリデーションしておきたい場合はここでやる
+                    
+                    // DataStore の変更は必ず MainActor で
+                    let report = try await MainActor.run { () -> DataStore.ImportReport in
+                        try store.importBackup(data: data) { restoredTheme in
+                            // Theme の反映も MainActor
+                            themeStore.theme = restoredTheme
+                        }
+                    }
+                    
+                    await MainActor.run {
+                        importReportText = "復元完了：取込 \(report.inserted) 件 / 新規カテゴリ \(report.createdCategories) 件 / スキップ \(report.skipped) 件"
+                        showImportDone = true
+                    }
+                } catch {
+                    await MainActor.run {
+                        importReportText = "復元に失敗: \(error.localizedDescription)"
+                        showImportDone = true
+                    }
+                }
+            }
+        } catch {
+            importReportText = "ファイル読み込みに失敗: \(error.localizedDescription)"
+            showImportDone = true
+        }
+    }
+
+    // MARK: - Sections split (to help type-checker)
+    
+    @ViewBuilder
+    private func settingsSection(accent: Color) -> some View {
+        Section {
+            SettingsRowButton(
+                title: "リマインダーを管理",
+                systemImage: "bell.badge",
+                accent: accent,
+                trailingText: reminderCountText
+            ) {
+                Task {
+                    if await hasNotificationPermission() {
+                        sheet = .reminders
+                    } else {
+                        notifMessage = "現在通知の許可設定ができていません。iOSの「設定」アプリ > 通知 > KaKeBo からオンにしてください。"
+                        showNotifAlert = true
+                    }
+                }
+            }
+            
+            SettingsRowButton(
+                title: "カテゴリを管理",
+                systemImage: "square.grid.2x2",
+                accent: accent,
+                trailingText: "\(store.categories.count)件"
+            ) { sheet = .categories }
+            
+            SettingsRowButton(
+                title: "毎月のToDoを管理",
+                systemImage: "calendar.badge.clock",
+                accent: accent,
+                trailingText: "\(recurringCount)件"
+            ) { sheet = .recurringTodos }
+            
+            SettingsRowButton(
+                title: "固定費を管理",
+                systemImage: "yensign.circle",
+                accent: accent,
+                trailingText: fixedCountText
+            ) { sheet = .fixedExpenses }
+            
+            SettingsRowButton(
+                title: "テーマ管理",
+                systemImage: "paintpalette",
+                accent: accent,
+                trailingText: nil
+            ) { sheet = .theme }
+        } header: {
+            Text("各種設定")
+        }
+        .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
+    }
+    
+    @ViewBuilder
+    private func supportSection(accent: Color) -> some View {
+        Section {
+            SettingsRowButton(
+                title: "使い方・よくある質問",
+                systemImage: "questionmark.circle",
+                accent: accent,
+                trailingText: nil
+            ) { sheet = .help }
+            
+            SettingsRowButton(
+                title: "ウィジェットの使い方",
+                systemImage: "apps.iphone",
+                accent: accent,
+                trailingText: "Apple公式"
+            ) { UIApplication.shared.open(appleWidgetURL) }
+            
+            SettingsRowButton(
+                title: "友達にKaKeBoを共有する",
+                systemImage: "square.and.arrow.up",
+                accent: accent,
+                trailingText: nil
+            ) { showShareSheet = true }
+            
+            SettingsRowButton(
+                title: "バグ報告・アプリへのご意見",
+                systemImage: "envelope",
+                accent: accent,
+                trailingText: "メール"
+            ) {
+                let subject = urlEncode("KaKeBoへのフィードバック")
+                let body = urlEncode(defaultFeedbackBody())
+                if let url = URL(string: "mailto:ken.office.arita@gmail.com?subject=\(subject)&body=\(body)") {
+                    UIApplication.shared.open(url)
+                }
+            }
+            SettingsRowButton(
+                title: "バックアップを作成",
+                systemImage: "arrow.down.doc",
+                accent: accent,
+                trailingText: "JSON形式"
+            ) {
+                let data = store.exportFullBackupJSON(theme: themeStore.theme)
+                exportDoc = KaKeBoBackupDocument(data: data)
+                showingExporter = true
+            }
+            SettingsRowButton(
+                title: "バックアップから復元",
+                systemImage: "arrow.up.doc",
+                accent: accent,
+                trailingText: "JSON/CSV"
+            ) { showImporter = true }
+            // テストサンプルボタン
+//            SettingsRowButton(
+//                title: "バックアップを作成（テストサンプル2025）",
+//                systemImage: "arrow.down.doc",
+//                accent: accent,
+//                trailingText: "JSON"
+//            ) {
+//                let data = makeSample2025BackupJSON()
+//                exportDoc = KaKeBoBackupDocument(data: data)
+//                showingExporter = true
+//            }
+
+        } header: {
+            Text("サポート")
+        }
+        .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
     }
     
     private func defaultFeedbackBody() -> String {
@@ -329,7 +441,15 @@ struct SettingsView: View {
             }
         }
     }
-    
+    private func formattedDate() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd"
+        return formatter.string(from: Date())
+    }
+    static func todayString() -> String {
+        let f = DateFormatter(); f.locale = .init(identifier: "ja_JP"); f.dateFormat = "yyyyMMdd_HHmmss"
+        return f.string(from: Date())
+    }
 }
 
 private struct SettingsRowButton: View {
@@ -347,7 +467,7 @@ private struct SettingsRowButton: View {
                     Text(title) // テキストはデフォルトカラー
                 } icon: {
                     Image(systemName: systemImage)
-                        .symbolRenderingMode(.hierarchical)
+//                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(accent)
                 }
                 

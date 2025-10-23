@@ -32,7 +32,7 @@ struct ReportsView: View {
                 
                 // MARK: Year selector + Export
                 HStack(spacing: 12) {
-                    YearPicker(selectedYear: $year, availableYears: availableYears)
+                    YearPicker(selectedYear: $year, availableYears: availableYears, accent: accent)
                         .tint(accent)
                     Spacer()
                     ShareLink(item: csvData(), preview: SharePreview("\(String(year))年レポート", image: Image(systemName: "doc")))
@@ -40,7 +40,7 @@ struct ReportsView: View {
                         Image(systemName: "square.and.arrow.up")
                             .font(.headline)
                             .padding(10)
-                            .background(Circle().fill(.thinMaterial))
+                            .background(Circle().fill(accent.opacity(0.15)))
                     }
                     .tint(accent)
                 }
@@ -150,6 +150,7 @@ struct ReportsView: View {
 private struct YearPicker: View {
     @Binding var selectedYear: Int
     let availableYears: [Int]
+    let accent: Color
     
     var body: some View {
         Menu {
@@ -168,7 +169,10 @@ private struct YearPicker: View {
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
-            .background(RoundedRectangle(cornerRadius: 10).fill(.thinMaterial))
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(accent.opacity(0.15))
+            )
         }
     }
 }

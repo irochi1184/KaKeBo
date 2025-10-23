@@ -7,18 +7,29 @@
 
 import SwiftUI
 
+import SwiftUI
+
 struct ReminderRuleEditor: View {
     @State var rule: ReminderRule
     let onSave: (ReminderRule) -> Void
     @Environment(\.dismiss) private var dismiss
-    // プレビュー用の現在値を親から渡す（設定画面側で計算）
+    
+    // 課金状態 & テーマ
+    @EnvironmentObject var purchase: PurchaseManager
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
+    @State private var showPaywall = false
+    
+    // プレビュー用
     var previewTodosToday: Int = 2
     var previewUnloggedToday: Bool = true
     
     private let weekdaysJP = ["日", "月", "火", "水", "木", "金", "土"]
     
     var body: some View {
+        let accent = themeStore.theme.accentColor(for: scheme)
         Form {
+            // ===== スケジュール（常に利用可） =====
             Section("スケジュール") {
                 Picker("繰り返し", selection: $rule.repeatType) {
                     Text("毎日").tag(ReminderRepeat.daily)
@@ -44,7 +55,7 @@ struct ReminderRuleEditor: View {
                                         .foregroundStyle(rule.weekdays.contains(i) ? .white : .primary)
                                         .background(
                                             Circle()
-                                                .fill(rule.weekdays.contains(i) ? .blue : .gray.opacity(0.2))
+                                                .fill(rule.weekdays.contains(i) ? accent : .gray.opacity(0.2))
                                         )
                                 }
                                 .buttonStyle(.plain)
@@ -58,68 +69,106 @@ struct ReminderRuleEditor: View {
                 Toggle("有効", isOn: $rule.enabled)
             }
             
-            Section("通知メッセージ") {
-                TextField("通知タイトル（例：今日の家計簿をつけましょう）", text: $rule.title)
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField("通知メッセージ（例：今日の支出・収入を登録しましょう。"
-                              + "¥n残りToDo: {todosToday}）",
-                              text: $rule.bodyTemplate, axis: .vertical)
-                    .lineLimit(2...4)
-                    
-                    // ← ここが“ワンタップ挿入”チップ
-                    PlaceholderChips(target: $rule.bodyTemplate)
-                    
-                    // わかりやすい説明
-                    Text("プレースホルダーは、通知時に実際の値に置き換わります。")
-                        .font(.caption).foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(ReminderPlaceholder.allCases) { p in
-                            Text("• \(p.rawValue) ＝ \(p.labelJP)（\(p.hintJP)）")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+            // ===== プレミアム限定：通知メッセージ + プレビュー =====
+            if purchase.isPremiumActive {
+                Section("通知メッセージ") {
+                    TextField("通知タイトル（例：今日の家計簿をつけましょう）", text: $rule.title)
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("通知メッセージ（例：今日の支出・収入を登録しましょう。{todosToday}件のToDo）",
+                                  text: $rule.bodyTemplate, axis: .vertical)
+                        .lineLimit(2...4)
+                        
+                        // ワンタップ挿入チップ
+                        PlaceholderChips(target: $rule.bodyTemplate)
+                        
+                        Text("プレースホルダーは、通知時に実際の値に置き換わります。")
+                            .font(.caption).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(ReminderPlaceholder.allCases) { p in
+                                Text("• \(p.rawValue) ＝ \(p.labelJP)（\(p.hintJP)）")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
-            }
-            
-            Section("プレビュー") {
-                let preview = resolvedBodyPreview()
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(rule.title.isEmpty ? "（タイトル未入力）" : rule.title)
-                        .font(.subheadline.weight(.semibold))
-                    Text(preview.isEmpty ? "（本文未入力）" : preview)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
+                
+                Section("プレビュー") {
+                    let preview = resolvedBodyPreview()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(rule.title.isEmpty ? "（タイトル未入力）" : rule.title)
+                            .font(.subheadline.weight(.semibold))
+                        Text(preview.isEmpty ? "（本文未入力）" : preview)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                    }
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(.thinMaterial))
                 }
-                .padding(8)
-                .background(RoundedRectangle(cornerRadius: 10).fill(.thinMaterial))
+            } else {
+                // 無料ユーザーにはロック表示
+                Section {
+                    LockedPremiumRow(
+                        title: "プレミアムプラン加入で通知メッセージのカスタムや通知条件の設定が利用可能になります。",
+                        accent: accent
+                    ) { showPaywall = true }
+                } header: { Text("プレミアム機能") }
             }
             
-            Section("条件") {
-                Toggle("今日の取引が未登録の時だけ通知", isOn: $rule.onlyIfUnloggedToday)
-                Toggle("今日が期日のToDoがある時だけ通知", isOn: $rule.onlyIfTodosDueToday)
+            // ===== プレミアム限定：条件 =====
+            if purchase.isPremiumActive {
+                Section("条件") {
+                    Toggle("今日の取引が未登録の時だけ通知", isOn: $rule.onlyIfUnloggedToday)
+                    Toggle("今日が期日のToDoがある時だけ通知", isOn: $rule.onlyIfTodosDueToday)
+                }
             }
         }
         .navigationTitle("リマインダーを編集")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { Button("キャンセル") { dismiss() } }
-            ToolbarItem(placement: .topBarTrailing) { Button("保存") { onSave(rule) } }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("保存") { onSave(rule) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent)
+            }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PremiumPaywallView(accent: themeStore.theme.accentColor(for: scheme))
+                .presentationDetents([.large, .medium])
+                .presentationDragIndicator(.visible)
         }
     }
     
-    // 置換してプレビュー用本文を作る
+    // 置換してプレビュー用本文を作る（プレミアム時のみに使われる）
     private func resolvedBodyPreview() -> String {
         var body = rule.bodyTemplate
         body = body.replacingOccurrences(of: ReminderPlaceholder.todosToday.rawValue,
                                          with: "\(previewTodosToday)")
-        //        body = body.replacingOccurrences(of: ReminderPlaceholder.unloggedToday.rawValue,
-        //                                         with: previewUnloggedToday ? "はい" : "いいえ")
+        // 他の置換を増やす場合はここに追記
         return body
     }
 }
 
-// ワンタップで本文末尾にプレースホルダーを挿入（シンプル実装）
+// ロック行（ボタン付き）
+private struct LockedPremiumRow: View {
+    let title: String
+    let accent: Color
+    let onTapUpgrade: () -> Void
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "lock.fill").foregroundStyle(accent)
+            Text(title)
+            Spacer()
+            Button("プレミアムを確認", action: onTapUpgrade)
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+        }
+        .padding(6)
+    }
+}
+
+// ワンタップで本文末尾にプレースホルダーを挿入
 private struct PlaceholderChips: View {
     @Binding var target: String
     var body: some View {

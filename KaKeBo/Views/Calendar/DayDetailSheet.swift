@@ -11,6 +11,8 @@ struct DayDetailSheet: View {
     @EnvironmentObject var store: DataStore
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var todoStore: TodoStore
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     private var dayTodos: [CalendarTodo] { todoStore.todos(on: date) }
     
     let date: Date
@@ -180,6 +182,7 @@ struct DayDetailSheet: View {
                 )
                 .presentationDetents([.height(200)])   // ← “アラート風”の小ぶりサイズ
                 .presentationDragIndicator(.visible)
+                .background(themeStore.theme.backgroundColor(for: scheme))
             }
         }
     }
@@ -346,6 +349,8 @@ struct DayDetailSheet: View {
 }
 
 private struct AddTodoMiniSheet: View {
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     let accent: Color
     @Binding var title: String
     let onAdd: () -> Void

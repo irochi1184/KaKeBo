@@ -45,6 +45,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		7371FE872EA9F992005F3594 /* Exceptions for "KaKeBo" folder in "KaKeBo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 739DEFD02E7FD6A000C4F358 /* KaKeBo */;
+		};
 		73931F652EA0E7980089855D /* Exceptions for "KaKeBoWidget" folder in "KaKeBoWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -78,6 +85,7 @@
 		739DEFD32E7FD6A000C4F358 /* KaKeBo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				7371FE872EA9F992005F3594 /* Exceptions for "KaKeBo" folder in "KaKeBo" target */,
 				73C09D262EA4F8F4003B5650 /* Exceptions for "KaKeBo" folder in "KaKeBoWidgetExtension" target */,
 			);
 			path = KaKeBo;
@@ -281,6 +289,7 @@
 				INFOPLIST_FILE = KaKeBoWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = KaKeBoWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -312,6 +321,7 @@
 				INFOPLIST_FILE = KaKeBoWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = KaKeBoWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -462,6 +472,7 @@
 				DEVELOPMENT_TEAM = XX3ULK22EF;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KaKeBo/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -498,6 +509,7 @@
 				DEVELOPMENT_TEAM = XX3ULK22EF;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KaKeBo/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

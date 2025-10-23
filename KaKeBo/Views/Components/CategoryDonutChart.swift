@@ -148,10 +148,10 @@ private struct DiffBadge: View {
                 let v = round(p) // 小数不要なら丸め
                 if v > 0 {
                     // 支出: 赤（悪化） / 収支: 緑（改善）
-                    let color: Color = (mode == .expense) ? .red : .green
+                    let color: Color = (mode == .expense) ? .red.opacity(0.85) : .green.opacity(0.85)
                     return ("先月比 +\(Int(v))%", color, "arrow.up.right")
                 } else if v < 0 {
-                    let color: Color = (mode == .expense) ? .green : .red
+                    let color: Color = (mode == .expense) ? .green.opacity(0.85) : .red.opacity(0.85)
                     return ("先月比 \(Int(v))%", color, "arrow.down.right")
                 } else {
                     return ("先月比 ±0%", .secondary, "arrow.right")
@@ -175,6 +175,8 @@ private struct DiffBadge: View {
 }
 
 struct CategoryDonutPager: View {
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     // 支出
     let expense: [CategorySlice]
     let expenseCurrentTotal: Int
@@ -187,6 +189,7 @@ struct CategoryDonutPager: View {
     @State private var page = 0
     
     var body: some View {
+        let accent = themeStore.theme.accentColor(for: scheme)
         let pagerHeight = max(requiredHeight(forCount: expense.count),
                               requiredHeight(forCount: income.count))
         
@@ -232,7 +235,7 @@ struct CategoryDonutPager: View {
                     } label: {
                         Image(systemName: "chevron.left.circle.fill")
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(accent)
                             .opacity(page == 0 ? 0.25 : 0.9)
                             .padding(4)
                             .background(.ultraThinMaterial, in: Circle())
@@ -248,7 +251,7 @@ struct CategoryDonutPager: View {
                     } label: {
                         Image(systemName: "chevron.right.circle.fill")
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(accent)
                             .opacity(page == 1 ? 0.25 : 0.9)
                             .padding(4)
                             .background(.ultraThinMaterial, in: Circle())

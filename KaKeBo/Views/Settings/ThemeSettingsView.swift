@@ -9,127 +9,210 @@ import SwiftUI
 
 struct ThemeSettingsView: View {
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var purchase: PurchaseManager
     @State private var working: AppTheme = .init()
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+    @State private var showPaywall = false
     
-    // プレビュー専用（システム追従なし / ライト・ダーク手動切替）
     enum PreviewMode: String, CaseIterable, Identifiable {
-        case light = "ライト"
-        case dark  = "ダーク"
+        case light = "ライト", dark = "ダーク"
         var id: String { rawValue }
         var colorScheme: ColorScheme { self == .light ? .light : .dark }
     }
     @State private var previewMode: PreviewMode = .light
     
     var body: some View {
+        let accent = themeStore.theme.accentColor(for: scheme)
         Form {
-            // --- アクセントカラー（共通 or 個別） ---
-            Section("アクセントカラー") {
-                Toggle("ライト/ダークで共通の色を使う", isOn: $working.useSameAccentForBoth)
-                    .onChange(of: working.useSameAccentForBoth) { _, on in
-                        if on { working.accentDarkRGBA = working.accentLightRGBA }
+            // === 無料プリセット（常に利用可） ===
+            Section("無料プリセット") {
+                PresetGrid(
+                    selected: working.activePreset,
+                    onSelect: { p in
+                        var t = working
+                        t.apply(p)
+                        working = t
                     }
-                
-                ColorPicker(
-                    working.useSameAccentForBoth ? "アクセント（共通）" : "アクセント（ライト）",
-                    selection: Binding(
-                        get: { working.accentLightRGBA.swiftUIColor },
-                        set: {
-                            working.accentLightRGBA = .init($0)
-                            if working.useSameAccentForBoth {
-                                working.accentDarkRGBA = working.accentLightRGBA
-                            }
-                        }
-                    ),
-                    supportsOpacity: false
                 )
-                .tint(working.accentLightRGBA.swiftUIColor)
-                
-                if !working.useSameAccentForBoth {
-                    ColorPicker(
-                        "アクセント（ダーク）",
-                        selection: Binding(
-                            get: { working.accentDarkRGBA.swiftUIColor },
-                            set: { working.accentDarkRGBA = .init($0) }
-                        ),
-                        supportsOpacity: false
-                    )
+            }
+            
+            // === カスタム（プレミアム限定） ===
+            Section("カスタム（プレミアム）") {
+                if purchase.isPremiumActive {
+                    customEditors
+                } else {
+                    LockedCustomSection(accent: accent) {
+                        showPaywall = true
+                    }
                 }
             }
             
-            // --- Home 背景色（共通 or 個別） ---
-            Section("Home 背景色") {
-                Toggle("ライト/ダークで共通の色を使う", isOn: $working.useSameBackgroundForBoth)
-                    .onChange(of: working.useSameBackgroundForBoth) { _, on in
-                        if on { working.backgroundDarkRGBA = working.backgroundLightRGBA }
-                    }
-                
-                ColorPicker(
-                    working.useSameBackgroundForBoth ? "背景色（共通）" : "背景色（ライト）",
-                    selection: Binding(
-                        get: { working.backgroundLightRGBA.swiftUIColor },
-                        set: {
-                            working.backgroundLightRGBA = .init($0)
-                            if working.useSameBackgroundForBoth {
-                                working.backgroundDarkRGBA = working.backgroundLightRGBA
-                            }
-                        }
-                    ),
-                    supportsOpacity: true
-                )
-                
-                if !working.useSameBackgroundForBoth {
-                    ColorPicker(
-                        "背景色（ダーク）",
-                        selection: Binding(
-                            get: { working.backgroundDarkRGBA.swiftUIColor },
-                            set: { working.backgroundDarkRGBA = .init($0) }
-                        ),
-                        supportsOpacity: true
-                    )
-                }
-            }
-            
-            // --- プレビュー（ライト/ダーク切替） ---
+            // === プレビュー ===
             Section("プレビュー") {
                 Picker("表示モード", selection: $previewMode) {
-                    ForEach(PreviewMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
+                    ForEach(PreviewMode.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 
-                let scheme = previewMode.colorScheme
+                let s = previewMode.colorScheme
                 HomePreview(
-                    background: working.backgroundColor(for: scheme),
-                    accent: working.accentColor(for: scheme)
+                    background: working.backgroundColor(for: s),
+                    accent: working.accentColor(for: s)
                 )
-                .environment(\.colorScheme, scheme)
+                .environment(\.colorScheme, s)
                 .frame(maxHeight: 160)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
             }
         }
         .onAppear { working = themeStore.theme }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("閉じる") { dismiss() }
-            }
+            ToolbarItem(placement: .topBarLeading) { Button("閉じる") { dismiss() } }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("保存") {
                     themeStore.theme = working
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(accent)
+            }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PremiumPaywallView(accent: themeStore.theme.accentColor(for: scheme))
+                .presentationDetents([.large, .medium])
+                .presentationDragIndicator(.visible)
+        }
+    }
+    
+    // MARK: - カスタム編集UI（プレミアム時のみ）
+    private var customEditors: some View {
+        Group {
+            // アクセント（ライト/ダーク個別OK、ただし「ダークでも同じ色にする」運用推奨時は useSameAccentForBoth=true を維持）
+            Section {
+                Toggle("ライト/ダークでアクセントを共通にする", isOn: Binding(
+                    get: { working.useSameAccentForBoth },
+                    set: { newVal in
+                        var w = working; w.useSameAccentForBoth = newVal; if newVal { w.accentDarkRGBA = w.accentLightRGBA }; w.markAsCustom(); working = w
+                    }
+                ))
+                ColorPicker(
+                    working.useSameAccentForBoth ? "アクセント（共通）" : "アクセント（ライト）",
+                    selection: Binding(
+                        get: { working.accentLightRGBA.swiftUIColor },
+                        set: { c in var w = working; w.accentLightRGBA = .init(c); if w.useSameAccentForBoth { w.accentDarkRGBA = w.accentLightRGBA }; w.markAsCustom(); working = w }
+                    ),
+                    supportsOpacity: false
+                )
+                if !working.useSameAccentForBoth {
+                    ColorPicker(
+                        "アクセント（ダーク）",
+                        selection: Binding(
+                            get: { working.accentDarkRGBA.swiftUIColor },
+                            set: { c in var w = working; w.accentDarkRGBA = .init(c); w.markAsCustom(); working = w }
+                        ),
+                        supportsOpacity: false
+                    )
+                }
+            }
+            
+            // 背景（要件：ライトは基本白系、ダークは暗め推奨。自由編集はプレミアムで可能）
+            Section {
+                Toggle("ライト/ダークで背景を共通にする", isOn: Binding(
+                    get: { working.useSameBackgroundForBoth },
+                    set: { newVal in
+                        var w = working; w.useSameBackgroundForBoth = newVal; if newVal { w.backgroundDarkRGBA = w.backgroundLightRGBA }; w.markAsCustom(); working = w
+                    }
+                ))
+                ColorPicker(
+                    working.useSameBackgroundForBoth ? "背景（共通）" : "背景（ライト）",
+                    selection: Binding(
+                        get: { working.backgroundLightRGBA.swiftUIColor },
+                        set: { c in var w = working; w.backgroundLightRGBA = .init(c); if w.useSameBackgroundForBoth { w.backgroundDarkRGBA = w.backgroundLightRGBA }; w.markAsCustom(); working = w }
+                    ),
+                    supportsOpacity: true
+                )
+                if !working.useSameBackgroundForBoth {
+                    ColorPicker(
+                        "背景（ダーク）",
+                        selection: Binding(
+                            get: { working.backgroundDarkRGBA.swiftUIColor },
+                            set: { c in var w = working; w.backgroundDarkRGBA = .init(c); w.markAsCustom(); working = w }
+                        ),
+                        supportsOpacity: true
+                    )
+                }
             }
         }
     }
 }
 
-// 簡易プレビュー：HomeView のカード・ボタンをなんとなく再現
+// MARK: - プリセットグリッド（無料）
+private struct PresetGrid: View {
+    let selected: AppTheme.Preset?
+    let onSelect: (AppTheme.Preset) -> Void
+    
+    private let cols = [GridItem(.flexible()), GridItem(.flexible())]
+    
+    var body: some View {
+        LazyVGrid(columns: cols, spacing: 10) {
+            // “custom” を除外
+            ForEach(AppTheme.Preset.allCases.filter { $0 != .custom }, id: \.self) { p in
+                Button {
+                    onSelect(p)
+                } label: {
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(p.accent)
+                            .frame(width: 20, height: 20)
+                        
+                        Text(p.title)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                        
+                        Spacer()
+                        
+                        if selected == p {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(p.accent)
+                        }
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.thinMaterial)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+
+
+// MARK: - ロック表示（非プレミアム時）
+private struct LockedCustomSection: View {
+    let accent: Color
+    let onTapUpgrade: () -> Void
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill").foregroundStyle(accent)
+                Text("プレミアムプラン加入でアクセントカラーに背景色、ライトモードとダークモード時など自由なカラー編集がご利用いただけます。カラー指定も無限大で自由自在にカスタムできます。")
+                Spacer()
+            }
+            Button("プレミアムを確認") { onTapUpgrade() }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+        }
+        .padding(8)
+    }
+}
+
+// 既存の簡易プレビューを流用
 private struct HomePreview: View {
     var background: Color
     var accent: Color
-    
     var body: some View {
         ZStack {
             Rectangle().fill(background)
@@ -137,12 +220,8 @@ private struct HomePreview: View {
                 HStack {
                     Text("合計支出").font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Button("追加") { }
-                        .buttonStyle(.borderedProminent)
-                        .tint(accent)
-                }
-                .padding(.horizontal, 12)
-                
+                    Button("追加") { }.buttonStyle(.borderedProminent).tint(accent)
+                }.padding(.horizontal, 12)
                 RoundedRectangle(cornerRadius: 12)
                     .fill(.thinMaterial)
                     .overlay(

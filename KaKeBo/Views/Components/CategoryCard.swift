@@ -9,13 +9,15 @@
 import SwiftUI
 
 struct CategoryCard: View {
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     let name: String
     let symbolName: String
     let color: Color
     let isSelected: Bool
     
     var body: some View {
-        let strokeColor: Color = isSelected ? .accentColor : .white.opacity(0.08)
+        let strokeColor: Color = isSelected ? themeStore.theme.accentColor(for: scheme) : .white.opacity(0.08)
         let lineWidth: CGFloat = isSelected ? 2 : 1
         let shadowOpacity: Double = isSelected ? 0.10 : 0.04
         let shadowRadius: CGFloat = isSelected ? 8 : 4
