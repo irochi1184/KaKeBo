@@ -13,11 +13,17 @@ struct CategorySelector: View {
     @Environment(\.horizontalSizeClass) private var hSize
     @EnvironmentObject var themeStore: ThemeStore
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject var purchase: PurchaseManager
+    @State private var showPaywall = false
     
     /// ＋ボタンのタップ時に呼ばれる（nilなら表示しない）
     var onTapAdd: (() -> Void)? = nil
     /// ＋カードを表示するか（デフォルト true）
     var showsAddButton: Bool = true
+    
+    // 課金ガード
+    private let freeCategoryLimit = 12
+    private var atLimit: Bool { !purchase.isPremiumActive && store.categories.count >= freeCategoryLimit }
     
     // iPhoneコンパクト幅：4列 / それ以外：6列
     private var columns: [GridItem] {
@@ -72,13 +78,24 @@ struct CategorySelector: View {
                     }
                     // 最後尾に「＋ 追加」カードを差し込む（onTapAdd があるときのみ）
                     if let onTapAdd, showsAddButton {
-                        Button(action: onTapAdd) {
+                        Button {
+                            handleAddTapped(onTapAdd)
+                        } label: {
                             CategoryCard(
                                 name: "カテゴリー追加",
                                 symbolName: "plus.circle.fill",
                                 color: .accentColor,
                                 isSelected: false
                             )
+                            .opacity(atLimit ? 0.6 : 1)
+                            .overlay(alignment: .topTrailing) {
+                                if atLimit {
+                                    Image(systemName: "lock.fill")
+                                        .font(.caption2)
+                                        .padding(6)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("カテゴリー追加")
@@ -87,5 +104,19 @@ struct CategorySelector: View {
             }
         }
         .luxCard()
+        // 課金シート
+        .sheet(isPresented: $showPaywall) {
+            PremiumPaywallView(accent: themeStore.theme.accentColor(for: scheme))
+                .presentationDetents([.large, .medium])
+                .presentationDragIndicator(.visible)
+        }
+    }
+    
+    private func handleAddTapped(_ onTapAdd: () -> Void) {
+        if atLimit {
+            showPaywall = true
+        } else {
+            onTapAdd()
+        }
     }
 }

@@ -148,10 +148,10 @@ private struct DiffBadge: View {
                 let v = round(p) // 小数不要なら丸め
                 if v > 0 {
                     // 支出: 赤（悪化） / 収支: 緑（改善）
-                    let color: Color = (mode == .expense) ? .red : .green
+                    let color: Color = (mode == .expense) ? .red.opacity(0.85) : .green.opacity(0.85)
                     return ("先月比 +\(Int(v))%", color, "arrow.up.right")
                 } else if v < 0 {
-                    let color: Color = (mode == .expense) ? .green : .red
+                    let color: Color = (mode == .expense) ? .green.opacity(0.85) : .red.opacity(0.85)
                     return ("先月比 \(Int(v))%", color, "arrow.down.right")
                 } else {
                     return ("先月比 ±0%", .secondary, "arrow.right")

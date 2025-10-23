@@ -39,13 +39,13 @@ struct ThemeSettingsView: View {
             
             // === カスタム（プレミアム限定） ===
             Section("カスタム（プレミアム）") {
-//                if purchase.isPremiumActive {
+                if purchase.isPremiumActive {
                     customEditors
-//                } else {
-//                    LockedCustomSection(accent: accent) {
-//                        showPaywall = true
-//                    }
-//                }
+                } else {
+                    LockedCustomSection(accent: accent) {
+                        showPaywall = true
+                    }
+                }
             }
             
             // === プレビュー ===
@@ -198,7 +198,7 @@ private struct LockedCustomSection: View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "lock.fill").foregroundStyle(accent)
-                Text("自由なカラー編集はプレミアムでご利用いただけます。")
+                Text("プレミアムプラン加入でアクセントカラーに背景色、ライトモードとダークモード時など自由なカラー編集がご利用いただけます。カラー指定も無限大で自由自在にカスタムできます。")
                 Spacer()
             }
             Button("プレミアムを確認") { onTapUpgrade() }

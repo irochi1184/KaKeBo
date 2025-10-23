@@ -3,10 +3,7 @@
 <plist version="1.0">
     <dict>
         
-        <key>LSSupportsOpeningDocumentsInPlace</key>
-        <true/>
-        
-        <key>UTExportedTypeDeclarations</key>
+        <key>UTImportedTypeDeclarations</key>
         <array>
             <dict>
                 <key>UTTypeIdentifier</key>
@@ -19,30 +16,14 @@
                 </array>
                 <key>UTTypeTagSpecification</key>
                 <dict>
+                    <!-- 衝突回避のため json を入れないのが無難 -->
                     <key>public.filename-extension</key>
                     <array>
                         <string>kakebo</string>
-                        <string>json</string>
                     </array>
                     <key>public.mime-type</key>
-                    <string>application/json</string>
+                    <string>application/vnd.irochi.kakebo+json</string>
                 </dict>
-            </dict>
-        </array>
-        
-        <key>CFBundleDocumentTypes</key>
-        <array>
-            <dict>
-                <key>CFBundleTypeName</key>
-                <string>KaKeBo Backup</string>
-                <key>LSItemContentTypes</key>
-                <array>
-                    <string>com.irochi.kakebo.backup</string>
-                </array>
-                <key>CFBundleTypeRole</key>
-                <string>Editor</string>
-                <key>LSHandlerRank</key>
-                <string>Owner</string>
             </dict>
         </array>
         

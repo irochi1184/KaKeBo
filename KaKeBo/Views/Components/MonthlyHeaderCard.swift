@@ -27,8 +27,8 @@ struct MonthlyHeaderCard: View {
                 }
                 
                 HStack(spacing: 12) {
-                    StatPill(title: "支出", value: expense, icon: "arrow.down.left.circle.fill", base: .red)
-                    StatPill(title: "収入", value: income, icon: "arrow.up.right.circle.fill", base: .green)
+                    StatPill(title: "支出", value: expense, icon: "arrow.down.left.circle.fill", base: .red.opacity(0.75))
+                    StatPill(title: "収入", value: income, icon: "arrow.up.right.circle.fill", base: .green.opacity(0.75))
                 }
             }
             .luxCard()

@@ -95,6 +95,8 @@ final class PurchaseManager: ObservableObject {
     }
     
     var isPremiumActive: Bool { !purchasedProductIDs.isEmpty }
+    // 下の1行はテスト用
+//    var isPremiumActive = true
     
     // MARK: - Updates listener
     private func startListeningForTransactions() {

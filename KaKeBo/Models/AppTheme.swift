@@ -10,7 +10,7 @@ import SwiftUI
 extension AppTheme.Preset {
     var title: String {
         switch self {
-        case .default: return "デフォルト（青）"
+        case .default: return "デフォルト"
         case .green:   return "緑系"
         case .red:     return "赤系"
         case .orange:  return "オレンジ系"

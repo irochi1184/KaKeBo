@@ -9,7 +9,12 @@ import SwiftUI
 
 struct CategoryListView: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var purchase: PurchaseManager
+    @Environment(\.colorScheme) private var scheme
+    
     @State private var showAdd = false
+    @State private var showPaywall = false
     
     // 削除確認のための状態
     @State private var pendingDeleteIDs: [UUID] = []
@@ -17,6 +22,9 @@ struct CategoryListView: View {
     
     // クイック追加の折りたたみ
     @State private var showQuickAdd = true
+    
+    private let freeCategoryLimit = 12
+    private var atLimit: Bool { !purchase.isPremiumActive && store.categories.count >= freeCategoryLimit }
     
     var body: some View {
         NavigationStack {
@@ -30,11 +38,24 @@ struct CategoryListView: View {
                                 store.categories.contains(where: { $0.name == p.name }) == false
                             },
                             onTap: { p in
-                                let cat = Category(name: p.name, symbolName: p.symbol, color: p.color)
-                                store.addCategory(cat)
-                            }
+                                if atLimit {
+                                    showPaywall = true
+                                } else {
+                                    let cat = Category(name: p.name, symbolName: p.symbol, color: p.color)
+                                    store.addCategory(cat)
+                                }
+                            },
+                            isLocked: atLimit
                         )
                         .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                        if atLimit {
+                            Text("無料プランではカテゴリは \(freeCategoryLimit) 件までです。\nプレミアムプラン加入で上限無制限になります。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 12)
+                                .padding(.bottom, 6)
+                        }
                     } header: {
                         HStack {
                             Text("クイック追加")
@@ -72,12 +93,17 @@ struct CategoryListView: View {
             .navigationTitle("カテゴリ")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    EditButton() // ← これで並べ替え＆複数削除モード
+                    EditButton()
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showAdd = true
+                        if atLimit {
+                            showPaywall = true
+                        } else {
+                            showAdd = true
+                        }
                     } label: { Image(systemName: "plus") }
+                        .disabled(false) // 押せるようにして Paywall に誘導
                 }
             }
             .confirmationDialog(
@@ -98,6 +124,13 @@ struct CategoryListView: View {
             .sheet(isPresented: $showAdd) {
                 CategoryEditorView(category: (nil as Category?))
                     .environmentObject(store)
+                    .environmentObject(themeStore)
+                    .environmentObject(purchase)
+            }
+            .sheet(isPresented: $showPaywall) {
+                PremiumPaywallView(accent: themeStore.theme.accentColor(for: scheme))
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -115,6 +148,11 @@ struct CategoryEditorView: View {
     @State private var color: Color = .blue
     
     private var editingId: UUID? = nil
+    
+    private let freeCategoryLimit = 12
+    @EnvironmentObject var purchase: PurchaseManager
+    @State private var showPaywall = false
+    
     var onSaved: ((Category) -> Void)? = nil
     
     init(category: Category?, onSaved: ((Category) -> Void)? = nil) {
@@ -175,6 +213,11 @@ struct CategoryEditorView: View {
             .navigationTitle(editingId == nil ? "カテゴリ追加" : "カテゴリ編集")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .sheet(isPresented: $showPaywall) {
+                PremiumPaywallView(accent: themeStore.theme.accentColor(for: scheme))
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
+            }
         }
         .presentationDetents([.large, .medium])
         .presentationDragIndicator(.visible)
@@ -201,6 +244,15 @@ struct CategoryEditorView: View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         
+        // 新規時のみ課金ガード
+        if editingId == nil {
+            let isOverLimit = !purchase.isPremiumActive && store.categories.count >= freeCategoryLimit
+            if isOverLimit {
+                showPaywall = true
+                return
+            }
+        }
+        
         let cat = Category(
             id: editingId ?? UUID(),
             name: trimmed,
@@ -218,45 +270,110 @@ struct CategoryEditorView: View {
 }
 
 // 同ファイル末尾 or 別ファイルでもOK
+private let presetHexByName: [String: String] = [
+    "食費":       "#F28B59",
+    "通信料":     "#BFA5FF",
+    "交際費":     "#00DAC3",
+    "その他収入": "#3BD3FE",
+    "水道光熱費": "#92E2E6",
+    "交通費":     "#91ACBE",
+    "住宅費":     "#6199CF",
+    "医療費":     "#BB74A3",
+    "娯楽費":     "#77B98A",
+    "給与":       "#509C9C",
+    "日用品費":   "#FFD88F",
+]
 
 struct PresetCategory {
     let name: String
     let symbol: String
     let color: Color
     
+    /// 名前に一致するHEX色があればそれを、無ければフォールバック色を返す
+    private static func color(for name: String, fallback: Color) -> Color {
+        if let hex = presetHexByName[name], let c = Color.fromHex(hex) {
+            return c
+        }
+        print("⚠️ Fallback color used for:", name)
+        return fallback
+    }
+    
     static let all: [PresetCategory] = [
-        .init(name: "食費",       symbol: "fork.knife",              color: .red),
-        .init(name: "日用品費",   symbol: "bag.fill",                color: .orange),
-        .init(name: "水道光熱費", symbol: "lightbulb.fill",          color: .blue),
-        .init(name: "交通費",     symbol: "tram.fill",               color: .teal),
-        .init(name: "通信料",     symbol: "wifi",                    color: .indigo),
-        .init(name: "住宅費",     symbol: "house.fill",              color: .brown),
-        .init(name: "医療費",     symbol: "cross.case.fill",         color: .pink),
-        .init(name: "被服費",     symbol: "tshirt.fill",             color: .purple),
-        .init(name: "交際費",     symbol: "gift.fill",               color: .mint),
-        .init(name: "娯楽費",     symbol: "gamecontroller.fill",     color: .green),
-        .init(name: "美容費",     symbol: "scissors",                color: .pink),
-        .init(name: "子ども費",   symbol: "figure.2.and.child.holdinghands", color: .cyan),
-        .init(name: "雑費",       symbol: "ellipsis.circle.fill",    color: .gray),
-        .init(name: "特別費",     symbol: "sparkles",                color: .yellow),
-        .init(name: "保険料",     symbol: "shield.checkerboard",     color: .blue),
-        .init(name: "車両費",     symbol: "car.fill",                color: .orange),
-        .init(name: "学費",       symbol: "book.fill",               color: .brown),
-        .init(name: "税金",       symbol: "yensign.circle",          color: .red),
-        .init(name: "習い事",     symbol: "music.note.list",         color: .purple),
-        .init(name: "小遣い",     symbol: "banknote.fill", color: .green),
+        .init(name: "食費",       symbol: "fork.knife",
+              color: color(for: "食費",       fallback: .red)),
         
-        // 収入系（必要ならここからも追加できる）
-        .init(name: "給与",       symbol: "banknote",                color: .green),
-        .init(name: "その他収入", symbol: "yensign.circle.fill",     color: .cyan),
+            .init(name: "日用品費",   symbol: "bag.fill",
+                  color: color(for: "日用品費",   fallback: .orange)),
+        
+            .init(name: "水道光熱費", symbol: "lightbulb.fill",
+                  color: color(for: "水道光熱費", fallback: .blue)),
+        
+            .init(name: "交通費",     symbol: "tram.fill",
+                  color: color(for: "交通費",     fallback: .teal)),
+        
+            .init(name: "通信料",     symbol: "wifi",
+                  color: color(for: "通信料",     fallback: .indigo)),
+        
+            .init(name: "住宅費",     symbol: "house.fill",
+                  color: color(for: "住宅費",     fallback: .brown)),
+        
+            .init(name: "医療費",     symbol: "cross.case.fill",
+                  color: color(for: "医療費",     fallback: .pink)),
+        
+            .init(name: "被服費",     symbol: "tshirt.fill",
+                  color: .purple),
+        
+            .init(name: "交際費",     symbol: "gift.fill",
+                  color: color(for: "交際費",     fallback: .mint)),
+        
+            .init(name: "娯楽費",     symbol: "gamecontroller.fill",
+                  color: color(for: "娯楽費",     fallback: .green)),
+        
+            .init(name: "美容費",     symbol: "scissors",
+                  color: .pink),
+        
+            .init(name: "子ども費",   symbol: "figure.2.and.child.holdinghands",
+                  color: .cyan),
+        
+            .init(name: "雑費",       symbol: "ellipsis.circle.fill",
+                  color: .gray),
+        
+            .init(name: "特別費",     symbol: "sparkles",
+                  color: .yellow),
+        
+            .init(name: "保険料",     symbol: "shield.checkerboard",
+                  color: .blue),
+        
+            .init(name: "車両費",     symbol: "car.fill",
+                  color: .orange),
+        
+            .init(name: "学費",       symbol: "book.fill",
+                  color: .brown),
+        
+            .init(name: "税金",       symbol: "yensign.circle",
+                  color: .red),
+        
+            .init(name: "習い事",     symbol: "music.note.list",
+                  color: .purple),
+        
+            .init(name: "小遣い",     symbol: "banknote.fill",
+                  color: .green),
+        
+        // 収入系
+        .init(name: "給与",       symbol: "banknote", // ←必要なら "yensign.circle" に合わせてもOK
+              color: color(for: "給与",       fallback: .green)),
+        
+            .init(name: "その他収入", symbol: "yensign.circle.fill",
+                  color: color(for: "その他収入", fallback: .cyan)),
     ]
 }
+
 
 private struct QuickAddGrid: View {
     let presets: [PresetCategory]
     let onTap: (PresetCategory) -> Void
+    var isLocked: Bool = false
     
-    // 横スクロールのチップ群（件数が多いのでスクロール式が扱いやすい）
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -278,6 +395,15 @@ private struct QuickAddGrid: View {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .fill(p.color.opacity(0.12))
                         )
+                        .overlay(alignment: .topTrailing) {
+                            if isLocked {
+                                Image(systemName: "lock.fill")
+                                    .font(.caption2)
+                                    .padding(4)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .opacity(isLocked ? 0.65 : 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -286,3 +412,4 @@ private struct QuickAddGrid: View {
         }
     }
 }
+
