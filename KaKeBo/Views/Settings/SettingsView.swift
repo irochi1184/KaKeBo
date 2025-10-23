@@ -375,6 +375,18 @@ struct SettingsView: View {
                 accent: accent,
                 trailingText: "JSON/CSV"
             ) { showImporter = true }
+            // テストサンプルボタン
+//            SettingsRowButton(
+//                title: "バックアップを作成（テストサンプル2025）",
+//                systemImage: "arrow.down.doc",
+//                accent: accent,
+//                trailingText: "JSON"
+//            ) {
+//                let data = makeSample2025BackupJSON()
+//                exportDoc = KaKeBoBackupDocument(data: data)
+//                showingExporter = true
+//            }
+
         } header: {
             Text("サポート")
         }

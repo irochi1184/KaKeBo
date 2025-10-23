@@ -76,7 +76,6 @@ struct BackupTheme: Codable {
 }
 
 extension UTType {
-    static let kakeboBackup = UTType(exportedAs: "com.irochi.kakebo.backup",
+    static let kakeboBackup = UTType(importedAs: "com.irochi.kakebo.backup",
                                      conformingTo: .json)
 }
-

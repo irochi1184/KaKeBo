@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-	<key>UTExportedTypeDeclarations</key>
-	<array>
-        <!-- Exported Type Identifiers -->
+    <dict>
+        
+        <!-- 1) Exported Type Identifiers -->
         <key>UTExportedTypeDeclarations</key>
         <array>
             <dict>
@@ -21,6 +20,7 @@
                     <key>public.filename-extension</key>
                     <array>
                         <string>kakebo</string>
+                        <!-- （任意）JSON でも扱いたいなら残してOK -->
                         <string>json</string>
                     </array>
                     <key>public.mime-type</key>
@@ -31,7 +31,7 @@
             </dict>
         </array>
         
-        <!-- Document Types -->
+        <!-- 2) Document Types -->
         <key>CFBundleDocumentTypes</key>
         <array>
             <dict>
@@ -40,6 +40,7 @@
                 <key>LSItemContentTypes</key>
                 <array>
                     <string>com.irochi.kakebo.backup</string>
+                    <!-- （任意）JSON もこのアプリで開けるようにするなら残す -->
                     <string>public.json</string>
                 </array>
                 <key>CFBundleTypeRole</key>
@@ -48,8 +49,6 @@
                 <string>Owner</string>
             </dict>
         </array>
-
-		<dict/>
-	</array>
-</dict>
+        
+    </dict>
 </plist>
