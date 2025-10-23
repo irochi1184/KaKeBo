@@ -175,6 +175,8 @@ private struct DiffBadge: View {
 }
 
 struct CategoryDonutPager: View {
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     // 支出
     let expense: [CategorySlice]
     let expenseCurrentTotal: Int
@@ -187,6 +189,7 @@ struct CategoryDonutPager: View {
     @State private var page = 0
     
     var body: some View {
+        let accent = themeStore.theme.accentColor(for: scheme)
         let pagerHeight = max(requiredHeight(forCount: expense.count),
                               requiredHeight(forCount: income.count))
         
@@ -232,7 +235,7 @@ struct CategoryDonutPager: View {
                     } label: {
                         Image(systemName: "chevron.left.circle.fill")
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(accent)
                             .opacity(page == 0 ? 0.25 : 0.9)
                             .padding(4)
                             .background(.ultraThinMaterial, in: Circle())
@@ -248,7 +251,7 @@ struct CategoryDonutPager: View {
                     } label: {
                         Image(systemName: "chevron.right.circle.fill")
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(accent)
                             .opacity(page == 1 ? 0.25 : 0.9)
                             .padding(4)
                             .background(.ultraThinMaterial, in: Circle())

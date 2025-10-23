@@ -106,11 +106,14 @@ struct CategoryListView: View {
 // ========== 編集画面（同ファイルに定義してスコープ問題を潰す） ==========
 struct CategoryEditorView: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     
     @State private var name: String = ""
     @State private var symbolName: String = "tag.fill"
     @State private var color: Color = .blue
+    
     private var editingId: UUID? = nil
     var onSaved: ((Category) -> Void)? = nil
     
@@ -124,58 +127,93 @@ struct CategoryEditorView: View {
         }
     }
     
+    private var isEnabled: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
     var body: some View {
         NavigationStack {
             Form {
-                TextField("名前", text: $name)
-                ColorPicker("色", selection: $color, supportsOpacity: false)
-                
-                NavigationLink {
-                    SymbolPickerView(selected: $symbolName)
-                        .navigationTitle("シンボルを選択")
-                } label: {
-                    HStack {
-                        Text("アイコン")
-                        Spacer()
-                        Image(systemName: symbolName)
-                            .foregroundStyle(color)
+                Section {
+                    TextField("名前（例：食費）", text: $name)
+                    ColorPicker("色", selection: $color, supportsOpacity: false)
+                    
+                    NavigationLink {
+                        SymbolPickerView(selected: $symbolName)
+                            .navigationTitle("シンボルを選択")
+                    } label: {
+                        HStack {
+                            Text("アイコン")
+                            Spacer()
+                            Image(systemName: symbolName)
+                                .foregroundStyle(color)
+                        }
                     }
                 }
+                .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .black.opacity(0.02))
+                
+                // ちょいプレビュー
+                Section("プレビュー") {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(color.opacity(0.12))
+                            Image(systemName: symbolName)
+                                .foregroundStyle(color)
+                        }
+                        .frame(width: 36, height: 36)
+                        Text(name.isEmpty ? "未入力" : name)
+                            .font(.subheadline.weight(.medium))
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                }
+                .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .black.opacity(0.02))
             }
+            .scrollContentBackground(.hidden)
+            .background(themeStore.theme.backgroundColor(for: scheme))
             .navigationTitle(editingId == nil ? "カテゴリ追加" : "カテゴリ編集")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                // 新規追加時のみ「閉じる」を表示
-                if editingId == nil {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("閉じる") {
-                            dismiss()
-                        }
-                    }
-                }
-                
-                // 右上：保存ボタン（共通）
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("保存") {
-                        let cat = Category(
-                            id: editingId ?? UUID(),
-                            name: name,
-                            symbolName: symbolName,
-                            color: color
-                        )
-                        if editingId == nil {
-                            store.addCategory(cat)
-                        } else {
-                            store.updateCategory(cat)
-                        }
-                        onSaved?(cat)
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
+            .toolbar { toolbarContent }
+        }
+        .presentationDetents([.large, .medium])
+        .presentationDragIndicator(.visible)
+    }
+    
+    // MARK: - Toolbar
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if editingId == nil {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("閉じる") { dismiss() }
             }
         }
+        ToolbarItem(placement: .topBarTrailing) {
+            SaveButton(
+                isEnabled: isEnabled,
+                accent: themeStore.theme.accentColor(for: scheme)
+            ) { save() }
+        }
+    }
+    
+    // MARK: - Actions
+    private func save() {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        
+        let cat = Category(
+            id: editingId ?? UUID(),
+            name: trimmed,
+            symbolName: symbolName,
+            color: color
+        )
+        if editingId == nil {
+            store.addCategory(cat)
+        } else {
+            store.updateCategory(cat)
+        }
+        onSaved?(cat)
+        dismiss()
     }
 }
 

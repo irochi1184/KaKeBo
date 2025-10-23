@@ -136,14 +136,7 @@ struct AddTransactionView: View {
             TypePillSelector(type: $type)
             // ▼ 日付
             VStack(alignment: .leading, spacing: 6) {
-                Text("日付")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                DatePicker("", selection: $date, displayedComponents: .date)
-                    .environment(\.locale, Locale(identifier: "ja_JP"))
-                    .datePickerStyle(.compact)
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                JapaneseDatePickerRow(date: $date)
             }
             // ▼ 金額入力欄
             VStack(alignment: .leading, spacing: 6) {

@@ -11,6 +11,8 @@ struct CategorySelector: View {
     @EnvironmentObject var store: DataStore
     @Binding var selectedCategoryId: UUID?
     @Environment(\.horizontalSizeClass) private var hSize
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     
     /// ＋ボタンのタップ時に呼ばれる（nilなら表示しない）
     var onTapAdd: (() -> Void)? = nil
@@ -39,7 +41,7 @@ struct CategorySelector: View {
                             CategoryCard(
                                 name: "カテゴリーを追加",
                                 symbolName: "plus.circle.fill",
-                                color: .accentColor,
+                                color: themeStore.theme.accentColor(for: scheme),
                                 isSelected: false
                             )
                         }

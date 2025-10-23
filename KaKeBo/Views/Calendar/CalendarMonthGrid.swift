@@ -94,8 +94,8 @@ private struct DayCell: View {
         ZStack(alignment: .topLeading) {   // ← 右上から左上に変更
             // 枠
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .stroke(isToday ? accent.opacity(0.6) : accent.opacity(0.2),
-                        lineWidth: isToday ? 2 : 1)
+                .stroke(isToday ? accent.opacity(0.6) : accent.opacity(0.4),
+                        lineWidth: isToday ? 2 : 0.8)
             
             VStack(spacing: 4) {
                 // 上：日付は右上に表示

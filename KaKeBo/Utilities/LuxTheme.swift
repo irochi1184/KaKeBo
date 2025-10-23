@@ -9,21 +9,17 @@ import SwiftUI
 
 struct LuxCard: ViewModifier {
 //    @EnvironmentObject var themeStore: ThemeStore
-//    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorScheme) private var scheme
     var corner: CGFloat = 16
     func body(content: Content) -> some View {
 //        let accent = themeStore.theme.accentColor(for: scheme)
         content
             .padding(16)
             .background(
-                .ultraThinMaterial.opacity(0.8),
-                in: RoundedRectangle(cornerRadius: corner, style: .continuous)
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(scheme == .dark ? Color.white.opacity(0.06) : .white)
+                    .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.06), radius: 10, y: 5)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .stroke(.white.opacity(0.10), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 6)
     }
 }
 extension View {

@@ -17,12 +17,22 @@ final class PurchaseManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String? = nil
     
-    // ★ あなたの Product ID に合わせて
     static let premiumProductIDs: Set<String> = [
         "kakebo.premium.monthly",
         "kakebo.premium.yearly",
         "kakebo.premium.lifetime"
     ]
+    
+    private var updatesTask: Task<Void, Never>?   // ← 追加
+    
+    init() {
+        // 起動時にトランザクション更新を常時監視
+        startListeningForTransactions()
+    }
+    
+    deinit {
+        updatesTask?.cancel()
+    }
     
     func load() async {
         isLoading = true; defer { isLoading = false }
@@ -31,15 +41,21 @@ final class PurchaseManager: ObservableObject {
             products = try await Product.products(for: Array(Self.premiumProductIDs))
                 .sorted(by: { $0.price < $1.price })
             
-            // 購入状態の復元 — StoreKit.Transaction をフル修飾して衝突回避
+            // 所有状況の復元（最新トランザクション or 現行権利）
             var owned: Set<String> = []
-            for id in Self.premiumProductIDs {
-                if let vr = await StoreKit.Transaction.latest(for: id) {
-                    switch vr {
-                    case .verified(let skTx):
-                        if isActive(skTx) { owned.insert(id) }
-                    case .unverified:
-                        break
+            // iOS17+ なら currentEntitlements を優先、なければ latest(for:)
+            if #available(iOS 17.0, *) {
+                for await ent in StoreKit.Transaction.currentEntitlements {
+                    if case .verified(let tx) = ent, Self.premiumProductIDs.contains(tx.productID), isActive(tx) {
+                        owned.insert(tx.productID)
+                    }
+                }
+            } else {
+                for id in Self.premiumProductIDs {
+                    if let vr = await StoreKit.Transaction.latest(for: id) {
+                        if case .verified(let tx) = vr, isActive(tx) {
+                            owned.insert(id)
+                        }
                     }
                 }
             }
@@ -54,11 +70,9 @@ final class PurchaseManager: ObservableObject {
             let result = try await product.purchase()
             switch result {
             case .success(let verification):
-                if case .verified(let skTx) = verification {
-                    if isActive(skTx) {
-                        purchasedProductIDs.insert(skTx.productID)
-                    }
-                    await skTx.finish()
+                if case .verified(let tx) = verification {
+                    applyPurchase(tx)            // ← ここでセット反映
+                    await tx.finish()
                     return true
                 }
                 return false
@@ -82,11 +96,40 @@ final class PurchaseManager: ObservableObject {
     
     var isPremiumActive: Bool { !purchasedProductIDs.isEmpty }
     
+    // MARK: - Updates listener
+    private func startListeningForTransactions() {
+        // すでに走っていれば再作成しない
+        guard updatesTask == nil else { return }
+        updatesTask = Task { [weak self] in
+            // アプリ存続中ずっと待ち受け
+            for await update in StoreKit.Transaction.updates {
+                guard let self else { continue }
+                if case .verified(let tx) = update {
+                    // UI更新は MainActor 上（このクラスは @MainActor）
+                    self.applyPurchase(tx)
+                    await tx.finish()
+                }
+            }
+        }
+    }
+    
+    // 購入適用（買い切り／サブスク共通）
+    private func applyPurchase(_ tx: StoreKit.Transaction) {
+        if isActive(tx) {
+            purchasedProductIDs.insert(tx.productID)
+        } else {
+            purchasedProductIDs.remove(tx.productID)
+        }
+    }
+    
     // MARK: - Helpers
-    /// サブスクは期限切れ／取消を考慮。買い切りは取消がなければ有効。
+    /// サブスクは有効期限、買い切りは取消（返金）を考慮
     private func isActive(_ t: StoreKit.Transaction) -> Bool {
-        if let revocation = t.revocationDate { return revocation > Date() ? true : false }
-        if let exp = t.expirationDate { return exp > Date() }      // サブスク系
-        return true                                                // 非消費型など
+        // 取消済み（返金等）は無効
+        if t.revocationDate != nil { return false }
+        // サブスク等：期限が未来なら有効
+        if let exp = t.expirationDate { return exp > Date() }
+        // 非消費型（買い切り）は取消がなければ有効
+        return true
     }
 }
