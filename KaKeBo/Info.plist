@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+        <!-- Exported Type Identifiers -->
+        <key>UTExportedTypeDeclarations</key>
+        <array>
+            <dict>
+                <key>UTTypeIdentifier</key>
+                <string>com.irochi.kakebo.backup</string>
+                <key>UTTypeDescription</key>
+                <string>KaKeBo Backup</string>
+                <key>UTTypeConformsTo</key>
+                <array>
+                    <string>public.json</string>
+                </array>
+                <key>UTTypeTagSpecification</key>
+                <dict>
+                    <key>public.filename-extension</key>
+                    <array>
+                        <string>kakebo</string>
+                        <string>json</string>
+                    </array>
+                    <key>public.mime-type</key>
+                    <array>
+                        <string>application/json</string>
+                    </array>
+                </dict>
+            </dict>
+        </array>
+        
+        <!-- Document Types -->
+        <key>CFBundleDocumentTypes</key>
+        <array>
+            <dict>
+                <key>CFBundleTypeName</key>
+                <string>KaKeBo Backup</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                    <string>com.irochi.kakebo.backup</string>
+                    <string>public.json</string>
+                </array>
+                <key>CFBundleTypeRole</key>
+                <string>Editor</string>
+                <key>LSHandlerRank</key>
+                <string>Owner</string>
+            </dict>
+        </array>
+
+		<dict/>
+	</array>
+</dict>
+</plist>
