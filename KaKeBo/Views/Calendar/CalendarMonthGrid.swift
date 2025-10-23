@@ -109,14 +109,20 @@ private struct DayCell: View {
                 }
                 
                 // 下：支出・収入
-                VStack(alignment: .leading, spacing: 3) {
-                    if expense > 0 {
-                        AmountPill(text: "¥" + decimal(expense),
-                                   color: color(for: expense, max: maxExpense, base: .red))
-                    }
+                VStack(alignment: .trailing, spacing: 3) {
                     if income > 0 {
-                        AmountPill(text: "¥" + decimal(income),
-                                   color: color(for: income, max: maxIncome, base: .green))
+                        AmountLabel(
+                            text: "¥" + decimal(income),
+                            isIncome: true,
+                            strength: intensity(value: income, max: maxIncome)
+                        )
+                    }
+                    if expense > 0 {
+                        AmountLabel(
+                            text: "¥" + decimal(expense),
+                            isIncome: false,
+                            strength: intensity(value: expense, max: maxExpense)
+                        )
                     }
                 }
                 .padding(.horizontal, 3)
@@ -156,24 +162,37 @@ private struct DayCell: View {
     }
 }
 
-// 横幅フルで省略しないピル
-private struct AmountPill: View {
-    let text: String
-    let color: Color
+// 数値だけを右揃えで出すラベル
+private struct AmountLabel: View {
+    @Environment(\.colorScheme) private var scheme
+    let text: String          // 例: "¥12,345"
+    let isIncome: Bool        // true=緑, false=赤
+    let strength: Double      // 0...1 : 大きいほど濃い
+    
     var body: some View {
         Text(text)
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .monospacedDigit()                   // 等幅数字で桁ズレ防止
+            .font(.system(size: 9, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(dynamicColor)
+            .frame(maxWidth: .infinity, alignment: .trailing)  // 右揃え
             .lineLimit(1)
-            .minimumScaleFactor(0.50)            // かなり小さくまで縮小OK
+            .minimumScaleFactor(0.85)
             .allowsTightening(true)
-            .padding(.vertical, 2)
-            .padding(.horizontal, 6)
-            .frame(width: 41, height: 12) // 横幅固定
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(color)
-            )
-            .foregroundStyle(.white)
+            .padding(.trailing, 2)
     }
+    
+    private var dynamicColor: Color {
+        let base = isIncome ? Color.green : Color.red
+        // ダークモードではやや淡く、かつ強さで少し濃淡をつける
+        let darkFactor = (scheme == .dark) ? 0.85 : 1.0
+        let strengthFactor = 0.6 + 0.4 * max(0.0, min(1.0, strength))  // 0.6〜1.0
+        return base.opacity(darkFactor * strengthFactor)
+    }
+}
+
+// 値に応じた“強さ”(0...1) を作る簡単な関数
+private func intensity(value: Int, max: Int) -> Double {
+    guard max > 0 else { return 1.0 }
+    let ratio = Double(value) / Double(max)
+    return Swift.max(0.2, Swift.min(1.0, ratio))
 }
