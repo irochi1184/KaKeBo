@@ -46,6 +46,10 @@ struct HomeView: View {
                     Spacer(minLength: 24)
                 }
                 .padding(.top, 0)
+                .onDrop(of: dropUTIs, isTargeted: nil, perform: { _ in
+                    dragging = nil
+                    return true
+                })
             }
             .background(
                 themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea()
@@ -147,24 +151,18 @@ struct HomeView: View {
     // 1カードをドラッグ/ドロップ可能にラップ
     @ViewBuilder
     private func reorderableCard<Content: View>(_ card: DashboardCard, @ViewBuilder content: () -> Content) -> some View {
-        let accent = themeStore.theme.accentColor(for: scheme)
+        @State var isTargeted = false
+        
         content()
-        // 長押し開始で軽く縮小
             .scaleEffect(dragging == card ? 0.98 : 1.0)
-            .overlay(
-                // ドラッグ中は薄い縁取り
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(dragging == card ? accent.opacity(0.35) : .clear, lineWidth: 1.2)
-            )
+            .animation(.snappy(duration: 0.15), value: isTargeted)
             .animation(.snappy(duration: 0.15), value: dragging == card)
         
-        // ドラッグのペイロードは card.id を文字列で
+        // ドラッグ開始
             .onDrag {
-                self.dragging = card
-                let provider = NSItemProvider(object: card.id as NSString)
-                // 触覚
+                dragging = card
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                return provider
+                return NSItemProvider(object: card.id as NSString)
             }
         
         // 自身の上に入ってきたら配列を差し替える
