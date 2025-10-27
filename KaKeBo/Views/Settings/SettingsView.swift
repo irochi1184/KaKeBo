@@ -281,7 +281,7 @@ struct SettingsView: View {
                 trailingText: reminderCountText
             ) {
                 Task {
-                    if await hasNotificationPermission() {
+                    if await ensureNotificationRegistered() {
                         sheet = .reminders
                     } else {
                         notifMessage = "現在通知の許可設定ができていません。iOSの「設定」アプリ > 通知 > KaKeBo からオンにしてください。"
@@ -488,5 +488,26 @@ private struct SettingsRowButton: View {
             .contentShape(Rectangle()) // ← 行全体をタップ領域に
         }
         .buttonStyle(.plain) // デフォルトの青ハイライト無効
+    }
+}
+
+func ensureNotificationRegistered() async -> Bool {
+    let center = UNUserNotificationCenter.current()
+    let settings = await withCheckedContinuation { (c: CheckedContinuation<UNNotificationSettings, Never>) in
+        center.getNotificationSettings { c.resume(returning: $0) }
+    }
+    switch settings.authorizationStatus {
+    case .notDetermined:
+        // ここで初回リクエスト。これが走れば「設定 > 通知」に現れます
+        let ok = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+            center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                c.resume(returning: granted)
+            }
+        }
+        return ok
+    case .authorized, .provisional, .ephemeral:
+        return true
+    default:
+        return false
     }
 }

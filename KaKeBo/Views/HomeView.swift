@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Charts
+import UniformTypeIdentifiers
 
 struct HomeView: View {
     @EnvironmentObject var store: DataStore
@@ -15,6 +16,7 @@ struct HomeView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var hSize
     
+    // 既存
     @State private var selectedMonth: Date = {
         let cal = Calendar.current
         let comps = cal.dateComponents([ .year, .month ], from: Date())
@@ -22,53 +24,22 @@ struct HomeView: View {
     }()
     @State private var editingTx: Transaction? = nil
     
+    // ▼ 追加：カード順序の状態とドラッグ中のカード
+    @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .donut, .daily, .transactions])
+    @State private var dragging: DashboardCard?
+    
+    private let dropUTIs: [UTType] = [.plainText] // onDrag のペイロード種別
+    
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
                     
-                    // 月次ヘッダー（収支・支出・収入）
-                    MonthlyHeaderCard(
-                        income: monthIncome,
-                        expense: monthExpense,
-                        balance: monthBalance
-                    )
-                    .luxCard()
-                    .padding(.horizontal)
-                    
-                    // 円グラフ：カテゴリ別支出比率（選択月）
-                    if !expenseBreakdown.isEmpty {
-                        CategoryDonutPager(
-                            expense: expenseBreakdown,                    // 既存の支出ブレイクダウン
-                            expenseCurrentTotal: monthExpense,            // 今月の支出合計
-                            expensePreviousTotal: prevMonthExpense,       // 先月の支出合計
-                            income: incomeBreakdown,                      // 新規：収入ブレイクダウン
-                            incomeCurrentTotal: monthIncome,              // 今月の収入合計
-                            incomePreviousTotal: prevMonthIncome          // 先月の収入合計
-                        )
-                        .luxCard()
-                        .padding(.horizontal)
-                    }
-                    
-                    // 棒グラフ：日別推移（選択月）
-                    if !dailySeries.isEmpty {
-                        DailyBarChart(series: dailySeries)
-                            .luxCard()
-                            .padding(.horizontal)
-                    }
-                    
-                    // 最近の取引（選択月から）
-                    if !allThisMonthTransactions.isEmpty {
-                        TransactionListCard(
-                            transactions: allThisMonthTransactions,
-                            categories: store.categories,
-                            onEdit: { tx in editingTx = tx },
-                            onDeleteIDs: { ids in
-                                // DataStore に用意（次の項目）
-                                store.deleteTransactions(with: ids)
-                            }
-                        )
-                        .luxCard()
+                    // ▼ 並び替え可能なカード群を ForEach で描画
+                    ForEach(visibleCardsInOrder(), id: \.id) { card in
+                        reorderableCard(card) {
+                            render(card) // ← 下の render(card:) で実体ビューを返す
+                        }
                         .padding(.horizontal)
                     }
                     
@@ -111,19 +82,101 @@ struct HomeView: View {
                     .environmentObject(store)
             }
             .sheet(item: $editingTx) { tx in
-                EditTransactionView(transaction: tx)    // ← 次で作る編集画面
+                EditTransactionView(transaction: tx)
                     .environmentObject(store)
             }
-
-            .onChange(of: selectedMonth) {
+            .onChange(of: selectedMonth) { _, _ in
                 selectedMonth = monthStart(selectedMonth)
             }
-
-        }.onAppear {
+        }
+        .onAppear {
             store.applyFixedExpensesForCurrentMonth()
         }
     }
+    
+    // 現在のデータ状況で表示可能なカードのみを順序通りに返す
+    private func visibleCardsInOrder() -> [DashboardCard] {
+        cardOrder.filter { c in
+            switch c {
+            case .header: return true
+            case .donut:  return !expenseBreakdown.isEmpty || !incomeBreakdown.isEmpty
+            case .daily:  return !dailySeries.isEmpty
+            case .transactions: return !allThisMonthTransactions.isEmpty
+            }
+        }
+    }
+    
+    // カードの実体ビュー（既存のビューをそのまま使う）
+    @ViewBuilder
+    private func render(_ card: DashboardCard) -> some View {
+        switch card {
+        case .header:
+            MonthlyHeaderCard(
+                income: monthIncome,
+                expense: monthExpense,
+                balance: monthBalance
+            )
+            .luxCard()
+            
+        case .donut:
+            CategoryDonutPager(
+                expense: expenseBreakdown,
+                expenseCurrentTotal: monthExpense,
+                expensePreviousTotal: prevMonthExpense,
+                income: incomeBreakdown,
+                incomeCurrentTotal: monthIncome,
+                incomePreviousTotal: prevMonthIncome
+            )
+            .luxCard()
+            
+        case .daily:
+            DailyBarChart(series: dailySeries)
+                .luxCard()
+            
+        case .transactions:
+            TransactionListCard(
+                transactions: allThisMonthTransactions,
+                categories: store.categories,
+                onEdit: { tx in editingTx = tx },
+                onDeleteIDs: { ids in store.deleteTransactions(with: ids) }
+            )
+            .luxCard()
+        }
+    }
+    
+    // 1カードをドラッグ/ドロップ可能にラップ
+    @ViewBuilder
+    private func reorderableCard<Content: View>(_ card: DashboardCard, @ViewBuilder content: () -> Content) -> some View {
+        let accent = themeStore.theme.accentColor(for: scheme)
+        content()
+        // 長押し開始で軽く縮小
+            .scaleEffect(dragging == card ? 0.98 : 1.0)
+            .overlay(
+                // ドラッグ中は薄い縁取り
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(dragging == card ? accent.opacity(0.35) : .clear, lineWidth: 1.2)
+            )
+            .animation(.snappy(duration: 0.15), value: dragging == card)
+        
+        // ドラッグのペイロードは card.id を文字列で
+            .onDrag {
+                self.dragging = card
+                let provider = NSItemProvider(object: card.id as NSString)
+                // 触覚
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                return provider
+            }
+        
+        // 自身の上に入ってきたら配列を差し替える
+            .onDrop(of: dropUTIs, delegate: CardDropDelegate(
+                current: card,
+                items: $cardOrder,
+                dragging: $dragging,
+                onCommit: { CardOrderStore().save(cardOrder) }
+            ))
+    }
 }
+
 
 // MARK: - ヘルパ（選択月に基づく集計）
 extension HomeView {
@@ -324,4 +377,69 @@ private struct TransactionListCard: View {
             )
         }
     }
+}
+
+// 並び替え対象のカード
+private enum DashboardCard: String, CaseIterable, Identifiable {
+    case header        // 月次ヘッダー（収支・支出・収入）
+    case donut         // 円グラフ（支出/収入ブレイクダウン）
+    case daily         // 日別推移（棒グラフ）
+    case transactions  // 最近の取引リスト
+    var id: String { rawValue }
+}
+
+// AppStorage で順序を保存/復元（["header","donut",...] という配列文字列で保存）
+private struct CardOrderStore {
+    @AppStorage("home.cardOrder") private var raw: String = ""
+    func load(default order: [DashboardCard]) -> [DashboardCard] {
+        guard let data = raw.data(using: .utf8),
+              let ids = (try? JSONDecoder().decode([String].self, from: data)) else {
+            return order
+        }
+        // 既知のカードだけ復元（将来カード増減しても安全）
+        let map = Dictionary(uniqueKeysWithValues: DashboardCard.allCases.map { ($0.id, $0) })
+        let seq = ids.compactMap { map[$0] }
+        // 足りないカードは末尾に補完
+        let missing = DashboardCard.allCases.filter { !seq.contains($0) }
+        return seq + missing
+    }
+    func save(_ order: [DashboardCard]) {
+        let ids = order.map(\.id)
+        if let data = try? JSONEncoder().encode(ids),
+           let s = String(data: data, encoding: .utf8) {
+            raw = s
+        }
+    }
+}
+
+private struct CardDropDelegate: DropDelegate {
+    let current: DashboardCard
+    @Binding var items: [DashboardCard]
+    @Binding var dragging: DashboardCard?
+    let onCommit: () -> Void
+    
+    func dropEntered(info: DropInfo) {
+        guard let from = dragging, from != current,
+              let fromIndex = items.firstIndex(of: from),
+              let toIndex   = items.firstIndex(of: current) else { return }
+        
+        // 順序入れ替え（アニメ付きで気持ちよく）
+        withAnimation(.snappy) {
+            items.move(fromOffsets: IndexSet(integer: fromIndex),
+                       toOffset: (toIndex > fromIndex) ? toIndex + 1 : toIndex)
+        }
+    }
+    
+    func performDrop(info: DropInfo) -> Bool {
+        dragging = nil
+        onCommit() // 永続化
+        return true
+    }
+    
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        // コピーではなく移動扱い
+        DropProposal(operation: .move)
+    }
+    
+    func dropExited(info: DropInfo) { }
 }

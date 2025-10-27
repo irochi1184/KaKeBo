@@ -11,103 +11,74 @@ import Combine
 
 struct PremiumPaywallView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @StateObject private var pm = PurchaseManager()
     
     let accent: Color
     
+    // 審査で必須の外部リンク
+    private let termsURL = URL(string: "https://sneaky-truffle-e15.notion.site/297100819d8a80b989e3e873f3595ac6")!
+    private let privacyURL = URL(string: "https://sneaky-truffle-e15.notion.site/297100819d8a80ad80e7ef9c6152d06b")!
+    private let cancelHelpURL = URL(string: "https://support.apple.com/ja-jp/118428")!
+    private let manageURL = URL(string: "https://apps.apple.com/account/subscriptions")!
+    
     var body: some View {
         NavigationStack {
-            ZStack {
-                premiumBackground
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 22) {
-                        hero
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 24) {
+                    
+                    // MARK: - ヘッダー
+                    VStack(spacing: 10) {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 40))
+                            .foregroundStyle(accent)
                         
-                        featureCards
+                        Text("KaKeBo プレミアム")
+                            .font(.title2.weight(.bold))
                         
-                        productSection
-                        
-                        restoreSection
-                        
-                        subtleDisclaimer
+                        Text("カテゴリ上限の解放、テーマの自由設定、通知の拡張、固定費テンプレート強化など、すべての機能を解放。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
+                    .padding(.top, 8)
+                    
+                    // MARK: - 機能紹介 (FeatureCards)
+                    featureCards
+                    
+                    // MARK: - プランセクション
+                    planSection
+                    
+                    // MARK: - 復元 / 管理ボタン
+                    restoreSection
+                    
+                    // MARK: - 法定リンク・補足
+                    LegalBlock(
+                        privacyURL: privacyURL,
+                        termsURL: termsURL,
+                        cancelHelpURL: cancelHelpURL
+                    )
+                    .padding(.top, 8)
                 }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
             }
             .navigationTitle("プレミアムプラン")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarLeading) { CloseButton() } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { CloseButton() }
+            }
             .task { await pm.load() }
             .alert("エラー", isPresented: .constant(pm.errorMessage != nil), actions: {
                 Button("OK") { pm.errorMessage = nil }
-            }, message: {
-                Text(pm.errorMessage ?? "")
-            })
+            }, message: { Text(pm.errorMessage ?? "") })
         }
         .tint(accent)
+        .background(Color(uiColor: .systemBackground))
     }
     
-    // MARK: - Background
-    
-    private var premiumBackground: some View {
-        let top = accent
-        let bottom = Color.black.opacity(0.5)
-        return ZStack {
-            LinearGradient(colors: [top.opacity(0.20), bottom],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
-            .ignoresSafeArea()
-            
-            // ほのかな光のオーブ
-            Circle()
-                .fill(accent.opacity(0.22))
-                .blur(radius: 80)
-                .frame(width: 220, height: 220)
-                .offset(x: -120, y: -240)
-            
-            Circle()
-                .fill(accent.opacity(0.18))
-                .blur(radius: 100)
-                .frame(width: 260, height: 260)
-                .offset(x: 140, y: 380)
-        }
-    }
-    
-    // MARK: - Hero
-    
-    private var hero: some View {
-        VStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .frame(width: 88, height: 88)
-                    .overlay(
-                        Circle()
-                            .stroke(accent.opacity(0.35), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.35), radius: 20, y: 10)
-                
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 38))
-                    .foregroundStyle(accent)
-            }
-            
-            Text("あなたの家計簿を、上質に。")
-                .font(.title2.weight(.bold))
-                .kerning(0.5)
-            
-            Text("カテゴリ上限の解放、自由なテーマ、賢い通知、固定費の拡張。すべてをプレミアムで。")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 6)
-    }
-    
-    // MARK: - Feature Cards (4つ)
-    
+    // MARK: - FeatureCards
     private var featureCards: some View {
         VStack(spacing: 12) {
             FeatureCard(
@@ -136,17 +107,16 @@ struct PremiumPaywallView: View {
             )
         }
         .padding(14)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 18)
                 .stroke(.white.opacity(0.10), lineWidth: 0.8)
         )
-        .shadow(color: .black.opacity(0.25), radius: 18, y: 8)
+        .shadow(color: .black.opacity(0.10), radius: 18, y: 8)
     }
     
-    // MARK: - Products
-    
-    private var productSection: some View {
+    // MARK: - プラン（サブスク or 買い切り）
+    private var planSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("プラン")
                 .font(.headline)
@@ -173,11 +143,17 @@ struct PremiumPaywallView: View {
                     }
                 }
             }
+            
+            // 🟡 買い切り補足をここに追加
+            Text("こちらは一度購入いただくと永久的に全ての機能をご利用いただけます。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
     
-    // MARK: - Restore
-    
+    // MARK: - 復元 / 管理
     private var restoreSection: some View {
         VStack(spacing: 6) {
             Button {
@@ -188,9 +164,7 @@ struct PremiumPaywallView: View {
             .font(.footnote.weight(.semibold))
             
             Button("サブスクリプションを管理") {
-                if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
-                    UIApplication.shared.open(url)
-                }
+                openURL(manageURL)
             }
             .font(.footnote)
             .foregroundStyle(.secondary)
@@ -199,28 +173,19 @@ struct PremiumPaywallView: View {
         .padding(.top, 8)
     }
     
-    private var subtleDisclaimer: some View {
-        Text("いつでも解約可能。価格は地域・通貨により異なる場合があります。")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.top, 6)
-    }
-    
-    // MARK: - Components
-    
+    // MARK: - 閉じるボタン
     private struct CloseButton: View {
         @Environment(\.dismiss) private var dismiss
         var body: some View {
-            Button {
-                dismiss()
-            } label: {
+            Button { dismiss() } label: {
                 Image(systemName: "xmark")
                     .font(.subheadline.weight(.semibold))
             }
         }
     }
 }
+
+// MARK: - FeatureCard コンポーネント（既存のまま）
 
 private struct FeatureCard: View {
     let icon: String
@@ -259,6 +224,8 @@ private struct FeatureCard: View {
     }
 }
 
+// MARK: - Product Card
+
 private struct ProductPremiumCard: View {
     let product: Product
     let accent: Color
@@ -278,15 +245,13 @@ private struct ProductPremiumCard: View {
             Button {
                 onPurchase()
             } label: {
-                Text("今すぐアップグレード  \(product.displayPrice)")
+                Text("\(product.displayPrice)")
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(
-                        Capsule().fill(accent)
-                    )
+                    .background(Capsule().fill(accent))
                     .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+                    .shadow(color: .black.opacity(0.10), radius: 10, y: 4)
             }
             .buttonStyle(.plain)
         }
@@ -299,6 +264,41 @@ private struct ProductPremiumCard: View {
                         .stroke(.white.opacity(0.10), lineWidth: 0.8)
                 )
         )
-        .shadow(color: .black.opacity(0.20), radius: 12, y: 6)
+        .shadow(color: .black.opacity(0.10), radius: 12, y: 6)
+    }
+}
+
+// MARK: - 法定リンクブロック
+
+private struct LegalBlock: View {
+    let privacyURL: URL
+    let termsURL: URL
+    let cancelHelpURL: URL
+    
+    var body: some View {
+        VStack(spacing: 10) {
+            Text("""
+                 ・購入はApple IDに請求されます。
+                 ・購入後は設定 > Apple ID > サブスクリプションで管理・解約できます。
+                 """)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            VStack(spacing: 6) {
+                Link("プライバシーポリシー", destination: privacyURL)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Link("利用規約", destination: termsURL)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Link("購読の解約方法", destination: cancelHelpURL)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.footnote)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.primary.opacity(0.08))
+        )
     }
 }

@@ -27,7 +27,7 @@ enum ReminderManager {
     /// - Note: completionハンドラ → async/await に橋渡しするため withCheckedContinuation を使用
     static func requestAuthorization() async -> Bool {
         await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-            center.requestAuthorization(options: [.alert, .badge, .sound]) { ok, _ in
+            center.requestAuthorization(options: [.alert, .sound]) { ok, _ in
                 // continuation経由でBoolを返す（Voidではないので returning: 必須）
                 cont.resume(returning: ok)
             }

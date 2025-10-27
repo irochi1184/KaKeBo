@@ -92,7 +92,6 @@ enum ReminderManagerV2 {
         
         c.body = body
         if rule.soundEnabled { c.sound = .default }
-        if rule.includeTodoCountInBadge { c.badge = NSNumber(value: todosToday) }
         return c
     }
     
