@@ -14,6 +14,7 @@ struct SettingsView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject var pm: PurchaseManager
     
     @AppStorage("reminder.enabled") private var enabled: Bool = true
     @AppStorage("reminder.time") private var timeRaw: Double = defaultTime.timeIntervalSinceReferenceDate
@@ -57,6 +58,7 @@ struct SettingsView: View {
     }
     // 外部URL
     private let appleWidgetURL = URL(string: "https://support.apple.com/ja-jp/HT207122")!
+    private let discordURL = URL(string: "https://discord.gg/RusZAXf57n")!
     // KaKeBoの App Store URL
     private let appStoreURL = URL(string: "https://apps.apple.com/app/id6754249349")!
     
@@ -99,13 +101,13 @@ struct SettingsView: View {
         let accent = themeStore.theme.accentColor(for: scheme)
         NavigationStack {
             VStack(spacing: 0) {
-                PremiumBanner(accent: accent) {
-                    showPaywall = true
+                if !pm.isPremiumActive {
+                    PremiumBanner(accent: accent) { showPaywall = true }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .padding(.bottom, 8)
+                        .background(themeStore.theme.backgroundColor(for: scheme).opacity(0.7))
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
-                .background(themeStore.theme.backgroundColor(for: scheme).opacity(0.7))
                 
                 Form {
                     settingsSection(accent: accent)
@@ -359,21 +361,30 @@ struct SettingsView: View {
                     UIApplication.shared.open(url)
                 }
             }
+            
+            SettingsRowButton(
+                title: "開発者・利用者コミュニティへ参加する",
+                systemImage: "apps.iphone",
+                accent: accent,
+                trailingText: "Discord"
+            ) { UIApplication.shared.open(discordURL) }
+            
             SettingsRowButton(
                 title: "バックアップを作成",
                 systemImage: "arrow.down.doc",
                 accent: accent,
-                trailingText: "JSON形式"
+                trailingText: ""
             ) {
                 let data = store.exportFullBackupJSON(theme: themeStore.theme)
                 exportDoc = KaKeBoBackupDocument(data: data)
                 showingExporter = true
             }
+            
             SettingsRowButton(
                 title: "バックアップから復元",
                 systemImage: "arrow.up.doc",
                 accent: accent,
-                trailingText: "JSON/CSV"
+                trailingText: ""
             ) { showImporter = true }
             // テストサンプルボタン
 //            SettingsRowButton(
