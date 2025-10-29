@@ -93,7 +93,7 @@ final class DayNotesStore: ObservableObject {
     func snippets(in month: Date, limit: Int = 8) -> [Date: String] {
         let cal = Calendar.current
         let start = cal.date(from: cal.dateComponents([.year, .month], from: month))!
-        let end = cal.date(byAdding: DateComponents(month: 1, day: -1), to: start)!
+//        let end = cal.date(byAdding: DateComponents(month: 1, day: -1), to: start)!
         var out: [Date: String] = [:]
         for (k, v) in notes {
             guard let d = day(fromKey: k) else { continue }
