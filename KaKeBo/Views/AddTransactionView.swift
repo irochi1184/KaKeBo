@@ -14,21 +14,25 @@ struct AddTransactionView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     
+    // MARK: - States
     @State private var date: Date = Date()
     @State private var amount: Int = 0
     @State private var type: TransactionType = .expense
     @State private var memo: String = ""
     @State private var selectedCategoryId: UUID?
     
-    // ▼ キーボード可視状態
+    // キーボード／UI
     @State private var isKeyboardVisible = false
-    // ▼ メモのフォーカス管理（キーボードの「閉じる」ボタン用）
     @FocusState private var memoFocused: Bool
     @State private var showCustomKeypad = true
     @State private var keypadHeight: CGFloat = 0
     @StateObject private var kb = KeyboardHeightReader()
     @State private var showAddCategory = false
     
+    // ★ レシートスキャン表示フラグ
+    @State private var showReceiptScanner = false
+    
+    // MARK: - Prefill (レシートや外部から)
     init(
         defaultCategoryId: UUID? = nil,
         defaultAmount: Int? = nil,
@@ -51,16 +55,15 @@ struct AddTransactionView: View {
         false
 #endif
     }
-    // ← ここだけ触れば微調整しやすい
-    private var keypadScale: CGFloat { isSmallPhone ? 0.86 : 0.85 }       // 少し大きく戻す
-    private var keypadHeightRatio: CGFloat { isSmallPhone ? 0.30 : 0.33 } // 高さも戻す
-    private var keypadLift: CGFloat { isSmallPhone ? 34 : 0 }             // さらに上へ
-    private var extraButtonLift: CGFloat { isSmallPhone ? 100 : 10 }      // 閉じるボタンを上へ
-    // セーフエリア下端（Environment未使用の汎用取得）
+    private var keypadScale: CGFloat { isSmallPhone ? 0.86 : 0.85 }
+    private var keypadHeightRatio: CGFloat { isSmallPhone ? 0.30 : 0.33 }
+    private var keypadLift: CGFloat { isSmallPhone ? 34 : 0 }
+    private var extraButtonLift: CGFloat { isSmallPhone ? 100 : 10 }
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
     
+    // MARK: - Body
     var body: some View {
         NavigationStack {
             contentScroll
@@ -68,10 +71,10 @@ struct AddTransactionView: View {
                 .navigationTitle("新規追加")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
-            // ▼ キーボードが見えてない時だけ電卓を出す
+            
+            // カスタム電卓
                 .safeAreaInset(edge: .bottom) {
                     if showCustomKeypad {
-                        // ZStackに包み、見た目位置だけ上にリフト
                         ZStack {
                             NumericKeypad(
                                 amount: $amount,
@@ -82,26 +85,24 @@ struct AddTransactionView: View {
                                 preferredHeightRatio: keypadHeightRatio,
                                 onHeightChange: { h in keypadHeight = h }
                             )
-                            // ↓ 念のため下端のセーフエリア分を内部に確保した上で持ち上げる
                             .padding(.bottom, safeBottomInset)
                         }
-                        .offset(y: -keypadLift) // ← 小画面だけ持ち上げ
+                        .offset(y: -keypadLift)
                     }
                 }
-            // 右下・独立した「閉じる」ボタン（キーパッドの表示テキストに被らないよう高め）
+            
+            // 自作キーパッドの閉じる
                 .overlay(alignment: .bottomTrailing) {
                     if showCustomKeypad {
-                        CloseKeyboardButton {
-                            showCustomKeypad = false
-                        }
-                        .padding(.trailing, 12)
-                        // キーパッドの上面からさらに持ち上げ（セーフエリアも考慮）
-                        .padding(.bottom, max(8,
-                                              (keypadHeight - keypadLift) + extraButtonLift + safeBottomInset
-                                             ))
+                        CloseKeyboardButton { showCustomKeypad = false }
+                            .padding(.trailing, 12)
+                            .padding(.bottom,
+                                     max(8, (keypadHeight - keypadLift) + extraButtonLift + safeBottomInset)
+                            )
                     }
                 }
-            // システムキーボード時の「閉じる」をツールバー無しで重ねる
+            
+            // システムキーボード時の閉じる
                 .overlay(alignment: .bottomTrailing) {
                     if memoFocused && kb.height > 0 {
                         CloseKeyboardButton {
@@ -113,7 +114,7 @@ struct AddTransactionView: View {
                         .animation(.easeInOut(duration: 0.2), value: kb.height)
                     }
                 }
-            // ▼ システムキーボードが出たら自作キーボードは閉じる（メモ編集などのとき）
+            
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isKeyboardVisible = true
@@ -125,11 +126,29 @@ struct AddTransactionView: View {
                         isKeyboardVisible = false
                     }
                 }
+            
+            // ★ レシートスキャンのシート
+                .sheet(isPresented: $showReceiptScanner) {
+                    NavigationStack {
+                        ReceiptScanView { recognized in
+                            // 解析してフィールドへ反映（ReceiptParser.swift を利用）
+                            let r = ReceiptParser.parse(recognized)
+                            if let v = r.total { amount = v }
+                            if let d = r.date  { date   = d }
+                            if let m = r.merchant, m.isEmpty == false {
+                                // 既にメモがあれば追記、なければ置換
+                                memo = memo.isEmpty ? m : "\(memo) \(m)"
+                            }
+                            // 金額編集しやすいよう自作キーパッドを出しておく
+                            showCustomKeypad = true
+                        }
+                        .navigationTitle("レシート読み取り")
+                    }
+                }
         }
     }
     
     // MARK: - 分割ビュー
-    
     private var contentScroll: some View {
         ScrollView {
             VStack(spacing: 18) {
@@ -141,7 +160,6 @@ struct AddTransactionView: View {
                 )
                 .environmentObject(store)
                 
-                // 小型画面では余白は控えめ（キーパッドが上がるため）
                 Spacer(minLength: showCustomKeypad ? (isSmallPhone ? 20 : 60) : 0)
             }
             .padding(.top, 12)
@@ -162,15 +180,15 @@ struct AddTransactionView: View {
     private var metaSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             TypePillSelector(type: $type)
-            // ▼ 日付
+            
+            // 日付
             VStack(alignment: .leading, spacing: 6) {
                 JapaneseDatePickerRow(date: $date)
             }
-            // ▼ 金額入力欄
+            
+            // 金額
             VStack(alignment: .leading, spacing: 6) {
                 Text("金額").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                
-                // 疑似入力欄
                 HStack {
                     Spacer()
                     Text(currency(amount))
@@ -188,13 +206,13 @@ struct AddTransactionView: View {
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    // メモのフォーカスを外してシステムKBを閉じる → 自作キーパッドを出す
                     memoFocused = false
                     withAnimation(.easeInOut(duration: 0.2)) { showCustomKeypad = true }
                 }
                 .accessibilityAddTraits(.isButton)
             }
-            // ▼ メモ入力欄
+            
+            // メモ
             VStack(alignment: .leading, spacing: 6) {
                 Text("メモ（任意）")
                     .font(.footnote.weight(.semibold))
@@ -216,7 +234,7 @@ struct AddTransactionView: View {
         }
     }
     
-    // 通貨整形
+    // MARK: - ヘルパ
     private func currency(_ n: Int) -> String {
         let f = NumberFormatter()
         f.numberStyle = .decimal
@@ -231,39 +249,31 @@ struct AddTransactionView: View {
         return LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom)
     }
     
-    private var keypadBar: some View {
-        let barBackground: AnyView = {
-            if scheme == .dark {
-                return AnyView(Color(white: 0.08).opacity(0.95))
-            } else {
-                return AnyView(Rectangle().fill(.regularMaterial))
-            }
-        }()
-        
-        return NumericKeypad(amount: $amount, maxDigits: 9, isIncome: type == .income)
-            .padding(.top, 8)
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            .background(barBackground)
-            .overlay(Divider(), alignment: .top)
-            .shadow(color: .black.opacity(0.15), radius: 10, y: -2)
-    }
-    
+    // MARK: - Toolbar（保存の横にカメラ）
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
             Button("閉じる") { dismiss() }
         }
+        // ★ カメラ（レシート読取）ボタン
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                // キーボードを閉じてからスキャナへ
+                memoFocused = false
+                showCustomKeypad = false
+                showReceiptScanner = true
+            } label: {
+                Label("レシート", systemImage: "doc.text.viewfinder")
+            }
+        }
+        // 保存ボタン
         ToolbarItem(placement: .topBarTrailing) {
             let isEnabled = !(store.categories.isEmpty || amount == 0 || selectedCategoryId == nil)
-            
             SaveButton(isEnabled: isEnabled, accent: themeStore.theme.accentColor(for: scheme)) {
                 save()
             }
         }
     }
-    
-    // MARK: - Actions
     
     private func save() {
         guard
@@ -284,8 +294,7 @@ struct AddTransactionView: View {
     }
 }
 
-
-/// 保存ボタン
+// MARK: - Buttons & Utils
 struct SaveButton: View {
     let isEnabled: Bool
     let accent: Color
@@ -304,7 +313,6 @@ struct SaveButton: View {
     }
 }
 
-/// 「閉じる」ボタン
 struct CloseKeyboardButton: View {
     let action: () -> Void
     var body: some View {
@@ -330,7 +338,6 @@ struct CloseKeyboardButton: View {
     }
 }
 
-/// UIWindow / セーフエリア取得のユーティリティ（Environment未使用で安全）
 private extension UIApplication {
     var activeKeyWindow: UIWindow? {
         connectedScenes
