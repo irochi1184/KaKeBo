@@ -13,15 +13,18 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
-    @Environment(\.colorScheme) private var scheme
     @EnvironmentObject var pm: PurchaseManager
+    @EnvironmentObject var lock: AppLockManager
+    
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
     
     @AppStorage("reminder.enabled") private var enabled: Bool = true
     @AppStorage("reminder.time") private var timeRaw: Double = defaultTime.timeIntervalSinceReferenceDate
+    
     // ▼ リマインダー統一：Settings 内で共有する ToDo ストア（今日の件数評価などに使う）
     @StateObject private var todoStore = TodoStore()
     
-    @Environment(\.dismiss) private var dismiss
     @State private var sheet: Sheet?
     
     @AppStorage("kakebo.recurring.templates") private var templatesData: Data = Data()
@@ -36,6 +39,7 @@ struct SettingsView: View {
     @State private var showingExporter = false
     @State private var importReportText: String? = nil
     @State private var showImportDone = false
+    @State private var showLockSheet = false
     
     struct KaKeBoBackupDocument: FileDocument {
         static var readableContentTypes: [UTType] = [.kakeboBackup, .json]
@@ -53,7 +57,7 @@ struct SettingsView: View {
     }
     
     enum Sheet: Identifiable {
-        case reminders, categories, recurringTodos, fixedExpenses, theme, help
+        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock
         var id: String { "sheet-\(self)" }
     }
     // 外部URL
@@ -179,16 +183,39 @@ struct SettingsView: View {
                         }
                         .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
+                        
+                    case .lock:
+                        NavigationStack {
+                            LockSettingsView()
+                                .navigationTitle("アプリロック")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+                        
                     }
                 }
+                // 共有
                 .sheet(isPresented: $showShareSheet) {
                     ActivityView(activityItems: [appStoreURL])
                         .presentationDetents([.medium])
                 }
+                // Paywall
                 .sheet(isPresented: $showPaywall) {
                     PremiumPaywallView(accent: accent)
                         .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
+                }
+                // ロック設定
+                .sheet(isPresented: $showLockSheet) {
+                    NavigationStack {
+                        LockSettingsView()
+                            .environmentObject(lock)
+                            .navigationTitle("アプリロック")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
                 }
                 .background(themeStore.theme.backgroundColor(for: scheme))
             }
@@ -206,7 +233,6 @@ struct SettingsView: View {
             defaultFilename: "KaKeBo_backup_\(Self.todayString()).kakebo"
         ) { result in
             if case .success = result {
-                // 成功時の任意トーストなど
                 print("バックアップ保存完了")
             }
         }
@@ -222,13 +248,13 @@ struct SettingsView: View {
                     showImportDone = true
                     return
                 }
-                handleImportedURL(url)   // ← 下の修正版に差し替え
+                handleImportedURL(url)
             case .failure(let error):
                 importReportText = "ファイル選択に失敗: \(error.localizedDescription)"
                 showImportDone = true
             }
         }
-        .alert("バックアップ復元", isPresented: $showImportDone) {   // ← アラートをビューに戻す
+        .alert("バックアップ復元", isPresented: $showImportDone) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(importReportText ?? "")
@@ -244,16 +270,11 @@ struct SettingsView: View {
             
             Task(priority: .userInitiated) {
                 do {
-                    // まずバックグラウンドで JSON/CSV を軽くバリデーションしておきたい場合はここでやる
-                    
-                    // DataStore の変更は必ず MainActor で
                     let report = try await MainActor.run { () -> DataStore.ImportReport in
                         try store.importBackup(data: data) { restoredTheme in
-                            // Theme の反映も MainActor
                             themeStore.theme = restoredTheme
                         }
                     }
-                    
                     await MainActor.run {
                         importReportText = "復元完了：取込 \(report.inserted) 件 / 新規カテゴリ \(report.createdCategories) 件 / スキップ \(report.skipped) 件"
                         showImportDone = true
@@ -270,8 +291,8 @@ struct SettingsView: View {
             showImportDone = true
         }
     }
-
-    // MARK: - Sections split (to help type-checker)
+    
+    // MARK: - Sections split
     
     @ViewBuilder
     private func settingsSection(accent: Color) -> some View {
@@ -319,6 +340,14 @@ struct SettingsView: View {
                 accent: accent,
                 trailingText: nil
             ) { sheet = .theme }
+            
+            SettingsRowButton(
+                title: "アプリロックを設定",
+                systemImage: "lock.shield",
+                accent: accent,
+                trailingText: nil
+            ) { sheet = .lock }
+
         } header: {
             Text("各種設定")
         }
@@ -386,18 +415,6 @@ struct SettingsView: View {
                 accent: accent,
                 trailingText: ""
             ) { showImporter = true }
-            // テストサンプルボタン
-//            SettingsRowButton(
-//                title: "バックアップを作成（テストサンプル2025）",
-//                systemImage: "arrow.down.doc",
-//                accent: accent,
-//                trailingText: "JSON"
-//            ) {
-//                let data = makeSample2025BackupJSON()
-//                exportDoc = KaKeBoBackupDocument(data: data)
-//                showingExporter = true
-//            }
-
         } header: {
             Text("サポート")
         }
@@ -452,16 +469,22 @@ struct SettingsView: View {
             }
         }
     }
+    
     private func formattedDate() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd"
         return formatter.string(from: Date())
     }
+    
     static func todayString() -> String {
         let f = DateFormatter(); f.locale = .init(identifier: "ja_JP"); f.dateFormat = "yyyyMMdd_HHmmss"
         return f.string(from: Date())
     }
+    
+    private func showLockSettingsSheet() { showLockSheet = true }
 }
+
+// ======================================================
 
 private struct SettingsRowButton: View {
     let title: String
@@ -473,35 +496,29 @@ private struct SettingsRowButton: View {
     var body: some View {
         Button(action: action) {
             HStack {
-                // 左アイコン＋タイトル
                 Label {
-                    Text(title) // テキストはデフォルトカラー
+                    Text(title)
                 } icon: {
                     Image(systemName: systemImage)
-//                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(accent)
                 }
-                
                 Spacer()
-                
-                // 右側の補足テキスト
                 if let trailingText {
                     Text(trailingText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                
-                // 「>」アイコン（右矢印）
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
-            .contentShape(Rectangle()) // ← 行全体をタップ領域に
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain) // デフォルトの青ハイライト無効
+        .buttonStyle(.plain)
     }
 }
 
+// 既存のユーティリティ（変更なし）
 func ensureNotificationRegistered() async -> Bool {
     let center = UNUserNotificationCenter.current()
     let settings = await withCheckedContinuation { (c: CheckedContinuation<UNNotificationSettings, Never>) in
@@ -509,7 +526,6 @@ func ensureNotificationRegistered() async -> Bool {
     }
     switch settings.authorizationStatus {
     case .notDetermined:
-        // ここで初回リクエスト。これが走れば「設定 > 通知」に現れます
         let ok = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
             center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
                 c.resume(returning: granted)

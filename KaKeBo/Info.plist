@@ -5,6 +5,10 @@
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>
+			<key>NSCameraUsageDescription</key>
+			<string>レシート撮影のためにカメラを使用します。</string>
+			<key>NSFaceIDUsageDescription</key>
+			<string>アプリロックの解除にFace IDを使用します。</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.json</string>
