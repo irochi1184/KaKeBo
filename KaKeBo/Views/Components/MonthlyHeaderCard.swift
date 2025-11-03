@@ -51,27 +51,46 @@ private struct StatPill: View {
     let icon: String
     let base: Color
     
+    // ▼ iPhone SE など小型端末判定
+    private var isSmallPhone: Bool {
+#if os(iOS)
+        UIScreen.main.bounds.height <= 667 // iPhone SE 第2世代相当
+#else
+        false
+#endif
+    }
+    
+    // ▼ アイコンのサイズスケール
+    private var iconScale: CGFloat { isSmallPhone ? 0.75 : 1.0 }
+    
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon).foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(base.gradient))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.caption).foregroundStyle(.secondary)
-//                Text(currency(value)).font(.subheadline.weight(.semibold))
+        HStack(spacing: 10 * iconScale) {
+            Image(systemName: icon)
+                .foregroundStyle(.white)
+                .frame(width: 24 * iconScale, height: 24 * iconScale)
+                .background(
+                    Circle()
+                        .fill(base.gradient)
+                        .frame(width: 28 * iconScale, height: 28 * iconScale)
+                )
+            
+            VStack(alignment: .leading, spacing: 2 * iconScale) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(currency(value))
                     .font(.headline.weight(.semibold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                     .allowsTightening(true)
-                    .fixedSize(horizontal: false, vertical: true) // 高さだけ固定
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
-        .padding(12)
+        .padding(12 * iconScale)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 12 * iconScale, style: .continuous)
                 .fill(base.opacity(0.12))
         )
     }

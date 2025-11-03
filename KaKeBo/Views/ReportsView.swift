@@ -38,14 +38,14 @@ struct ReportsView: View {
                         YearPicker(selectedYear: $year, availableYears: availableYears, accent: accent)
                             .tint(accent)
                         Spacer()
-                        ShareLink(item: csvData(), preview: SharePreview("\(String(year))年レポート", image: Image(systemName: "doc")))
-                        {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.headline)
-                                .padding(10)
-                                .background(Circle().fill(accent.opacity(0.15)))
-                        }
-                        .tint(accent)
+//                        ShareLink(item: csvData(), preview: SharePreview("\(String(year))年レポート", image: Image(systemName: "doc")))
+//                        {
+//                            Image(systemName: "square.and.arrow.up")
+//                                .font(.headline)
+//                                .padding(10)
+//                                .background(Circle().fill(accent.opacity(0.15)))
+//                        }
+//                        .tint(accent)
                     }
                     .padding(.horizontal)
                     

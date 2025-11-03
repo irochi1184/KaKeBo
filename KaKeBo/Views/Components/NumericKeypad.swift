@@ -17,8 +17,8 @@ struct NumericKeypad: View {
     var style: Style = .attached
     var isIncome: Bool = false
     // サイズ調整用
-    var sizeScale: CGFloat = 1.0               // 例: 0.8 で2割小さく
-    var preferredHeightRatio: CGFloat? = nil    // 例: 0.33 で画面高の1/3
+    var sizeScale: CGFloat = 1.0
+    var preferredHeightRatio: CGFloat? = nil
     var onHeightChange: ((CGFloat) -> Void)? = nil
     var onTapClose: (() -> Void)? = nil
     
@@ -29,6 +29,27 @@ struct NumericKeypad: View {
     @State private var accumulator: Int = 0
     @State private var pendingOp: CalcOp? = nil
     @State private var lastInputWasOp = false
+    
+    // ▼ 小型画面対応（iPhone SE2 など）
+    private var isSmallPhone: Bool {
+#if os(iOS)
+        UIScreen.main.bounds.height <= 667
+#else
+        false
+#endif
+    }
+    private var scale: CGFloat {
+        sizeScale * (isSmallPhone ? 0.88 : 1.0)
+    }
+    private var keyHeight: CGFloat {
+        (isSmallPhone ? 48 : 54) * scale
+    }
+    private var opColumnWidth: CGFloat {
+        (isSmallPhone ? 66 : 70) * scale
+    }
+    private var gridMinWidth: CGFloat {
+        (isSmallPhone ? 92 : 96) * scale
+    }
     
     var body: some View {
         content
@@ -66,49 +87,47 @@ struct NumericKeypad: View {
     // MARK: - レイアウト
     @ViewBuilder
     private var content: some View {
-        VStack(spacing: 12 * sizeScale) {
+        VStack(spacing: 12 * scale) {
             // 上部：数値 or 式
             Text(displayText)
-                .font(.system(size: 34 * sizeScale, weight: .bold, design: .rounded))
+                .font(.system(size: 34 * scale, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .allowsTightening(true)
                 .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.horizontal, 10 * sizeScale)
+                .padding(.horizontal, 10 * scale)
                 .foregroundStyle(labelColor)
             
             // クイック加算
-            HStack(spacing: 8 * sizeScale) {
+            HStack(spacing: 8 * scale) {
                 ForEach([1000, 3000, 5000, 10000], id: \.self) { add in
                     Button {
                         applyQuickAdd(add); haptic(.light); lastInputWasOp = false
                     } label: {
                         Text("+\(decimal(add))")
-                            .font(.system(size: 13 * sizeScale, weight: .semibold))
+                            .font(.system(size: 13 * scale, weight: .semibold))
                             .monospacedDigit()
-                            .padding(.vertical, 6 * sizeScale)
-                            .padding(.horizontal, 10 * sizeScale)
+                            .padding(.vertical, 6 * scale)
+                            .padding(.horizontal, 10 * scale)
                             .background(Capsule().fill(chipBackground))
-                            .overlay(Capsule().stroke(chipBorder, lineWidth: 1 * sizeScale))
+                            .overlay(Capsule().stroke(chipBorder, lineWidth: 1 * scale))
                             .foregroundStyle(chipLabel)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 16 * sizeScale)
+            .padding(.horizontal, 16 * scale)
             
             // 本体：数字 + 演算子列
-            HStack(spacing: 8 * sizeScale) {
+            HStack(spacing: 8 * scale) {
                 // 数字パッド
                 let gridColumns = Array(
-                    repeating: GridItem(.flexible(minimum: 100 * sizeScale), spacing: 8 * sizeScale),
+                    repeating: GridItem(.flexible(minimum: gridMinWidth), spacing: 8 * scale),
                     count: 3
                 )
                 
-                LazyVGrid(columns: gridColumns, spacing: 8 * sizeScale) {
-//                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8 * sizeScale), count: 3),
-//                          spacing: 8 * sizeScale) {
+                LazyVGrid(columns: gridColumns, spacing: 8 * scale) {
                     ForEach(digits, id: \.self) { key in
                         KeyButton(
                             title: key,
@@ -117,33 +136,38 @@ struct NumericKeypad: View {
                             action: { tap(key); haptic(.soft) },
                             longPress: {
                                 if key == "⌫" { amount = 0; haptic(.rigid); lastInputWasOp = false }
-                            }
+                            },
+                            sizeScale: scale
                         )
-                        .frame(height: 54 * sizeScale)
+                        .frame(height: keyHeight)
                     }
                 }
                 
                 // 演算子列
-                VStack(spacing: 8 * sizeScale) {
+                VStack(spacing: 8 * scale) {
                     OperatorButton("＋") { operatorTapped(.add) }
                     OperatorButton("－") { operatorTapped(.sub) }
                     OperatorButton("×", onTap: { operatorTapped(.mul) }, onLongPress: { operatorTapped(.div) })
                     OperatorButton("＝") { equalsTapped() }
                 }
-                .frame(width: 70 * sizeScale)
+                .frame(width: opColumnWidth)
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 6 * sizeScale)
-//            .padding(.horizontal, 10 * sizeScale)
-            .padding(.bottom, 8 * sizeScale)
+            .padding(.horizontal, 6 * scale)
+            // ❌ 負の下パディングは白抜けの原因になるので廃止
+            .padding(.bottom, 8 * scale)
         }
-        .padding(.vertical, 10 * sizeScale)
-        .background(containerBackground)
+        .padding(.vertical, 10 * scale)
+        .background(containerBackground) // ← 不透明ベースに変更
         .overlay(topHairline, alignment: .top)
         .clipShape(containerShape)
         .shadow(color: shadowColor, radius: shadowRadius, y: shadowY)
         .padding(containerPadding)
-        .frame(height: preferredHeightRatio.map { UIScreen.main.bounds.height * $0 })
+        .frame(height: preferredHeightRatio.map {
+            let base = UIScreen.main.bounds.height * $0
+            // 小画面はほんの少しだけ圧縮（大きさを維持しつつ安全側）
+            return isSmallPhone ? base * 0.92 : base
+        })
         .overlay(alignment: .topTrailing) {
             if let onTapClose {
                 CloseKeyboardButton { onTapClose() }
@@ -158,14 +182,14 @@ struct NumericKeypad: View {
     private func OperatorButton(_ symbol: String, onTap: @escaping () -> Void, onLongPress: (() -> Void)? = nil) -> some View {
         Button(action: onTap) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12 * sizeScale)
-                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 12 * scale)
+                    .fill(.ultraThinMaterial) // 内部はOK（下地が不透明になったため白発光しない）
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12 * sizeScale)
-                            .stroke(baseColor.opacity(0.55), lineWidth: 1.2 * sizeScale)
+                        RoundedRectangle(cornerRadius: 12 * scale)
+                            .stroke(baseColor.opacity(0.55), lineWidth: 1.2 * scale)
                     )
                 Text(symbol)
-                    .font(.system(size: 22 * sizeScale, weight: .semibold))
+                    .font(.system(size: 22 * scale, weight: .semibold))
                     .foregroundStyle(baseColor)
             }
         }
@@ -173,7 +197,7 @@ struct NumericKeypad: View {
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.7).onEnded { _ in onLongPress?() }
         )
-        .frame(height: 54 * sizeScale)
+        .frame(height: keyHeight)
     }
     
     // MARK: - 電卓ロジック
@@ -227,23 +251,32 @@ struct NumericKeypad: View {
     private var chipLabel: Color { scheme == .dark ? .white : baseColor.opacity(0.9) }
     private var keyButtonTint: Color { baseColor.opacity(scheme == .dark ? 0.35 : 0.25) }
     
+    // ★ 不透明ベースに変更（白四角の原因だった “素材＋ブラー” を撤去）
     @ViewBuilder
     private var containerBackground: some View {
+        let base: Color = {
+            if scheme == .dark { return Color(red: 0.08, green: 0.08, blue: 0.09) } // ほぼ黒（不透明）
+            else { return Color(white: 0.98) } // 明るめ（不透明）
+        }()
         ZStack {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 0.8)
+            // 不透明ベース
+            RoundedRectangle(cornerRadius: style == .attached ? 0 : 16, style: .continuous)
+                .fill(base)
+            // 軽いグラデの味付け（透明度を低くして“明るくなりすぎ”を防ぐ）
+            RoundedRectangle(cornerRadius: style == .attached ? 0 : 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: scheme == .dark
+                        ? [baseColor.opacity(0.14), .clear]
+                        : [baseColor.opacity(0.06), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
                 )
-                .blur(radius: 10)
-            LinearGradient(
-                colors: scheme == .dark
-                ? [baseColor.opacity(0.25), Color(white: 0.1)]
-                : [baseColor.opacity(0.10), Color(white: 0.98)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+                .allowsHitTesting(false)
+            // 枠線
+            RoundedRectangle(cornerRadius: style == .attached ? 0 : 16, style: .continuous)
+                .stroke(Color.white.opacity(scheme == .dark ? 0.08 : 0.15), lineWidth: 0.8)
         }
     }
     

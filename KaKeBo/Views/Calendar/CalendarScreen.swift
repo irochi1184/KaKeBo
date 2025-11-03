@@ -57,33 +57,39 @@ struct CalendarScreen: View {
                 Group {
                     if keyboard.height == 0 {
                         // 曜日ヘッダー
-                        HStack {
-                            ForEach(weekdaySymbolsJP, id: \.self) { w in
-                                Text(w)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .frame(maxWidth: .infinity)
+                        VStack(spacing: 8) {
+                            // 曜日ヘッダー
+                            HStack {
+                                ForEach(weekdaySymbolsJP, id: \.self) { w in
+                                    Text(w)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity)
+                                }
                             }
+                            .padding(.horizontal, 8)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            
+                            // 月グリッド
+                            CalendarMonthGrid(
+                                month: month,
+                                expenseBuckets: expenseBuckets,
+                                incomeBuckets: incomeBuckets,
+                                maxExpense: maxExpenseInMonth,
+                                maxIncome: maxIncomeInMonth,
+                                todoCounts: todoStore.dueCounts(in: month),
+                                accent: accent,
+                                onTapDay: { day in sheet = .detail(day) },
+                                onLongPressDay: { day in sheet = .add(day) },
+                                notedDays: dayNotes.notedDays(in: month),
+                                noteSnippets: dayNotes.snippets(in: month, limit: 8)
+                            )
+                            .padding(.horizontal)
+                            .transition(.move(edge: .top).combined(with: .opacity))
                         }
-                        .padding(.horizontal, 8)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        
-                        // 月グリッド
-                        CalendarMonthGrid(
-                            month: month,
-                            expenseBuckets: expenseBuckets,
-                            incomeBuckets: incomeBuckets,
-                            maxExpense: maxExpenseInMonth,
-                            maxIncome: maxIncomeInMonth,
-                            todoCounts: todoStore.dueCounts(in: month),
-                            accent: accent,
-                            onTapDay: { day in sheet = .detail(day) },
-                            onLongPressDay: { day in sheet = .add(day) },
-                            notedDays: dayNotes.notedDays(in: month),
-                            noteSnippets: dayNotes.snippets(in: month, limit: 8)
-                        )
-                        .padding(.horizontal)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        // ここがポイント：この塊にだけスワイプを付与
+                        .contentShape(Rectangle()) // 余白でもドラッグを拾えるように
+                        .simultaneousGesture(swipeGesture, including: .all)
                     }
                 }
                 
@@ -188,7 +194,6 @@ struct CalendarScreen: View {
                 .frame(height: max(0, keyboard.height))
                 .animation(.snappy, value: keyboard.height)
         }
-        .simultaneousGesture(swipeGesture, including: .all)
     }
     
     // MARK: - 集計

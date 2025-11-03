@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct AddTransactionView: View {
     @EnvironmentObject var store: DataStore
@@ -42,51 +43,77 @@ struct AddTransactionView: View {
         _memo   = State(initialValue: defaultMemo ?? "")
     }
     
+    // ===== 小画面（SE2等）だけの調整値 =====
+    private var isSmallPhone: Bool {
+#if os(iOS)
+        UIScreen.main.bounds.height <= 667
+#else
+        false
+#endif
+    }
+    // ← ここだけ触れば微調整しやすい
+    private var keypadScale: CGFloat { isSmallPhone ? 0.86 : 0.85 }       // 少し大きく戻す
+    private var keypadHeightRatio: CGFloat { isSmallPhone ? 0.30 : 0.33 } // 高さも戻す
+    private var keypadLift: CGFloat { isSmallPhone ? 34 : 0 }             // さらに上へ
+    private var extraButtonLift: CGFloat { isSmallPhone ? 100 : 10 }      // 閉じるボタンを上へ
+    // セーフエリア下端（Environment未使用の汎用取得）
+    private var safeBottomInset: CGFloat {
+        UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
+    }
+    
     var body: some View {
         NavigationStack {
             contentScroll
-                .background(bgGradient.ignoresSafeArea())   // ← 重い式を外出し
+                .background(bgGradient.ignoresSafeArea())
                 .navigationTitle("新規追加")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
-                // ▼ キーボードが見えてない時だけ電卓を出す
+            // ▼ キーボードが見えてない時だけ電卓を出す
                 .safeAreaInset(edge: .bottom) {
                     if showCustomKeypad {
-                        NumericKeypad(
-                            amount: $amount,
-                            maxDigits: 9,
-                            style: .attached,
-                            isIncome: type == .income,
-                            sizeScale: 0.85,
-                            preferredHeightRatio: 0.33,
-                            onHeightChange: { h in keypadHeight = h }  // ← ここで高さ受け取り
-                        )
+                        // ZStackに包み、見た目位置だけ上にリフト
+                        ZStack {
+                            NumericKeypad(
+                                amount: $amount,
+                                maxDigits: 9,
+                                style: .attached,
+                                isIncome: type == .income,
+                                sizeScale: keypadScale,
+                                preferredHeightRatio: keypadHeightRatio,
+                                onHeightChange: { h in keypadHeight = h }
+                            )
+                            // ↓ 念のため下端のセーフエリア分を内部に確保した上で持ち上げる
+                            .padding(.bottom, safeBottomInset)
+                        }
+                        .offset(y: -keypadLift) // ← 小画面だけ持ち上げ
                     }
                 }
+            // 右下・独立した「閉じる」ボタン（キーパッドの表示テキストに被らないよう高め）
                 .overlay(alignment: .bottomTrailing) {
                     if showCustomKeypad {
-                        // ツールバーと同じ見た目にしたければ、共通化したボタンを使う
                         CloseKeyboardButton {
                             showCustomKeypad = false
                         }
                         .padding(.trailing, 12)
-                        .padding(.bottom, keypadHeight + 8)  // ← キーボードの“上”に浮かせる
+                        // キーパッドの上面からさらに持ち上げ（セーフエリアも考慮）
+                        .padding(.bottom, max(8,
+                                              (keypadHeight - keypadLift) + extraButtonLift + safeBottomInset
+                                             ))
                     }
                 }
-                // システムキーボード時の「閉じる」をツールバー無しで重ねる
+            // システムキーボード時の「閉じる」をツールバー無しで重ねる
                 .overlay(alignment: .bottomTrailing) {
-                    // メモにフォーカス & キーボードが出ている時のみ表示
                     if memoFocused && kb.height > 0 {
                         CloseKeyboardButton {
-                            memoFocused = false       // ← システムKBを閉じる
-                            showCustomKeypad = false  // ← 念のため自作も閉じる
+                            memoFocused = false
+                            showCustomKeypad = false
                         }
                         .padding(.trailing, 12)
-                        .padding(.bottom, 8) // “キーボードの上” に浮かせる
+                        .padding(.bottom, 8 + safeBottomInset)
                         .animation(.easeInOut(duration: 0.2), value: kb.height)
                     }
                 }
-                // ▼ システムキーボードが出たら自作キーボードは閉じる（メモ編集などのとき）
+            // ▼ システムキーボードが出たら自作キーボードは閉じる（メモ編集などのとき）
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isKeyboardVisible = true
@@ -114,7 +141,8 @@ struct AddTransactionView: View {
                 )
                 .environmentObject(store)
                 
-                Spacer(minLength: showCustomKeypad ? 60 : 0) // 電卓に重ならないよう余白
+                // 小型画面では余白は控えめ（キーパッドが上がるため）
+                Spacer(minLength: showCustomKeypad ? (isSmallPhone ? 20 : 60) : 0)
             }
             .padding(.top, 12)
             .padding(.horizontal)
@@ -158,7 +186,7 @@ struct AddTransactionView: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(Color.secondary.opacity(0.2))
                 )
-                .contentShape(Rectangle())                  // 余白までタップ可
+                .contentShape(Rectangle())
                 .onTapGesture {
                     // メモのフォーカスを外してシステムKBを閉じる → 自作キーパッドを出す
                     memoFocused = false
@@ -204,7 +232,6 @@ struct AddTransactionView: View {
     }
     
     private var keypadBar: some View {
-        // ここもネストを避けて型を軽く
         let barBackground: AnyView = {
             if scheme == .dark {
                 return AnyView(Color(white: 0.08).opacity(0.95))
@@ -258,6 +285,7 @@ struct AddTransactionView: View {
 }
 
 
+/// 保存ボタン
 struct SaveButton: View {
     let isEnabled: Bool
     let accent: Color
@@ -276,6 +304,7 @@ struct SaveButton: View {
     }
 }
 
+/// 「閉じる」ボタン
 struct CloseKeyboardButton: View {
     let action: () -> Void
     var body: some View {
@@ -287,7 +316,7 @@ struct CloseKeyboardButton: View {
                 .padding(.horizontal, 13)
                 .frame(minHeight: 42)
                 .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous) // 14 → 16
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .fill(.ultraThinMaterial)
                         .overlay(
                             RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -296,7 +325,17 @@ struct CloseKeyboardButton: View {
                 )
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())                           // 余白もヒット領域に
-        .shadow(color: .black.opacity(0.14), radius: 12, y: 3) // 少しだけ強めに
+        .contentShape(Rectangle())
+        .shadow(color: .black.opacity(0.14), radius: 12, y: 3)
+    }
+}
+
+/// UIWindow / セーフエリア取得のユーティリティ（Environment未使用で安全）
+private extension UIApplication {
+    var activeKeyWindow: UIWindow? {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }
     }
 }
