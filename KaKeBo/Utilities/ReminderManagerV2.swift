@@ -13,13 +13,25 @@ enum ReminderManagerV2 {
     private static let center = UNUserNotificationCenter.current()
     private static func id(for rule: ReminderRule) -> String { "kakebo.rule.\(rule.id.uuidString)" }
     
+    // MARK: - Public API (Viewから呼ばれるのはココだけでOK)
+    
+    /// 権限リクエスト（初回のみシステムUIが出る）
+    @discardableResult
+    static func requestAuthorization() async -> Bool {
+        await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            center.requestAuthorization(options: [.alert, .sound]) { ok, _ in
+                cont.resume(returning: ok)
+            }
+        }
+    }
+    
     /// すべてのルールを再適用（削除→再登録）
     static func applyAll(rules: [ReminderRule], store: DataStore, todoStore: TodoStore) async {
-        // まず、この名前空間の通知を一掃
-        let pending = await pendingIds()
-        let ours = pending.filter { $0.hasPrefix("kakebo.rule.") }
-        center.removePendingNotificationRequests(withIdentifiers: ours)
-        
+        // 1) まず自分の名前空間の通知を一掃（pending + delivered）
+        await removeAllOurRuleNotifications()
+        // 2) レガシーの “monthly.*” を掃除（残って鳴る事故を防止）
+        await sweepLegacyMonthly()
+        // 3) 有効なルールだけ再登録
         for rule in rules where rule.enabled {
             await schedule(rule: rule, store: store, todoStore: todoStore)
         }
@@ -31,25 +43,24 @@ enum ReminderManagerV2 {
         let content = content(for: rule, store: store, todoStore: todoStore)
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1.0, repeats: false)
         let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            center.add(req) { _ in cont.resume() }
-        }
+        await add([req])
     }
+    
+    // MARK: - Core
     
     private static func schedule(rule: ReminderRule, store: DataStore, todoStore: TodoStore) async {
         var reqs: [UNNotificationRequest] = []
+        let hm = Calendar.current.dateComponents([.hour, .minute], from: rule.time)
         
         switch rule.repeatType {
         case .daily:
             var comps = DateComponents()
-            let hm = Calendar.current.dateComponents([.hour, .minute], from: rule.time)
             comps.hour = hm.hour; comps.minute = hm.minute
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
             let content = content(for: rule, store: store, todoStore: todoStore)
             reqs.append(.init(identifier: id(for: rule), content: content, trigger: trigger))
             
         case .weekly:
-            let hm = Calendar.current.dateComponents([.hour, .minute], from: rule.time)
             for w in rule.weekdays {
                 var comps = DateComponents()
                 comps.weekday = w
@@ -59,15 +70,7 @@ enum ReminderManagerV2 {
                 reqs.append(.init(identifier: id(for: rule) + ".w\(w)", content: content, trigger: trigger))
             }
         }
-        
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            let group = DispatchGroup()
-            for r in reqs {
-                group.enter()
-                center.add(r) { _ in group.leave() }
-            }
-            group.notify(queue: .main) { cont.resume() }
-        }
+        await add(reqs)
     }
     
     private static func content(for rule: ReminderRule, store: DataStore, todoStore: TodoStore, weekday: Int? = nil) -> UNMutableNotificationContent {
@@ -80,19 +83,33 @@ enum ReminderManagerV2 {
         let hasUnlogged = store.transactions.first(where: { cal.isDate($0.date, inSameDayAs: today) }) == nil
         let todosToday = todoStore.todos.filter { $0.due.map{ cal.isDate($0, inSameDayAs: today) } ?? false && !$0.done }.count
         
-        // 条件 → 片方でも成り立たない & フィルタ指定がある場合は内容を「条件未達の軽い促し」に変更（通知自体の抑制は iOS では難しい）
+        // 本文テンプレ置換
         var body = rule.bodyTemplate
             .replacingOccurrences(of: "{todosToday}", with: "\(todosToday)")
             .replacingOccurrences(of: "{unloggedToday}", with: hasUnlogged ? "はい" : "いいえ")
         
+        // 条件：満たさない場合でも「通知抑制」はせず軽い文言へ置換（iOSの仕様上サイレント抑制は難しいため）
         if (rule.onlyIfUnloggedToday && !hasUnlogged) ||
             (rule.onlyIfTodosDueToday && todosToday == 0) {
-            body = "進捗チェック：条件に一致しないため、通知のみ表示しています。"
+            body = "進捗チェック：条件に一致しないため通知のみ表示しています。"
         }
         
         c.body = body
         if rule.soundEnabled { c.sound = .default }
         return c
+    }
+    
+    // MARK: - Helpers
+    
+    private static func add(_ requests: [UNNotificationRequest]) async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            let group = DispatchGroup()
+            for r in requests {
+                group.enter()
+                center.add(r) { _ in group.leave() }
+            }
+            group.notify(queue: .main) { cont.resume() }
+        }
     }
     
     private static func pendingIds() async -> [String] {
@@ -101,5 +118,31 @@ enum ReminderManagerV2 {
                 cont.resume(returning: list.map(\.identifier))
             }
         }
+    }
+    
+    private static func deliveredIds(prefix: String) async -> [String] {
+        await withCheckedContinuation { (cont: CheckedContinuation<[String], Never>) in
+            center.getDeliveredNotifications { delivered in
+                let ids = delivered.map { $0.request.identifier }.filter { $0.hasPrefix(prefix) }
+                cont.resume(returning: ids)
+            }
+        }
+    }
+    
+    private static func removeAllOurRuleNotifications() async {
+        let prefix = "kakebo.rule."
+        let p = await pendingIds().filter { $0.hasPrefix(prefix) }
+        center.removePendingNotificationRequests(withIdentifiers: p)
+        let d = await deliveredIds(prefix: prefix)
+        center.removeDeliveredNotifications(withIdentifiers: d)
+    }
+    
+    /// レガシー掃除：かつての単発月次通知（monthly.*）を一掃して事故防止
+    private static func sweepLegacyMonthly() async {
+        let prefix = "monthly."
+        let p = await pendingIds().filter { $0.hasPrefix(prefix) }
+        if !p.isEmpty { center.removePendingNotificationRequests(withIdentifiers: p) }
+        let d = await deliveredIds(prefix: prefix)
+        if !d.isEmpty { center.removeDeliveredNotifications(withIdentifiers: d) }
     }
 }
