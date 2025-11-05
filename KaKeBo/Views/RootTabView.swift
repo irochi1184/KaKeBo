@@ -17,15 +17,16 @@ struct RootTabView: View {
         TabView {
             HomeView()
                 .tabItem { Label("ホーム", systemImage: "house.fill") }
-//            CategoryListView()
-//                .tabItem { Label("カテゴリ", systemImage: "square.grid.2x2.fill") }
             CalendarScreen()
                 .tabItem { Label("カレンダー", systemImage: "calendar") }
             ReportsView()
                 .tabItem { Label("レポート", systemImage: "chart.pie.fill") }
+            AllTransactionsView()
+                .tabItem { Label("履歴", systemImage: "magnifyingglass") }
             SettingsView()
                 .tabItem { Label("設定", systemImage: "gearshape.fill") }
         }
+        .overlay(UpdateNoticeGate())
         .tint(themeStore.theme.accentColor(for: scheme))
     }
 }

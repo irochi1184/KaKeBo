@@ -30,7 +30,6 @@ struct ReminderRule: Identifiable, Codable, Equatable {
     // 条件
     var onlyIfUnloggedToday: Bool = false       // まだ今日の取引が0件のときだけ
     var onlyIfTodosDueToday: Bool = false       // 今日が期日のToDoが1件以上あるとき
-    var includeTodoCountInBadge: Bool = true    // バッジにToDo数
     var soundEnabled: Bool = true
     
     // 並び順

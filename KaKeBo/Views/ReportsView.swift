@@ -24,122 +24,173 @@ struct ReportsView: View {
     @State private var year: Int = Calendar.current.component(.year, from: Date())
     // グラフの表示モード（見やすさ切替）
     @State private var stackedBars: Bool = true
+    @State private var excludedCategoryIds: Set<UUID> = []
+    @State private var trendTarget: CategoryAnnual? = nil
     
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
-        ScrollView {
-            VStack(spacing: 16) {
-                
-                // MARK: Year selector + Export
-                HStack(spacing: 12) {
-                    YearPicker(selectedYear: $year, availableYears: availableYears, accent: accent)
-                        .tint(accent)
-                    Spacer()
-                    ShareLink(item: csvData(), preview: SharePreview("\(String(year))年レポート", image: Image(systemName: "doc")))
-                    {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.headline)
-                            .padding(10)
-                            .background(Circle().fill(accent.opacity(0.15)))
-                    }
-                    .tint(accent)
-                }
-                .padding(.horizontal)
-                
-                // MARK: KPI Card
-                KPIHeader(
-                    income: yearIncome,
-                    expense: yearExpense,
-                    balance: yearBalance,
-                    savingsRate: yearSavingsRate,
-                    avgExpense: avgExpensePerMonth
-                )
-                .luxCard()
-                .padding(.horizontal)
-                
-                // MARK: 月別 収入/支出 バー + 累積残高 ライン
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("月別サマリ").font(.headline)
-                        Spacer()
-                        Toggle(isOn: $stackedBars) {
-                            Text(stackedBars ? "積み上げ" : "並列")
-                        }
-                        .tint(accent)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                    }
-                    .padding(.horizontal, 4)
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
                     
-                    MonthlyBarsAndCumLine(
-                        monthlyIncome: monthlyIncome,
-                        monthlyExpense: monthlyExpense,
-                        stacked: stackedBars,
-                        accent: accent
+                    // MARK: Year selector + Export
+                    HStack(spacing: 12) {
+                        YearPicker(selectedYear: $year, availableYears: availableYears, accent: accent)
+                            .tint(accent)
+                        Spacer()
+//                        ShareLink(item: csvData(), preview: SharePreview("\(String(year))年レポート", image: Image(systemName: "doc")))
+//                        {
+//                            Image(systemName: "square.and.arrow.up")
+//                                .font(.headline)
+//                                .padding(10)
+//                                .background(Circle().fill(accent.opacity(0.15)))
+//                        }
+//                        .tint(accent)
+                    }
+                    .padding(.horizontal)
+                    
+                    // MARK: KPI Card
+                    KPIHeader(
+                        income: yearIncome,
+                        expense: yearExpense,
+                        balance: yearBalance,
+                        savingsRate: yearSavingsRate,
+                        avgExpense: avgExpensePerMonth
                     )
-                    .frame(height: 240)
-                }
-                .cardBackground(scheme)
-                
-                // MARK: カテゴリ内訳（支出）
-                // 例：しきい値をここで定義（内側注釈は8%以上の扇だけ）
-                let insideThreshold = 0.08
-                
-                if !categoryTotals.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("年間カテゴリ別内訳（支出）").font(.headline)
-                        
-                        // ドーナツ（扇注釈のみ／白文字）
-                        CategoryDonutAnnual(breakdown: categoryTotals, insideThreshold: insideThreshold)
-                            .frame(height: 240)
-                        
-                        // Topカテゴリ（外側リスト）: そのまま重複なしでOK
-                        VStack(spacing: 8) {
-                            ForEach(categoryTotals.prefix(store.categories.count)) { c in
-                                HStack {
-                                    Label(c.name, systemImage: c.symbol)
-                                        .labelStyle(.titleAndIcon)
-                                        .foregroundStyle(c.color)
-                                    Spacer()
-                                    Text(yen(c.amount))
-                                        .font(.subheadline.weight(.semibold))
-                                }
-                                .padding(.vertical, 4)
-                                Divider().opacity(0.2)
+                    .luxCard()
+                    .padding(.horizontal)
+                    
+                    // MARK: 月別 収入/支出 バー + 累積残高 ライン
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("月別サマリ").font(.headline)
+                            Spacer()
+                            Toggle(isOn: $stackedBars) {
+                                Text(stackedBars ? "積み上げ" : "並列")
                             }
+                            .tint(accent)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
                         }
-                        .padding(.top, 4)
+                        .padding(.horizontal, 4)
+                        
+                        MonthlyBarsAndCumLine(
+                            monthlyIncome: monthlyIncome,
+                            monthlyExpense: monthlyExpense,
+                            stacked: stackedBars,
+                            accent: accent
+                        )
+                        .frame(height: 240)
                     }
                     .cardBackground(scheme)
-                }
-
-                
-                // MARK: ベスト/ワースト月 + 昨年比
-                VStack(spacing: 12) {
-                    HStack {
-                        Text("ハイライト").font(.headline)
-                        Spacer()
+                    
+                    // MARK: カテゴリ内訳（支出）
+                    // 例：しきい値をここで定義（内側注釈は8%以上の扇だけ）
+                    // 例：しきい値
+                    let insideThreshold = 0.08
+                    
+                    if !categoryTotals.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("年間カテゴリ別内訳（支出）").font(.headline)
+                            
+                            // ★ フィルタ済みを渡す
+                            CategoryDonutAnnual(breakdown: filteredCategoryTotals, insideThreshold: insideThreshold)
+                                .frame(height: 240)
+                            
+                            // ★ リスト（全カテゴリを表示しつつ、除外は薄く）
+                            VStack(spacing: 8) {
+                                ForEach(categoryTotals.prefix(store.categories.count)) { c in
+                                    HStack(spacing: 10) {
+                                        
+                                        // 疑似チェックボックス（現状どおり）
+                                        Button {
+                                            if excludedCategoryIds.contains(c.id) {
+                                                excludedCategoryIds.remove(c.id)
+                                            } else {
+                                                excludedCategoryIds.insert(c.id)
+                                            }
+                                        } label: {
+                                            Image(systemName: excludedCategoryIds.contains(c.id) ? "square" : "checkmark.square.fill")
+                                                .imageScale(.medium)
+                                                .foregroundStyle(excludedCategoryIds.contains(c.id) ? .secondary : c.color)
+                                                .frame(width: 24)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel(excludedCategoryIds.contains(c.id) ? "含める" : "除外する")
+                                        
+                                        // ラベル本体（除外時は薄く）
+                                        Label(c.name, systemImage: c.symbol)
+                                            .labelStyle(.titleAndIcon)
+                                            .foregroundStyle(c.color.opacity(excludedCategoryIds.contains(c.id) ? 0.35 : 1.0))
+                                        
+                                        Spacer()
+                                        
+                                        Text(yen(c.amount))
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(excludedCategoryIds.contains(c.id) ? .secondary : .primary)
+                                    }
+                                    .padding(.vertical, 4)
+                                    .contentShape(Rectangle())                // ← 行全体をタップ領域に
+                                    .onTapGesture { trendTarget = c }         // ← 行タップで詳細へ
+                                    Divider().opacity(0.2)
+                                }
+                            }
+                            .padding(.top, 4)
+                            
+                            // 便利ボタン（任意）：全選択/全解除
+                            HStack(spacing: 12) {
+                                Button("全て含める") {
+                                    excludedCategoryIds.removeAll()
+                                }
+                                Button("全て除外") {
+                                    excludedCategoryIds = Set(categoryTotals.map { $0.id })
+                                }
+                                .tint(.secondary)
+                                Spacer()
+                                // 参考表示：現在の合計
+                                let currTotal = filteredCategoryTotals.reduce(0) { $0 + $1.amount }
+                                Text("表示合計: \(yen(currTotal))")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            .padding(.top, 2)
+                        }
+                        .cardBackground(scheme)
                     }
                     
-                    HighlightsRow(best: bestMonth, worst: worstMonth)
-                    
-                    if let y2y = yearOverYear {
-                        YoYRow(yoy: y2y)
+                    // MARK: ベスト/ワースト月 + 昨年比
+                    VStack(spacing: 12) {
+                        HStack {
+                            Text("ハイライト").font(.headline)
+                            Spacer()
+                        }
+                        
+                        HighlightsRow(best: bestMonth, worst: worstMonth)
+                        
+                        if let y2y = yearOverYear {
+                            YoYRow(yoy: y2y)
+                        }
                     }
+                    .cardBackground(scheme)
+                    .padding(.bottom, 24)
                 }
-                .cardBackground(scheme)
-                .padding(.bottom, 24)
+                .padding(.top, 12)
             }
-            .padding(.top, 12)
-        }
-        .background(
-            themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea()
-        )
-        .navigationTitle("レポート")
-        .onAppear {
-            // データが今年に無ければ、最新年に寄せる
-            if availableYears.contains(year) == false, let latest = availableYears.max() {
-                year = latest
+            .background(
+                themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea()
+            )
+            .navigationDestination(item: $trendTarget) { cat in
+                CategoryTrendView(
+                    year: year,
+                    initialCategoryIds: [cat.id]
+                )
+                .environmentObject(store)
+                .environmentObject(themeStore)
+            }
+            .onAppear {
+                // データが今年に無ければ、最新年に寄せる
+                if availableYears.contains(year) == false, let latest = availableYears.max() {
+                    year = latest
+                }
             }
         }
     }
@@ -311,6 +362,15 @@ private struct MonthlyBarsAndCumLine: View {
             res.append(acc)
         }
         return res
+    }
+}
+
+extension CategoryAnnual: Hashable {
+    static func == (lhs: CategoryAnnual, rhs: CategoryAnnual) -> Bool {
+        lhs.id == rhs.id
+    }
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }
 
@@ -595,6 +655,9 @@ private extension ReportsView {
         for r in rows { csv += r.joined(separator: ",") + "\n" }
         let data = csv.data(using: .utf8) ?? Data()
         return ShareableResource(data: data, filename: "KaKeBo_\(year)_report.csv", contentType: .plainText)
+    }
+    var filteredCategoryTotals: [CategoryAnnual] {
+        categoryTotals.filter { !excludedCategoryIds.contains($0.id) }
     }
 }
 

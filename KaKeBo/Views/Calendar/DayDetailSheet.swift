@@ -13,6 +13,7 @@ struct DayDetailSheet: View {
     @EnvironmentObject var todoStore: TodoStore
     @EnvironmentObject var themeStore: ThemeStore
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject var dayNotes: DayNotesStore
     private var dayTodos: [CalendarTodo] { todoStore.todos(on: date) }
     
     let date: Date
@@ -130,6 +131,14 @@ struct DayDetailSheet: View {
                         }
                         .tint(accent)
                     }
+                    
+                    Section("この日のメモ") {
+                        DayNoteEditor(
+                            date: date,
+                            accent: accent
+                        )
+                    }
+
                 }
                 .listStyle(.insetGrouped)
             }
@@ -383,5 +392,56 @@ private struct AddTodoMiniSheet: View {
             }
         }
         .padding(16)
+    }
+}
+
+private struct DayNoteEditor: View {
+    @EnvironmentObject var dayNotes: DayNotesStore
+    let date: Date
+    let accent: Color
+    
+    @State private var text: String = ""
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $text)
+                    .frame(minHeight: 48)
+                    .padding(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(.quaternary)
+                    )
+                if text.isEmpty {
+                    Text("例：北海道旅行など")
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 14)
+                        .padding(.leading, 14)
+                        .allowsHitTesting(false)
+                }
+            }
+            
+            HStack {
+                Button("削除", role: .destructive) {
+                    text = ""
+                    dayNotes.removeNote(for: date)
+                }
+                
+                Spacer()
+                
+                Button("保存") {
+                    dayNotes.setNote(text, for: date)
+                    hideKeyboard()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+            }
+        }
+        .onAppear { text = dayNotes.note(for: date) }
+    }
+    
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                        to: nil, from: nil, for: nil)
     }
 }

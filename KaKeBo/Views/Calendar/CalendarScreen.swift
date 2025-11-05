@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct CalendarScreen: View {
     @EnvironmentObject var store: DataStore
@@ -13,6 +14,7 @@ struct CalendarScreen: View {
     @Environment(\.colorScheme) private var scheme
     public var cal: Calendar { .current }
     @StateObject private var keyboard = KeyboardHeightReader()
+    @StateObject private var dayNotes = DayNotesStore()
 
     @State private var month: Date = Calendar.current.date(from:Calendar.current.dateComponents([.year,.month], from: .now)
     ) ?? .now
@@ -41,36 +43,53 @@ struct CalendarScreen: View {
     
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
+        
+        // どこでも横にスワイプしたら月移動（縦優勢は無視）
+        let swipeGesture = DragGesture(minimumDistance: 20, coordinateSpace: .local)
+            .onEnded { value in
+                let dx = value.translation.width
+                let dy = value.translation.height
+                guard abs(dx) > abs(dy), abs(dx) > 40 else { return } // 横優勢 & 十分な距離
+                if dx < 0 { nextMonth() } else { previousMonth() }
+            }
         NavigationStack {
             VStack(spacing: 12) {
                 Group {
                     if keyboard.height == 0 {
                         // 曜日ヘッダー
-                        HStack {
-                            ForEach(weekdaySymbolsJP, id: \.self) { w in
-                                Text(w)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .frame(maxWidth: .infinity)
+                        VStack(spacing: 8) {
+                            // 曜日ヘッダー
+                            HStack {
+                                ForEach(weekdaySymbolsJP, id: \.self) { w in
+                                    Text(w)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity)
+                                }
                             }
+                            .padding(.horizontal, 8)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            
+                            // 月グリッド
+                            CalendarMonthGrid(
+                                month: month,
+                                expenseBuckets: expenseBuckets,
+                                incomeBuckets: incomeBuckets,
+                                maxExpense: maxExpenseInMonth,
+                                maxIncome: maxIncomeInMonth,
+                                todoCounts: todoStore.dueCounts(in: month),
+                                accent: accent,
+                                onTapDay: { day in sheet = .detail(day) },
+                                onLongPressDay: { day in sheet = .add(day) },
+                                notedDays: dayNotes.notedDays(in: month),
+                                noteSnippets: dayNotes.snippets(in: month, limit: 8)
+                            )
+                            .padding(.horizontal)
+                            .transition(.move(edge: .top).combined(with: .opacity))
                         }
-                        .padding(.horizontal, 8)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        
-                        // 月グリッド
-                        CalendarMonthGrid(
-                            month: month,
-                            expenseBuckets: expenseBuckets,
-                            incomeBuckets: incomeBuckets,
-                            maxExpense: maxExpenseInMonth,
-                            maxIncome: maxIncomeInMonth,
-                            todoCounts: todoStore.dueCounts(in: month),
-                            accent: accent,
-                            onTapDay: { day in sheet = .detail(day) },
-                            onLongPressDay: { day in sheet = .add(day) }
-                        )
-                        .padding(.horizontal)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        // ここがポイント：この塊にだけスワイプを付与
+                        .contentShape(Rectangle()) // 余白でもドラッグを拾えるように
+                        .simultaneousGesture(swipeGesture, including: .all)
                     }
                 }
                 
@@ -131,6 +150,8 @@ struct CalendarScreen: View {
                     DayDetailSheet(date: date, accent: accent)
                         .environmentObject(store)
                         .environmentObject(todoStore)
+                        .environmentObject(themeStore)
+                        .environmentObject(dayNotes)
                     
                 case .add(let date):
                     AddTransactionView(
@@ -642,6 +663,21 @@ struct BarPrimaryButton: View {
             Button(title, action: {})
                 .buttonStyle(.bordered)
                 .disabled(true) // ← 見た目も無効化
+        }
+    }
+}
+
+private extension CalendarScreen {
+    func previousMonth() {
+        if let newMonth = cal.date(byAdding: .month, value: -1, to: month) {
+            withAnimation(.snappy) { month = newMonth }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+    func nextMonth() {
+        if let newMonth = cal.date(byAdding: .month, value: 1, to: month) {
+            withAnimation(.snappy) { month = newMonth }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
     }
 }

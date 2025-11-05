@@ -1,31 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-    <dict>
-        
-        <key>UTImportedTypeDeclarations</key>
-        <array>
-            <dict>
-                <key>UTTypeIdentifier</key>
-                <string>com.irochi.kakebo.backup</string>
-                <key>UTTypeDescription</key>
-                <string>KaKeBo Backup</string>
-                <key>UTTypeConformsTo</key>
-                <array>
-                    <string>public.json</string>
-                </array>
-                <key>UTTypeTagSpecification</key>
-                <dict>
-                    <!-- 衝突回避のため json を入れないのが無難 -->
-                    <key>public.filename-extension</key>
-                    <array>
-                        <string>kakebo</string>
-                    </array>
-                    <key>public.mime-type</key>
-                    <string>application/vnd.irochi.kakebo+json</string>
-                </dict>
-            </dict>
-        </array>
-        
-    </dict>
+<dict>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>NSCameraUsageDescription</key>
+			<string>レシート撮影のためにカメラを使用します。</string>
+			<key>NSFaceIDUsageDescription</key>
+			<string>アプリロックの解除にFace IDを使用します。</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>KaKeBo Backup</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.irochi.kakebo.backup</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>kakebo</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/vnd.irochi.kakebo+json</string>
+			</dict>
+		</dict>
+	</array>
+</dict>
 </plist>

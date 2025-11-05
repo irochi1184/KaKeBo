@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct EditTransactionView: View {
     @EnvironmentObject var store: DataStore
@@ -26,8 +27,8 @@ struct EditTransactionView: View {
     // キーボード制御（Add と揃える）
     @State private var isKeyboardVisible = false
     @FocusState private var memoFocused: Bool
-    @State private var showCustomKeypad = true          // ← 初期表示：自作キーパッド表示
-    @State private var keypadHeight: CGFloat = 0        // ← 自作キーパッド高さ（閉じるボタン位置調整用）
+    @State private var showCustomKeypad = true          // 初期表示：自作キーパッド表示
+    @State private var keypadHeight: CGFloat = 0        // 自作キーパッド高さ（閉じるボタン位置調整用）
     @StateObject private var kb = KeyboardHeightReader()
     @State private var showAddCategory = false
     
@@ -40,6 +41,32 @@ struct EditTransactionView: View {
         _selectedCategoryId = State(initialValue: transaction.categoryId)
     }
     
+    // 実効的に必要な下パディング（overlay配置のキーパッドと重ならないため）
+    private var contentBottomPadding: CGFloat {
+        guard showCustomKeypad else { return 0 }
+        // キーパッドの実高さ ー 見た目の持ち上げ量 + 余白 + セーフエリア
+        return max(0, (keypadHeight - keypadLift)) + 16 + safeBottomInset
+    }
+    
+    // ===== 小画面（SE2等）だけの調整値 =====
+    private var isSmallPhone: Bool {
+#if os(iOS)
+        UIScreen.main.bounds.height <= 667
+#else
+        false
+#endif
+    }
+    // AddTransactionView を参考に：サイズは少し大きめ、位置は上にずらす
+    private var keypadScale: CGFloat { isSmallPhone ? 0.86 : 0.85 }       // 少し大きく
+    private var keypadHeightRatio: CGFloat { isSmallPhone ? 0.30 : 0.33 } // 高さも戻す
+    private var keypadLift: CGFloat { isSmallPhone ? 34 : 0 }             // 上方向に持ち上げ
+    private var extraButtonLift: CGFloat { isSmallPhone ? 100 : 10 }      // 「閉じる」ボタンをさらに上へ
+    
+    // セーフエリア下端
+    private var safeBottomInset: CGFloat {
+        UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
+    }
+    
     var body: some View {
         NavigationStack {
             contentScroll
@@ -47,40 +74,53 @@ struct EditTransactionView: View {
                 .navigationTitle("取引を編集")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
-                // ▼ “自作キーボード”を制御（isKeyboardVisible ではなく showCustomKeypad を見る）
-                .safeAreaInset(edge: .bottom) {
+            // ▼ safeAreaInsetは使わず、overlayで下部配置（白抜け防止のため下地を敷く）
+                .overlay(alignment: .bottom) {
                     if showCustomKeypad {
-                        NumericKeypad(
-                            amount: $amount,
-                            maxDigits: 9,
-                            style: .attached,
-                            isIncome: type == .income,
-                            sizeScale: 0.85,              // Add と同じ縮尺
-                            preferredHeightRatio: 0.33,   // 画面高 1/3
-                            onHeightChange: { h in keypadHeight = h }
-                        )
+                        ZStack(alignment: .bottom) {
+                            // 下地：透明領域でマテリアルが白発光するのを防ぐ
+                            Rectangle()
+                                .fill(themeStore.theme.backgroundColor(for: scheme))
+                                .frame(height: safeBottomInset + 100)
+                                .ignoresSafeArea(edges: .bottom)
+                            
+                            NumericKeypad(
+                                amount: $amount,
+                                maxDigits: 9,
+                                style: .attached,
+                                isIncome: type == .income,
+                                sizeScale: keypadScale,
+                                preferredHeightRatio: keypadHeightRatio,
+                                onHeightChange: { h in keypadHeight = h }
+                            )
+                            // ホームインジケータ分を確保した上で、見た目だけ上へ
+                            .padding(.bottom, safeBottomInset)
+                            .offset(y: -keypadLift)
+                        }
                     }
                 }
-                // 自作キーボード右上に “閉じる”（ガラスボタン）
+            // 右下・独立した「閉じる」ボタン（キーパッドの表示テキストに被らないよう高め）
                 .overlay(alignment: .bottomTrailing) {
                     if showCustomKeypad {
                         CloseKeyboardButton {
                             showCustomKeypad = false
                         }
                         .padding(.trailing, 12)
-                        .padding(.bottom, keypadHeight + 8) // キーボードの“上”
+                        .padding(.bottom, max(
+                            8,
+                            (keypadHeight - keypadLift) + extraButtonLift + safeBottomInset
+                        ))
                     }
                 }
-                // システムキーボード時の「閉じる」をツールバー無しで重ねる
+            // システムキーボード時の「閉じる」をツールバー無しで重ねる
                 .overlay(alignment: .bottomTrailing) {
-                    // メモにフォーカス & キーボードが出ている時のみ表示
                     if memoFocused && kb.height > 0 {
                         CloseKeyboardButton {
-                            memoFocused = false       // ← システムKBを閉じる
-                            showCustomKeypad = false  // ← 念のため自作も閉じる
+                            memoFocused = false
+                            showCustomKeypad = false
                         }
                         .padding(.trailing, 12)
-                        .padding(.bottom, 8) // “キーボードの上” に浮かせる
+                        .padding(.bottom, 8 + safeBottomInset)
                         .animation(.easeInOut(duration: 0.2), value: kb.height)
                     }
                 }
@@ -112,10 +152,12 @@ struct EditTransactionView: View {
                 )
                 .environmentObject(store)
                 
-                Spacer(minLength: showCustomKeypad ? 60 : 0) // 電卓に重ならない余白（Add と同様）
+                Spacer(minLength: showCustomKeypad ? (isSmallPhone ? 12 : 20) : 0)
             }
             .padding(.top, 12)
             .padding(.horizontal)
+            // ← ここがポイント：キーパッド分だけスクロール領域に実パディングを付与
+            .padding(.bottom, contentBottomPadding)
         }
         .background(themeStore.theme.backgroundColor(for: scheme))
         .sheet(isPresented: $showAddCategory) {
@@ -245,5 +287,15 @@ struct EditTransactionView: View {
     private func performDelete() {
         store.deleteTransactions(with: [transaction.id])
         dismiss()
+    }
+}
+
+// UIWindow / セーフエリア取得のユーティリティ
+private extension UIApplication {
+    var activeKeyWindow: UIWindow? {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }
     }
 }

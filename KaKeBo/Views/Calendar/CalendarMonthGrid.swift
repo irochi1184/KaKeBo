@@ -19,6 +19,8 @@ struct CalendarMonthGrid: View {
     let accent: Color
     let onTapDay: (Date) -> Void
     let onLongPressDay: (Date) -> Void
+    let notedDays: Set<Date>
+    let noteSnippets: [Date: String]
     
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
     private var cal: Calendar { Calendar.current }
@@ -38,7 +40,9 @@ struct CalendarMonthGrid: View {
                         maxIncome: maxIncome,
                         isToday: cal.isDateInToday(day),
                         todoCount: todoCounts[k] ?? 0,
-                        accent: accent
+                        accent: accent,
+                        hasNote: notedDays.contains(key),
+                        noteSnippet: noteSnippets[key]
                     )
                     .onTapGesture { onTapDay(day) }
                     .onLongPressGesture(minimumDuration: 0.3) { onLongPressDay(day) }
@@ -87,6 +91,8 @@ private struct DayCell: View {
     let isToday: Bool
     let todoCount: Int
     let accent: Color
+    let hasNote: Bool
+    let noteSnippet: String?
     
     private var cal: Calendar { Calendar.current }
     
@@ -132,7 +138,7 @@ private struct DayCell: View {
             // ▼ ToDoバッジ（左上）
             if todoCount > 0 {
                 Text(todoCount > 9 ? "9+" : "\(todoCount)")
-                    .font(.system(size: 10, weight: .semibold))   // ← フォントを少し小さめ
+                    .font(.system(size: 8, weight: .semibold))   // ← フォントを少し小さめ
                     .monospacedDigit()
                     .padding(.vertical, 1.8)   // ← 縦パディングを微調整
                     .padding(.horizontal, 4.5) // ← 横パディングを微調整
@@ -142,6 +148,26 @@ private struct DayCell: View {
                     .padding(.top, 4)
                     .accessibilityLabel("ToDo \(todoCount) 件")
             }
+            // ▼ メモスニペット（左下、1行・超小さく）
+            if let s = noteSnippet, !s.isEmpty {
+                Text(s)
+                    .font(.system(size: 7, weight: .medium, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 3)
+                    .padding(.bottom, 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxHeight: .infinity, alignment: .bottomLeading)
+                } else if hasNote {
+                    // スニペットがない時だけ控えめなピン
+                    Image(systemName: "note.text")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(accent.opacity(0.95))
+                        .padding(.leading, 4)
+                        .padding(.bottom, 4)
+                        .frame(maxHeight: .infinity, alignment: .bottomLeading)
+                }
         }
         .frame(height: 56) // 少し縦に余裕（必要なら 56〜60 に調整）
     }
@@ -171,12 +197,12 @@ private struct AmountLabel: View {
     
     var body: some View {
         Text(text)
-            .font(.system(size: 9, weight: .semibold, design: .rounded))
+            .font(.system(size: 8, weight: .semibold, design: .rounded))
             .monospacedDigit()
             .foregroundStyle(dynamicColor)
             .frame(maxWidth: .infinity, alignment: .trailing)  // 右揃え
             .lineLimit(1)
-            .minimumScaleFactor(0.85)
+            .minimumScaleFactor(0.75)
             .allowsTightening(true)
             .padding(.trailing, 2)
     }
