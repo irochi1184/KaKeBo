@@ -45,6 +45,9 @@ struct DayDetailSheet: View {
                             }
                         } else {
                             ForEach(dayTx) { tx in
+                                var displayTags: [String] {
+                                    tx.tags.map { String($0.prefix(8)) }
+                                }
                                 if let cat = store.categories.first(where: { $0.id == tx.categoryId }) {
                                     Button { editingTx = tx } label: {
                                         HStack(spacing: 12) {
@@ -56,7 +59,22 @@ struct DayDetailSheet: View {
                                             .frame(width: 32, height: 32)
                                             
                                             VStack(alignment: .leading, spacing: 2) {
-                                                Text(cat.name).font(.subheadline.weight(.medium))
+                                                HStack(spacing: 8) {
+                                                    Text(cat.name)
+                                                        .font(.subheadline.weight(.medium))
+                                                        .lineLimit(1)
+                                                    
+                                                    // タグチップ（最大4個表示）
+                                                    if !displayTags.isEmpty {
+                                                        HStack(spacing: 6) {
+                                                            ForEach(displayTags.prefix(4), id: \.self) { t in
+                                                                TagMiniChip(text: t)
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    Spacer(minLength: 0)
+                                                }
                                                 if !tx.memo.isEmpty {
                                                     Text(tx.memo).font(.caption).foregroundStyle(.secondary)
                                                 }

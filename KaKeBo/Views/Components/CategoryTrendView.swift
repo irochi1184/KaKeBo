@@ -468,7 +468,7 @@ private extension CategoryTrendView {
         
         return AnyView(
             VStack(alignment: .leading, spacing: 8) {
-                Text("高額トップ5（選択カテゴリ・\(year)年）")
+                Text("高額トップ5（選択カテゴリ・\(String(year))年）")
                     .font(.headline)
                 
                 VStack(spacing: 8) {

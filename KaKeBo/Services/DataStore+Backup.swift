@@ -19,7 +19,7 @@ extension DataStore {
         let txs: [BackupTransaction] = transactions.map {
             .init(id: $0.id, date: $0.date, amount: $0.amount,
                   typeRaw: $0.type == .income ? "income" : "expense",
-                  memo: $0.memo, categoryId: $0.categoryId)
+                  memo: $0.memo, categoryId: $0.categoryId, tags: $0.tags)
         }
         // 毎月ToDo（あるなら）
         let recTodos: [BackupRecurringTodo]? = {
@@ -120,7 +120,7 @@ extension DataStore {
                 skipped += 1; continue
             }
             let type: TransactionType = (bt.typeRaw == "income") ? .income : .expense
-            let tx = Transaction(id: UUID(), date: bt.date, amount: bt.amount, type: type, memo: bt.memo, categoryId: newCatId)
+            let tx = Transaction(id: UUID(), date: bt.date, amount: bt.amount, type: type, memo: bt.memo, categoryId: newCatId, tags: bt.tags ?? [])
             addTransaction(tx)
             inserted += 1
         }
@@ -166,13 +166,14 @@ extension DataStore {
         
         func idx(_ name: String) -> Int? { header.firstIndex(of: name) }
         
-        let iCat = idx("category") ?? 2
-        let iType = idx("type") ?? 3
-        let iAmount = idx("amount") ?? 4
-        let iMemo = idx("memo") ?? 5
-        let iDate = idx("date") ?? 6
-        let iSymbol = idx("category_symbol")
+        let iCat     = idx("category") ?? 2
+        let iType    = idx("type") ?? 3
+        let iAmount  = idx("amount") ?? 4
+        let iMemo    = idx("memo") ?? 5
+        let iDate    = idx("date") ?? 6
+        let iSymbol  = idx("category_symbol")
         let iColorHex = idx("category_color_rgba")
+        let iTags    = idx("tags") // ★ 任意の tags 列（例: "家族;同棲費用|個人用" など）
         
         var inserted = 0, createdCats = 0, skipped = 0
         
@@ -192,7 +193,7 @@ extension DataStore {
                 return c
             }()
             
-            // 取引
+            // 取引本体
             let type: TransactionType = (stripQuotes(cols[iType]) == "income") ? .income : .expense
             let amount = Int(stripQuotes(cols[iAmount])) ?? 0
             
@@ -201,12 +202,41 @@ extension DataStore {
             
             let memo = iMemo < cols.count ? stripQuotes(cols[iMemo]) : ""
             
-            let tx = Transaction(id: UUID(), date: date, amount: amount, type: type, memo: memo, categoryId: cat.id)
+            // ★ tags 列を安全にパース（なければ []）
+            let tags: [String] = {
+                guard let iTags, iTags < cols.count else { return [] }
+                let raw = stripQuotes(cols[iTags])
+                return parseTags(raw)
+            }()
+            
+            let tx = Transaction(
+                id: UUID(),
+                date: date,
+                amount: amount,
+                type: type,
+                memo: memo,
+                categoryId: cat.id,
+                tags: tags
+            )
             addTransaction(tx)
             inserted += 1
         }
         return .init(inserted: inserted, createdCategories: createdCats, skipped: skipped)
     }
+    
+    /// "家族;同棲費用|個人用 仕事用、貯蓄" のような自由区切り文字列を配列へ
+    /// セミコロン/パイプ/日本語読点/空白で区切り、空要素は除去
+    private func parseTags(_ raw: String) -> [String] {
+        // まず全角・半角の空白を正規化
+        let normalized = raw.replacingOccurrences(of: "　", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        // 想定区切り：; | 、（読点） スペース
+        let separators = CharacterSet(charactersIn: ";|、 ")
+        return normalized
+            .components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
     
     // CSV の 1 行を安全に分割（ダブルクォート考慮の簡易版）
     private func splitCSVRow(_ row: String) -> [String] {

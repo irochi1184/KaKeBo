@@ -13,6 +13,7 @@ struct AddTransactionView: View {
     @EnvironmentObject var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject var purchase: PurchaseManager
     
     // MARK: - States
     @State private var date: Date = Date()
@@ -20,14 +21,18 @@ struct AddTransactionView: View {
     @State private var type: TransactionType = .expense
     @State private var memo: String = ""
     @State private var selectedCategoryId: UUID?
+    @State private var tags: [String] = []
+    @State private var tagInput: String = ""
     
     // キーボード／UI
     @State private var isKeyboardVisible = false
     @FocusState private var memoFocused: Bool
+    @FocusState private var tagFieldFocused: Bool
     @State private var showCustomKeypad = true
     @State private var keypadHeight: CGFloat = 0
     @StateObject private var kb = KeyboardHeightReader()
     @State private var showAddCategory = false
+    @State private var showPaywall = false
     
     // ★ レシートスキャン表示フラグ
     @State private var showReceiptScanner = false
@@ -160,6 +165,87 @@ struct AddTransactionView: View {
                 )
                 .environmentObject(store)
                 
+                // タグ
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("タグ（任意）")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    if purchase.isPremiumActive {
+                        // 入力フィールド（空白・カンマ・読点・# で確定）
+                        HStack(spacing: 6) {
+                            TextField("例：家族 個人 (最大8文字)", text: $tagInput)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .submitLabel(.done)
+                                .focused($tagFieldFocused)
+                                .onSubmit { commitTagInput() }
+                                .onChange(of: tagInput) { _, newValue in
+                                    // 8文字を超えたら自動でカット
+                                    if newValue.count > 8 {
+                                        tagInput = String(newValue.prefix(8))
+                                    }
+                                    // 区切り文字が来たら即確定
+                                    if tagInput.contains(where: { " ,、　#".contains($0) }) {
+                                        commitTagInput()
+                                    }
+                                }
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(themeStore.theme.backgroundColor(for: scheme))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(.secondary.opacity(0.2), lineWidth: 1)
+                                )
+                            
+                            if !tagInput.isEmpty {
+                                Button {
+                                    commitTagInput()
+                                } label: {
+                                    Text("追加")
+                                        .font(.subheadline.weight(.semibold))
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                        
+                        // 付与済みタグ（削除ボタン付）
+                        if !tags.isEmpty {
+                            TagListView(
+                                tags: tags,
+                                onRemove: { t in removeTag(t) }
+                            )
+                        }
+                        
+                        // 最近使ったタグ（直近5件・トグル式）
+                        if !recentTags.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("最近使ったタグ")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                                
+                                SuggestedTagListView(
+                                    suggestions: recentTags,
+                                    isOn: { tags.contains($0) },
+                                    onToggle: { t in toggleTag(t) }
+                                )
+                            }
+                        }
+                    } else {
+                        LockedCustomSection(accent: themeStore.theme.accentColor(for: scheme)) {
+                            showPaywall = true
+                        }
+                    }
+                }
+                .luxCard()
+                .sheet(isPresented: $showPaywall) {
+                    PremiumPaywallView(accent: themeStore.theme.accentColor(for: scheme))
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+                }
+                
                 Spacer(minLength: showCustomKeypad ? (isSmallPhone ? 20 : 60) : 0)
             }
             .padding(.top, 12)
@@ -207,6 +293,7 @@ struct AddTransactionView: View {
                 .contentShape(Rectangle())
                 .onTapGesture {
                     memoFocused = false
+                    tagFieldFocused = false
                     withAnimation(.easeInOut(duration: 0.2)) { showCustomKeypad = true }
                 }
                 .accessibilityAddTraits(.isButton)
@@ -260,6 +347,7 @@ struct AddTransactionView: View {
             Button {
                 // キーボードを閉じてからスキャナへ
                 memoFocused = false
+                tagFieldFocused = false
                 showCustomKeypad = false
                 showReceiptScanner = true
             } label: {
@@ -282,19 +370,84 @@ struct AddTransactionView: View {
             amount > 0
         else { return }
         
+        // tags を保存
         let tx = Transaction(
             date: date,
             amount: amount,
             type: type,
-            memo: memo,
-            categoryId: chosen.id
+            memo: memo.trimmingCharacters(in: .whitespacesAndNewlines),
+            categoryId: chosen.id,
+            tags: tags
         )
         store.addTransaction(tx)
         dismiss()
     }
+    
+    // MARK: - タグ周り
+    private func normalized(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "　", with: " ") // 全角空白→半角
+    }
+    private func commitTagInput() {
+        // 区切り文字で分割し、空要素を除外・重複除去
+        let seps = CharacterSet(charactersIn: " ,、　#")
+        let parts = normalized(tagInput)
+            .components(separatedBy: seps)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !parts.isEmpty else {
+            tagInput = ""
+            return
+        }
+        for p in parts { addTag(p) }
+        tagInput = ""
+    }
+    private func addTag(_ t: String) {
+        let v = normalized(t)
+        guard !v.isEmpty else { return }
+        
+        // ★ 文字数制限（8文字まで）
+        let limited = String(v.prefix(8))
+        
+        // 重複を防いで追加
+        if !tags.contains(limited) {
+            tags.append(limited)
+        }
+    }
+    private func toggleTag(_ t: String) {
+        let limited = String(t.prefix(8))
+        if let i = tags.firstIndex(of: limited) {
+            tags.remove(at: i)
+        } else {
+            if !tags.contains(limited) { tags.append(limited) }
+        }
+    }
+
+    private func removeTag(_ t: String) {
+        tags.removeAll { $0 == t }
+    }
+    
+    // 直近5件の「最近使ったタグ」
+    private var recentTags: [String] {
+        let stream = store.transactions
+            .flatMap { $0.tags.map { String($0.prefix(8)) } } // ★ 8文字に統一
+            .reversed()
+        
+        var seen = Set<String>()
+        var result: [String] = []
+        for t in stream {
+            if !seen.contains(t) {
+                seen.insert(t)
+                result.append(t)
+            }
+            if result.count >= 5 { break }
+        }
+        return result
+    }
 }
 
-// MARK: - Buttons & Utils
+// MARK: - Buttons & Utils（既存）
+
 struct SaveButton: View {
     let isEnabled: Bool
     let accent: Color
@@ -344,5 +497,184 @@ private extension UIApplication {
             .compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }
             .first { $0.isKeyWindow }
+    }
+}
+
+// ===== 共通：等間隔フロー配置レイアウト =====
+struct FlowLayout<Data: RandomAccessCollection, Content: View>: View where Data.Element: Hashable {
+    let items: Data
+    let spacing: CGFloat
+    let lineSpacing: CGFloat
+    @ViewBuilder let content: (Data.Element) -> Content
+    
+    init(items: Data, spacing: CGFloat = 8, lineSpacing: CGFloat = 8, @ViewBuilder content: @escaping (Data.Element) -> Content) {
+        self.items = items
+        self.spacing = spacing
+        self.lineSpacing = lineSpacing
+        self.content = content
+    }
+    
+    var body: some View {
+        GeometryReader { geo in
+            self.generate(in: geo.size)
+        }
+        .frame(minHeight: 0)
+    }
+    
+    private func generate(in size: CGSize) -> some View {
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        return ZStack(alignment: .topLeading) {
+            ForEach(Array(items), id: \.self) { item in
+                content(item)
+                    .fixedSize() // ★ 内在サイズを尊重（広がらない）
+                    .alignmentGuide(.leading) { d in
+                        // 次を置いたらはみ出す？ → 改行
+                        if x + d.width > size.width {
+                            x = 0
+                            y += d.height + lineSpacing
+                        }
+                        let result = x
+                        x += d.width + spacing // ★ 等間隔で進める
+                        return result
+                    }
+                    .alignmentGuide(.top) { _ in y }
+            }
+        }
+    }
+}
+
+// ===== 安定版：等間隔フローレイアウト（iOS 16+） =====
+struct FlowTagLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+    
+    func sizeThatFits(proposal: ProposedViewSize,
+                      subviews: Subviews,
+                      cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        
+        for s in subviews {
+            let size = s.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                // 改行
+                x = 0
+                y += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            lineHeight = max(lineHeight, size.height)
+            x += size.width + spacing
+        }
+        return CGSize(width: width, height: y + lineHeight)
+    }
+    
+    func placeSubviews(in bounds: CGRect,
+                       proposal: ProposedViewSize,
+                       subviews: Subviews,
+                       cache: inout ()) {
+        let width = bounds.width
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        
+        for s in subviews {
+            let size = s.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                // 改行
+                x = 0
+                y += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            s.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + y),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(size))
+            lineHeight = max(lineHeight, size.height)
+            x += size.width + spacing
+        }
+    }
+}
+
+// ===== タグチップ（1行固定・最大8文字・省略） =====
+struct TagChip: View {
+    let text: String
+    var leadingIcon: Image? = nil
+    var trailingIcon: Image? = nil
+    var selected: Bool = false
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            if let leadingIcon { leadingIcon.imageScale(.small) }
+            Text(String(text.prefix(8)))
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if let trailingIcon { trailingIcon.imageScale(.small) }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(
+            Capsule().fill(selected ? Color.accentColor.opacity(0.18)
+                           : Color.secondary.opacity(0.12))
+        )
+        .contentShape(Capsule())
+        .fixedSize(horizontal: true, vertical: true) // ← 幅が内容にフィットして安定
+    }
+}
+
+struct TagListView: View {
+    let tags: [String]
+    let onRemove: (String) -> Void
+    
+    var body: some View {
+        FlowTagLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(tags, id: \.self) { t in
+                TagChip(text: t, trailingIcon: Image(systemName: "xmark.circle.fill"))
+                    .onTapGesture { onRemove(t) }  // チップ全体で削除
+                    .accessibilityLabel("\(t) を削除")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeInOut(duration: 0.2), value: tags)
+    }
+}
+
+struct SuggestedTagListView: View {
+    let suggestions: [String]
+    let isOn: (String) -> Bool
+    let onToggle: (String) -> Void
+    
+    var body: some View {
+        FlowTagLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(suggestions.map { String($0.prefix(8)) }, id: \.self) { t in
+                let selected = isOn(t)
+                TagChip(text: t,
+                        leadingIcon: Image(systemName: selected ? "checkmark.circle.fill" : "plus.circle"),
+                        selected: selected)
+                .onTapGesture { onToggle(t) }
+                .accessibilityLabel("\(t) を\(selected ? "外す" : "追加")")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct LockedCustomSection: View {
+    let accent: Color
+    let onTapUpgrade: () -> Void
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill").foregroundStyle(accent)
+                Text("プレミアムプランに加入で、タグの追加・編集が無制限に利用できます。")
+                Spacer()
+            }
+            Button("プレミアムを確認") { onTapUpgrade() }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+        }
+        .padding(8)
     }
 }

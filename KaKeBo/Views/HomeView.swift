@@ -289,6 +289,10 @@ private struct TransactionRow: View {
     let tx: Transaction
     let category: Category
     
+    private var displayTags: [String] {
+        tx.tags.map { String($0.prefix(8)) }
+    }
+    
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
@@ -300,7 +304,22 @@ private struct TransactionRow: View {
             .frame(width: 36, height: 36)
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(category.name).font(.subheadline.weight(.medium))
+                HStack(spacing: 8) {
+                    Text(category.name)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                    
+                    // タグチップ（最大4個表示）
+                    if !displayTags.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(displayTags.prefix(4), id: \.self) { t in
+                                TagMiniChip(text: t)
+                            }
+                        }
+                    }
+                    
+                    Spacer(minLength: 0)
+                }
                 if !tx.memo.isEmpty {
                     Text(tx.memo).font(.caption).foregroundStyle(.secondary)
                 }

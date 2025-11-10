@@ -22,19 +22,40 @@ struct AllTransactionsView: View {
     @State private var dateTo: Date? = nil
     @State private var minAmount: Int? = nil
     @State private var maxAmount: Int? = nil
-    
-    // 編集シート
+    @State private var selectedTags: Set<String> = []
     @State private var editingTx: Transaction? = nil
-    
-    // フィルタシート
     @State private var showFilter = false
+    
+    // タグの正規化（検索・比較用）：8文字・lowercased
+    private func normTag(_ raw: String) -> String {
+        String(raw.prefix(8)).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+    // 取引の正規化済みタグ配列
+    private func normTags(of tx: Transaction) -> [String] {
+        tx.tags.map { normTag($0) }
+    }
+    // 全取引から重複を除いた全タグ（表示用は原文8文字切り詰め。内部キーは lowercased 8文字）
+    private var allTagsForFilter: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for t in store.transactions.flatMap({ $0.tags }) {
+            let key = normTag(t)
+            if !key.isEmpty, !seen.contains(key) {
+                seen.insert(key)
+                result.append(String(t.prefix(8)))
+            }
+        }
+        // 見やすさのためアルファベット順（日本語もUnicode順）
+        return result.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
         NavigationStack {
             VStack(spacing: 0) {
                 
-                // 🔎 検索バー + フィルタを横並び
+                // 検索バー + フィルタを横並び
                 SearchHeader(
                     text: $searchText,
                     isFiltering: isFiltering,
@@ -81,7 +102,9 @@ struct AllTransactionsView: View {
                 dateFrom: $dateFrom,
                 dateTo: $dateTo,
                 minAmount: $minAmount,
-                maxAmount: $maxAmount
+                maxAmount: $maxAmount,
+                allTags: allTagsForFilter,
+                selectedTags: $selectedTags
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
@@ -109,7 +132,7 @@ private struct SearchHeader: View {
             // 擬似検索フィールド
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("メモ・カテゴリ名を検索", text: $text)
+                TextField("メモ・カテゴリ・タグを検索", text: $text)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
@@ -159,20 +182,32 @@ private extension AllTransactionsView {
     var filtered: [Transaction] {
         var items = store.transactions
         
+        // キーワード検索：メモ / カテゴリ名 / タグ
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if !q.isEmpty {
             items = items.filter { tx in
                 let memoHit = tx.memo.lowercased().contains(q)
                 let catName = store.categories.first(where: { $0.id == tx.categoryId })?.name.lowercased() ?? ""
-                return memoHit || catName.contains(q)
+                let tagHit  = normTags(of: tx).contains { $0.contains(q) }
+                return memoHit || catName.contains(q) || tagHit
             }
         }
+        // 種別
         if let kind = selectedType {
             items = items.filter { $0.type == kind }
         }
+        // カテゴリ
         if !selectedCategoryIDs.isEmpty {
             items = items.filter { selectedCategoryIDs.contains($0.categoryId) }
         }
+        // タグフィルター（選択タグのいずれかを含む取引だけに絞る）
+        if !selectedTags.isEmpty {
+            items = items.filter { tx in
+                let txTags = Set(normTags(of: tx))
+                return !selectedTags.isDisjoint(with: txTags)
+            }
+        }
+        // 期間
         if let from = dateFrom {
             items = items.filter { $0.date >= Calendar.current.startOfDay(for: from) }
         }
@@ -180,6 +215,7 @@ private extension AllTransactionsView {
             let endOfDay = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: to) ?? to
             items = items.filter { $0.date <= endOfDay }
         }
+        // 金額
         if let lo = minAmount {
             items = items.filter { $0.amount >= lo }
         }
@@ -189,18 +225,16 @@ private extension AllTransactionsView {
         return items.sorted { $0.date > $1.date }
     }
     
-    var filteredIncomeTotal: Int {
-        filtered.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
-    }
-    var filteredExpenseTotal: Int {
-        filtered.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
-    }
+    var filteredIncomeTotal: Int { filtered.filter { $0.type == .income }.reduce(0) { $0 + $1.amount } }
+    var filteredExpenseTotal: Int { filtered.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount } }
+    
     var isFiltering: Bool {
         if !searchText.isEmpty { return true }
         if selectedType != nil { return true }
         if !selectedCategoryIDs.isEmpty { return true }
         if dateFrom != nil || dateTo != nil { return true }
         if minAmount != nil || maxAmount != nil { return true }
+        if !selectedTags.isEmpty { return true }
         return false
     }
     func resetFilters() {
@@ -211,6 +245,7 @@ private extension AllTransactionsView {
         dateTo = nil
         minAmount = nil
         maxAmount = nil
+        selectedTags.removeAll()
     }
 }
 
@@ -268,8 +303,14 @@ private struct HistoryRow: View {
     let tx: Transaction
     let category: Category
     
+    // 表示用に 8文字へ正規化 → 3文字+… にするのはチップ側
+    private var displayTags: [String] {
+        tx.tags.map { String($0.prefix(8)) }
+    }
+    
     var body: some View {
         HStack(spacing: 12) {
+            // 左：カテゴリアイコン
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(category.color.opacity(0.12))
@@ -278,20 +319,43 @@ private struct HistoryRow: View {
             }
             .frame(width: 36, height: 36)
             
+            // 中央：カテゴリ名 + タグ（横並び）
             VStack(alignment: .leading, spacing: 2) {
-                Text(category.name).font(.subheadline.weight(.medium))
+                HStack(spacing: 8) {
+                    Text(category.name)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                    
+                    // タグチップ（最大4個表示）
+                    if !displayTags.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(displayTags.prefix(4), id: \.self) { t in
+                                TagMiniChip(text: t)
+                            }
+                        }
+                    }
+                    
+                    Spacer(minLength: 0)
+                }
+                
                 if !tx.memo.isEmpty {
-                    Text(tx.memo).font(.caption).foregroundStyle(.secondary)
+                    Text(tx.memo)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
-            Spacer()
+            
+            // 右：金額と日付
             VStack(alignment: .trailing, spacing: 2) {
                 Text(amountStr(tx))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(tx.type == .income ? .green : .primary)
                     .monospacedDigit()
+                    .lineLimit(1)
                 Text(dateStr(tx.date))
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .contentShape(Rectangle())
@@ -311,6 +375,7 @@ private struct HistoryRow: View {
     }
 }
 
+
 // MARK: - フィルタシート
 
 private struct FilterSheet: View {
@@ -322,7 +387,16 @@ private struct FilterSheet: View {
     @Binding var minAmount: Int?
     @Binding var maxAmount: Int?
     
+    // ★ タグ
+    let allTags: [String]                    // 表示用（最大8文字）
+    @Binding var selectedTags: Set<String>   // 正規化キー lowercased 8文字
+    
     @Environment(\.dismiss) private var dismiss
+    
+    // ★ 表示→内部キー変換
+    private func key(_ display: String) -> String {
+        String(display.prefix(8)).lowercased()
+    }
     
     var body: some View {
         NavigationStack {
@@ -366,6 +440,44 @@ private struct FilterSheet: View {
                     }
                 }
                 
+                // タグ
+                Section("タグ") {
+                    if allTags.isEmpty {
+                        Text("タグがありません").foregroundStyle(.secondary)
+                    } else {
+                        // 自動折返しで均一スペースのチップ群（FlowLayout を使ってもOK）
+                        let columns = [GridItem(.adaptive(minimum: 80), spacing: 8)]
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                            ForEach(allTags, id: \.self) { t in
+                                let k = key(t)
+                                let on = selectedTags.contains(k)
+                                Button {
+                                    if on { selectedTags.remove(k) } else { selectedTags.insert(k) }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: on ? "checkmark.circle.fill" : "plus.circle")
+                                            .imageScale(.small)
+                                        Text(String(t.prefix(8)))
+                                            .font(.caption.weight(.semibold))
+                                            .lineLimit(1)
+                                    }
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 10)
+                                    .background(
+                                        Capsule().fill(on ? Color.accentColor.opacity(0.18)
+                                                       : Color.secondary.opacity(0.10))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        if !selectedTags.isEmpty {
+                            Button("タグをクリア", role: .destructive) { selectedTags.removeAll() }
+                                .font(.footnote)
+                        }
+                    }
+                }
+                
                 Section("期間") {
                     let fromBinding = Binding<Date>(
                         get: { dateFrom ?? Date() },
@@ -383,7 +495,7 @@ private struct FilterSheet: View {
                     }
                 }
                 
-                Section("金額範囲 (¥)") {
+                Section("金額範囲") {
                     AmountField(title: "最小", value: $minAmount)
                     AmountField(title: "最大", value: $maxAmount)
                     if minAmount != nil || maxAmount != nil {
@@ -423,5 +535,19 @@ private struct AmountField: View {
             if digits != newVal { text = digits }
             value = digits.isEmpty ? nil : Int(digits)
         }
+    }
+}
+
+// 小型タグチップ（3文字 + … で省略）
+struct TagMiniChip: View {
+    let text: String
+    var body: some View {
+        let shown = text.count > 3 ? String(text.prefix(3)) + "…" : text
+        Text(shown)
+            .font(.system(size:8))
+            .lineLimit(1)
+            .padding(.vertical, 2)
+            .padding(.horizontal, 6)
+            .background(Capsule().fill(Color.secondary.opacity(0.12)))
     }
 }

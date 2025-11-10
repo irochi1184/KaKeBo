@@ -105,6 +105,12 @@ struct PremiumPaywallView: View {
                 subtitle: "無料プランは5件まで。6件目以降の固定費テンプレートの登録・運用が可能に。自動計上で漏れゼロへ。",
                 accent: accent
             )
+            FeatureCard(
+                icon: "tag.fill",
+                title: "タグを無制限に管理",
+                subtitle: "支出やメモに自由にタグを付けて分類。無制限で追加・編集が可能に。目的別の分析や検索がよりスムーズに。",
+                accent: accent
+            )
         }
         .padding(14)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))

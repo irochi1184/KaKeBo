@@ -36,6 +36,7 @@ struct BackupTransaction: Codable, Identifiable {
     var typeRaw: String   // "income" | "expense"
     var memo: String
     var categoryId: UUID
+    var tags: [String]?
 }
 
 // ここはアプリの実体に合わせて最低限（あれば復元）

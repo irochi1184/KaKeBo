@@ -11,8 +11,10 @@ import UIKit
 struct EditTransactionView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var purchase: PurchaseManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @State private var showPaywall = false
     
     // 元データ
     let transaction: Transaction
@@ -24,9 +26,14 @@ struct EditTransactionView: View {
     @State private var memo: String
     @State private var selectedCategoryId: UUID?
     
+    // ★ タグ（Add と同等）
+    @State private var tags: [String]
+    @State private var tagInput: String = ""
+    
     // キーボード制御（Add と揃える）
     @State private var isKeyboardVisible = false
     @FocusState private var memoFocused: Bool
+    @FocusState private var tagFieldFocused: Bool
     @State private var showCustomKeypad = true          // 初期表示：自作キーパッド表示
     @State private var keypadHeight: CGFloat = 0        // 自作キーパッド高さ（閉じるボタン位置調整用）
     @StateObject private var kb = KeyboardHeightReader()
@@ -39,6 +46,7 @@ struct EditTransactionView: View {
         _type = State(initialValue: transaction.type)
         _memo = State(initialValue: transaction.memo)
         _selectedCategoryId = State(initialValue: transaction.categoryId)
+        _tags = State(initialValue: transaction.tags.map { String($0.prefix(8)) }) // 8文字統一
     }
     
     // 実効的に必要な下パディング（overlay配置のキーパッドと重ならないため）
@@ -124,7 +132,7 @@ struct EditTransactionView: View {
                         .animation(.easeInOut(duration: 0.2), value: kb.height)
                     }
                 }
-            // ▼ システムKBが出たら自作は閉じる（メモ編集などのとき）
+            // ▼ システムKBが出たら自作は閉じる（メモ/タグ編集などのとき）
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isKeyboardVisible = true
@@ -152,6 +160,81 @@ struct EditTransactionView: View {
                 )
                 .environmentObject(store)
                 
+                // ===== タグ（Add と同等：8文字上限・最近5件・等間隔フロー） =====
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("タグ（任意）")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    if purchase.isPremiumActive {
+                        // 入力 + 追加
+                        HStack(spacing: 6) {
+                            TextField("例：家族 個人 (最大8文字)", text: $tagInput)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .submitLabel(.done)
+                                .focused($tagFieldFocused)
+                                .onSubmit { commitTagInput() }
+                                .onChange(of: tagInput) { _, newValue in
+                                    // 8文字超過は切り詰め
+                                    if newValue.count > 8 {
+                                        tagInput = String(newValue.prefix(8))
+                                    }
+                                    // 区切り文字で即確定
+                                    if tagInput.contains(where: { " ,、　#".contains($0) }) {
+                                        commitTagInput()
+                                    }
+                                }
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(themeStore.theme.backgroundColor(for: scheme))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(.secondary.opacity(0.2), lineWidth: 1)
+                                )
+                            
+                            if !tagInput.isEmpty {
+                                Button {
+                                    commitTagInput()
+                                } label: {
+                                    Text("追加")
+                                        .font(.subheadline.weight(.semibold))
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                        
+                        // 付与済みタグ（削除）
+                        if !tags.isEmpty {
+                            TagListView(
+                                tags: tags,
+                                onRemove: { t in removeTag(t) }
+                            )
+                        }
+                        
+                        // 最近使ったタグ（直近5件・トグル）
+                        if !recentTags.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("最近使ったタグ")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                                
+                                SuggestedTagListView(
+                                    suggestions: recentTags,
+                                    isOn: { tags.contains($0) },
+                                    onToggle: { t in toggleTag(t) }
+                                )
+                            }
+                        }
+                    } else {
+                        LockedCustomSection(accent: themeStore.theme.accentColor(for: scheme)) {
+                            showPaywall = true
+                        }
+                    }
+                }.luxCard()
+                
                 Spacer(minLength: showCustomKeypad ? (isSmallPhone ? 12 : 20) : 0)
             }
             .padding(.top, 12)
@@ -168,6 +251,11 @@ struct EditTransactionView: View {
                 .environmentObject(store)
                 .navigationTitle("カテゴリ追加")
             }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PremiumPaywallView(accent: themeStore.theme.accentColor(for: scheme))
+                .presentationDetents([.large, .medium])
+                .presentationDragIndicator(.visible)
         }
     }
     
@@ -201,8 +289,9 @@ struct EditTransactionView: View {
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    // メモのフォーカスを外してシステムKBを閉じる → 自作キーパッドを出す
+                    // メモ/タグのフォーカスを外してシステムKBを閉じる → 自作キーパッドを出す
                     memoFocused = false
+                    tagFieldFocused = false
                     withAnimation(.easeInOut(duration: 0.2)) { showCustomKeypad = true }
                 }
                 .accessibilityAddTraits(.isButton)
@@ -269,6 +358,54 @@ struct EditTransactionView: View {
         }
     }
     
+    // MARK: - タグ周り（Add と共通の実装）
+    
+    private func normalized(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "　", with: " ")
+    }
+    private func commitTagInput() {
+        let seps = CharacterSet(charactersIn: " ,、　#")
+        let parts = normalized(tagInput)
+            .components(separatedBy: seps)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !parts.isEmpty else {
+            tagInput = ""
+            return
+        }
+        for p in parts { addTag(p) }
+        tagInput = ""
+    }
+    private func addTag(_ t: String) {
+        let v = String(normalized(t).prefix(8))
+        guard !v.isEmpty else { return }
+        if !tags.contains(v) { tags.append(v) }
+    }
+    private func toggleTag(_ t: String) {
+        let v = String(t.prefix(8))
+        if let i = tags.firstIndex(of: v) {
+            tags.remove(at: i)
+        } else if !tags.contains(v) {
+            tags.append(v)
+        }
+    }
+    private func removeTag(_ t: String) {
+        tags.removeAll { $0 == t }
+    }
+    private var recentTags: [String] {
+        // 新しい順 → 重複除去 → 先頭5件
+        let stream = store.transactions
+            .flatMap { $0.tags.map { String($0.prefix(8)) } }
+            .reversed()
+        var seen = Set<String>(), result: [String] = []
+        for t in stream where !seen.contains(t) {
+            seen.insert(t); result.append(t)
+            if result.count >= 5 { break }
+        }
+        return result
+    }
+    
     // MARK: - Actions
     
     private func save() {
@@ -279,6 +416,7 @@ struct EditTransactionView: View {
         edited.type = type
         edited.memo = memo
         edited.categoryId = catId
+        edited.tags = tags
         
         store.upsertTransaction(edited)
         dismiss()
@@ -297,5 +435,23 @@ private extension UIApplication {
             .compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }
             .first { $0.isKeyWindow }
+    }
+}
+
+private struct LockedCustomSection: View {
+    let accent: Color
+    let onTapUpgrade: () -> Void
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill").foregroundStyle(accent)
+                Text("プレミアムプランに加入で、タグの追加・編集が無制限に利用できます。")
+                Spacer()
+            }
+            Button("プレミアムを確認") { onTapUpgrade() }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+        }
+        .padding(8)
     }
 }

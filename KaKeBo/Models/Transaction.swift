@@ -12,4 +12,5 @@ struct Transaction: Identifiable, Codable, Hashable {
     var type: TransactionType
     var memo: String
     var categoryId: UUID
+    var tags: [String]
 }
