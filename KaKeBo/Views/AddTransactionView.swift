@@ -11,6 +11,8 @@ import UIKit
 struct AddTransactionView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
+    @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject var purchase: PurchaseManager
@@ -370,16 +372,49 @@ struct AddTransactionView: View {
             amount > 0
         else { return }
         
-        // tags を保存
-        let tx = Transaction(
-            date: date,
-            amount: amount,
-            type: type,
-            memo: memo.trimmingCharacters(in: .whitespacesAndNewlines),
-            categoryId: chosen.id,
-            tags: tags
-        )
-        store.addTransaction(tx)
+        let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // ▼ 1. 個人用家計簿のとき（今まで通り）
+        if ledgerContext.isPersonal {
+            let tx = Transaction(
+                date: date,
+                amount: amount,
+                type: type,
+                memo: trimmedMemo,
+                categoryId: chosen.id,
+                tags: tags
+            )
+            store.addTransaction(tx)
+            dismiss()
+            return
+        }
+        
+        // ▼ 2. 共有家計簿のとき（CloudKit に保存）
+        if ledgerContext.isShared,
+           let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+            
+            let sharedType: SharedTransactionType = (type == .income) ? .income : .expense
+            
+            // Category → SharedCategory 相当の情報にブリッジ
+            let categoryName = chosen.name
+            let categoryColorHex = chosen.colorHex   // ← Category に colorHex がある前提
+            
+            Task {
+                // いまのシグネチャに合わせる：categoryName / colorHex は SharedLedgerStore 側で決める
+                await sharedLedgerStore.addTransaction(
+                    to: ledger,
+                    amount: amount,
+                    date: date,
+                    type: sharedType,
+                    memo: trimmedMemo.isEmpty ? nil : trimmedMemo,
+                    category: nil   // とりあえず未分類で登録（後でちゃんとカテゴリ連携する）
+                )
+                dismiss()
+            }
+            return
+        }
+        
+        // 念のため：どちらでもない場合は何もしないで閉じる
         dismiss()
     }
     

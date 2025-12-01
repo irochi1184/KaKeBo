@@ -8,15 +8,21 @@
 import SwiftUI
 import Charts
 import UniformTypeIdentifiers
+import CloudKit
 
 struct HomeView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
+    @EnvironmentObject var ledgerContext: LedgerContext
     @State private var showAdd = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var hSize
     
-    // 既存
+    // 最後に開いたモード／共有家計簿IDを保存
+    @AppStorage("home.lastLedgerMode") private var lastLedgerModeRaw: String = "personal"
+    @AppStorage("home.lastSharedLedgerRecordName") private var lastSharedLedgerRecordName: String?
+    
     @State private var selectedMonth: Date = {
         let cal = Calendar.current
         let comps = cal.dateComponents([ .year, .month ], from: Date())
@@ -32,30 +38,22 @@ struct HomeView: View {
     
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    
-                    // ▼ 並び替え可能なカード群を ForEach で描画
-                    ForEach(visibleCardsInOrder(), id: \.id) { card in
-                        reorderableCard(card) {
-                            render(card) // ← 下の render(card:) で実体ビューを返す
-                        }
-                        .padding(.horizontal)
-                    }
-                    
-                    Spacer(minLength: 24)
+            Group {
+                switch ledgerContext.mode {
+                case .personal:
+                    personalContent
+                case .shared:
+                    sharedContent
                 }
-                .padding(.top, 0)
-                .onDrop(of: dropUTIs, isTargeted: nil, perform: { _ in
-                    dragging = nil
-                    return true
-                })
             }
             .background(
                 themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea()
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ledgerModeMenu
+                }
                 ToolbarItem(placement: .principal) {
                     YearMonthHeader(
                         month: $selectedMonth,
@@ -81,6 +79,7 @@ struct HomeView: View {
                     .accessibilityLabel("新規追加")
                 }
             }
+            // 個人用と共有用は AddTransactionView で判断
             .sheet(isPresented: $showAdd) {
                 AddTransactionView(defaultCategoryId: store.categories.first?.id)
                     .environmentObject(store)
@@ -95,6 +94,195 @@ struct HomeView: View {
         }
         .onAppear {
             store.applyFixedExpensesForCurrentMonth()
+        }
+        .task {
+            // 共有家計簿を読み込み
+            await sharedLedgerStore.reloadLedgers()
+            
+            // 1. デフォルトは個人用
+            ledgerContext.mode = .personal
+            ledgerContext.selectedSharedLedgerId = nil
+            
+            // 2. 保存されているモードが「共有」の場合は復元を試みる
+            if lastLedgerModeRaw == "shared" {
+                if let recordName = lastSharedLedgerRecordName,
+                   let ledger = sharedLedgerStore.ledgers.first(where: { $0.id.recordName == recordName }) {
+                    // → 前回開いていた共有家計簿がまだ存在する場合
+                    ledgerContext.mode = .shared
+                    ledgerContext.selectedSharedLedgerId = ledger.id
+                    await sharedLedgerStore.reloadTransactions(for: ledger)
+                } else if let first = sharedLedgerStore.ledgers.first {
+                    // → 見つからなかった場合は、共有家計簿の先頭を選択
+                    ledgerContext.mode = .shared
+                    ledgerContext.selectedSharedLedgerId = first.id
+                    await sharedLedgerStore.reloadTransactions(for: first)
+                } else {
+                    // → 共有家計簿がそもそも無い場合は個人用のまま
+                    ledgerContext.mode = .personal
+                }
+            }
+            
+            // 3. 共有モードではない or 共有復元に失敗 → 個人用のまま
+            //    ここで個人用の固定費展開だけやるなら：
+            store.applyFixedExpensesForCurrentMonth()
+        }
+    }
+    
+    @ViewBuilder
+    private var personalContent: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                
+                ForEach(visibleCardsInOrder(), id: \.id) { card in
+                    reorderableCard(card) {
+                        render(card)
+                    }
+                    .padding(.horizontal)
+                }
+                
+                Spacer(minLength: 24)
+            }
+            .padding(.top, 0)
+            .onDrop(of: dropUTIs, isTargeted: nil, perform: { _ in
+                dragging = nil
+                return true
+            })
+        }
+    }
+    
+    @ViewBuilder
+    private var sharedContent: some View {
+        let ledger: SharedLedger? = ledgerContext.currentSharedLedger(from: sharedLedgerStore)
+        
+        if let ledger {
+            let allTxs = sharedLedgerStore.transactionsByLedger[ledger.id] ?? []
+//            let monthTxs = sharedThisMonthTx(allTxs: allTxs)
+            
+            let expenseSlices = sharedExpenseBreakdown(allTxs: allTxs)
+            let incomeSlices  = sharedIncomeBreakdown(allTxs: allTxs)
+            let dailyPoints   = sharedDailySeries(allTxs: allTxs)
+            let cats   = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
+            
+            ScrollView {
+                VStack(spacing: 16) {
+                    // ① ヘッダーカード（今月の収支）
+                    MonthlyHeaderCard(
+                        income: sharedMonthIncome(txs: allTxs),
+                        expense: sharedMonthExpense(txs: allTxs),
+                        balance: sharedMonthBalance(txs: allTxs)
+                    )
+                    .luxCard()
+                    .padding(.horizontal)
+                    
+                    // ② カテゴリ別 ドーナツグラフ
+                    if !expenseSlices.isEmpty || !incomeSlices.isEmpty {
+                        CategoryDonutPager(
+                            expense: expenseSlices,
+                            expenseCurrentTotal: sharedMonthExpense(txs: allTxs),
+                            expensePreviousTotal: sharedPrevMonthExpense(allTxs: allTxs),
+                            income: incomeSlices,
+                            incomeCurrentTotal: sharedMonthIncome(txs: allTxs),
+                            incomePreviousTotal: sharedPrevMonthIncome(allTxs: allTxs)
+                        )
+                        .luxCard()
+                        .padding(.horizontal)
+                    }
+                    
+                    // ③ 日別棒グラフ
+                    if !dailyPoints.isEmpty {
+                        DailyBarChart(series: dailyPoints)
+                            .luxCard()
+                            .padding(.horizontal)
+                    }
+                    
+                    // ④ 当月の履歴リスト
+//                    let monthTxs = sharedThisMonthTx(allTxs: allTxs)
+                    
+                    TransactionListCard(
+                        sharedTransactions: allTxs.filter { tx in
+                            let cal = Calendar.current
+                            return cal.isDate(tx.date, equalTo: selectedMonth, toGranularity: .month)
+                        },
+                        categories: cats
+                    )
+                    .luxCard()
+                    .padding(.horizontal)
+
+                    
+                    Spacer(minLength: 24)
+                }
+                .padding(.top, 0)
+            }
+            .task {
+                await sharedLedgerStore.reloadCategories(for: ledger)
+                await sharedLedgerStore.reloadTransactions(for: ledger)
+            }
+            
+        } else {
+            VStack(spacing: 12) {
+                Text("共有家計簿が選択されていません")
+                    .font(.headline)
+                Text("左上のメニューから共有家計簿を選択、または作成してください。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var ledgerModeMenu: some View {
+        Menu {
+            // 個人用
+            Button {
+                ledgerContext.mode = .personal
+                ledgerContext.selectedSharedLedgerId = nil
+                
+                lastLedgerModeRaw = "personal"
+                lastSharedLedgerRecordName = nil
+            } label: {
+                Label(
+                    "個人用家計簿",
+                    systemImage: ledgerContext.isPersonal ? "checkmark.circle.fill" : "person"
+                )
+            }
+            
+            // 共有家計簿一覧
+            if !sharedLedgerStore.ledgers.isEmpty {
+                Section("共有家計簿") {
+                    ForEach(sharedLedgerStore.ledgers) { ledger in
+                        Button {
+                            ledgerContext.mode = .shared
+                            ledgerContext.selectedSharedLedgerId = ledger.id
+                            
+                            lastLedgerModeRaw = "shared"
+                            lastSharedLedgerRecordName = ledger.id.recordName
+                            
+                            Task {
+                                await sharedLedgerStore.reloadTransactions(for: ledger)
+                            }
+                        } label: {
+                            let isSelected =
+                            ledgerContext.isShared &&
+                            ledgerContext.selectedSharedLedgerId == ledger.id
+                            
+                            Label(
+                                ledger.name,
+                                systemImage: isSelected ? "checkmark.circle.fill" : "person.2"
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text("共有家計簿なし")
+                    .foregroundStyle(.secondary)
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: ledgerContext.isPersonal ? "person" : "person.2.fill")
+                Text(ledgerContext.isPersonal ? "個人用" : "共有")
+            }
+            .font(.subheadline)
         }
     }
     
@@ -234,21 +422,142 @@ extension HomeView {
         return dict.keys.sorted().map { day in DailyPoint(date: day, amount: dict[day] ?? 0) }
     }
     
-    // 最近の取引（選択月から上位10件）
-//    private var recentTransactions: [Transaction] {
-//        let cal = Calendar.current
-//        return store.transactions
-//            .filter { cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
-//            .sorted { $0.date > $1.date }
-//            .prefix(10)
-//            .map { $0 }
-//    }
     private var allThisMonthTransactions: [Transaction] {
         let cal = Calendar.current
         return store.transactions
             .filter { cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
             .sorted { $0.date > $1.date }
     }
+    
+    // MARK: - 共有家計簿：月次集計
+    private func sharedMonthIncome(txs: [SharedTransaction]) -> Int {
+        let cal = Calendar.current
+        return txs
+            .filter { $0.type == .income && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
+            .reduce(0) { $0 + $1.amount }
+    }
+    
+    private func sharedMonthExpense(txs: [SharedTransaction]) -> Int {
+        let cal = Calendar.current
+        return txs
+            .filter { $0.type == .expense && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
+            .reduce(0) { $0 + $1.amount }
+    }
+    
+    private func sharedMonthBalance(txs: [SharedTransaction]) -> Int {
+        sharedMonthIncome(txs: txs) - sharedMonthExpense(txs: txs)
+    }
+    
+    private func sharedPrevMonthExpense(allTxs: [SharedTransaction]) -> Int {
+        let cal = Calendar.current
+        let prev = cal.date(byAdding: .month, value: -1, to: selectedMonth) ?? selectedMonth
+        return allTxs
+            .filter { $0.type == .expense && cal.isDate($0.date, equalTo: prev, toGranularity: .month) }
+            .reduce(0) { $0 + $1.amount }
+    }
+    
+    private func sharedPrevMonthIncome(allTxs: [SharedTransaction]) -> Int {
+        let cal = Calendar.current
+        let prev = cal.date(byAdding: .month, value: -1, to: selectedMonth) ?? selectedMonth
+        return allTxs
+            .filter { $0.type == .income && cal.isDate($0.date, equalTo: prev, toGranularity: .month) }
+            .reduce(0) { $0 + $1.amount }
+    }
+    
+    // MARK: - 共有家計簿：カテゴリ別円グラフ
+    private func sharedExpenseBreakdown(allTxs: [SharedTransaction]) -> [CategorySlice] {
+        let cal = Calendar.current
+        let expenseTx = allTxs.filter {
+            $0.type == .expense && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+        }
+        
+        // カテゴリ名ごとに合計
+        var dict: [String: (total: Int, color: Color)] = [:]
+        for tx in expenseTx {
+            let name = tx.categoryName
+            var entry = dict[name] ?? (0, Color.fromHex(tx.categoryColorHex) ?? .gray)
+            entry.total += tx.amount
+            dict[name] = entry
+        }
+        
+        return dict.map { (name, entry) in
+            CategorySlice(
+                id: UUID(),
+                name: name,
+                color: entry.color,
+                value: entry.total
+            )
+        }
+        .sorted { $0.value > $1.value }
+    }
+    
+    private func sharedIncomeBreakdown(allTxs: [SharedTransaction]) -> [CategorySlice] {
+        let cal = Calendar.current
+        let incomeTx = allTxs.filter {
+            $0.type == .income && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+        }
+        
+        var dict: [String: (total: Int, color: Color)] = [:]
+        for tx in incomeTx {
+            let name = tx.categoryName
+            var entry = dict[name] ?? (0, Color.fromHex(tx.categoryColorHex) ?? .gray)
+            entry.total += tx.amount
+            dict[name] = entry
+        }
+        
+        return dict.map { (name, entry) in
+            CategorySlice(
+                id: UUID(),
+                name: name,
+                color: entry.color,
+                value: entry.total
+            )
+        }
+        .sorted { $0.value > $1.value }
+    }
+    
+    // MARK: - 共有家計簿：日別棒グラフ
+    private func sharedDailySeries(allTxs: [SharedTransaction]) -> [DailyPoint] {
+        let cal = Calendar.current
+        let expenseTx = allTxs.filter {
+            $0.type == .expense && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+        }
+        
+        var dict: [Date: Int] = [:]
+        for tx in expenseTx {
+            let day = cal.startOfDay(for: tx.date)
+            dict[day, default: 0] += tx.amount
+        }
+        
+        return dict.keys.sorted().map { day in
+            DailyPoint(date: day, amount: dict[day] ?? 0)
+        }
+    }
+    
+    private func sharedThisMonthTx(allTxs: [SharedTransaction]) -> [SharedTransaction] {
+        let cal = Calendar.current
+        return allTxs.filter {
+            cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+        }
+    }
+    
+    // MARK: - HEXカラー → Color 変換（#RRGGBB 前提の簡易版）
+//    private func colorFromHex(_ hex: String) -> Color {
+//        let cleaned = hex
+//            .trimmingCharacters(in: .whitespacesAndNewlines)
+//            .replacingOccurrences(of: "#", with: "")
+//        
+//        guard cleaned.count == 6,
+//              let intVal = Int(cleaned, radix: 16) else {
+//            return .gray  // 変換できなかった場合のフォールバック
+//        }
+//        
+//        let r = Double((intVal >> 16) & 0xFF) / 255.0
+//        let g = Double((intVal >> 8) & 0xFF) / 255.0
+//        let b = Double(intVal & 0xFF) / 255.0
+//        
+//        return Color(red: r, green: g, blue: b)
+//    }
 
     // 表示用
     private func monthTitle(_ date: Date) -> String {
@@ -285,31 +594,49 @@ extension HomeView {
     }
 }
 
+/// 1行分の表示に必要な共通データ
+private struct TransactionRowContent {
+    let title: String          // カテゴリ名
+    let color: Color
+    let symbolName: String?    // SF Symbol名（なければ頭文字を表示）
+    let memo: String
+    let tags: [String]
+    let amount: Int
+    let isIncome: Bool
+    let date: Date
+}
+
 private struct TransactionRow: View {
-    let tx: Transaction
-    let category: Category
+    let row: TransactionRowContent
     
     private var displayTags: [String] {
-        tx.tags.map { String($0.prefix(8)) }
+        row.tags.map { String($0.prefix(8)) }
     }
     
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(category.color.opacity(0.12))
-                Image(systemName: category.symbolName)
-                    .foregroundStyle(category.color)
+                    .fill(row.color.opacity(0.12))
+                
+                if let symbol = row.symbolName {
+                    Image(systemName: symbol)
+                        .foregroundStyle(row.color)
+                } else {
+                    // SF Symbol がない場合はカテゴリ名の頭文字を表示
+                    Text(String(row.title.prefix(1)))
+                        .font(.caption.bold())
+                        .foregroundStyle(row.color)
+                }
             }
             .frame(width: 36, height: 36)
             
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Text(category.name)
+                    Text(row.title)
                         .font(.subheadline.weight(.medium))
                         .lineLimit(1)
                     
-                    // タグチップ（最大4個表示）
                     if !displayTags.isEmpty {
                         HStack(spacing: 6) {
                             ForEach(displayTags.prefix(4), id: \.self) { t in
@@ -320,19 +647,22 @@ private struct TransactionRow: View {
                     
                     Spacer(minLength: 0)
                 }
-                if !tx.memo.isEmpty {
-                    Text(tx.memo).font(.caption).foregroundStyle(.secondary)
+                if !row.memo.isEmpty {
+                    Text(row.memo)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             
             Spacer()
             
             VStack(alignment: .trailing, spacing: 2) {
-                Text(currency(tx.amount))
+                Text(currency(row.amount))
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(tx.type == .income ? .green : .primary)
-                Text(dateStr(tx.date))
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .foregroundStyle(row.isIncome ? .green : .primary)
+                Text(dateStr(row.date))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .contentShape(Rectangle())
@@ -344,6 +674,7 @@ private struct TransactionRow: View {
         f.groupingSeparator = ","
         return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
     }
+    
     private func dateStr(_ d: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "ja_JP")
@@ -352,39 +683,45 @@ private struct TransactionRow: View {
     }
 }
 
-private struct TransactionListCard: View {
-    let transactions: [Transaction]
-    let categories: [Category]
-    let onEdit: (Transaction) -> Void
-    let onDeleteIDs: ([UUID]) -> Void
+private struct TransactionListCard<RowID: Hashable>: View {
+    let title: String
+    let rows: [Row]
+    let onEdit: ((RowID) -> Void)?
+    let onDelete: ((RowID) -> Void)?
+    
+    struct Row: Identifiable {
+        let id: RowID
+        let content: TransactionRowContent
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("履歴")
+            Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             
-            // ← List の代わりに LazyVStack
             LazyVStack(spacing: 0) {
-                ForEach(transactions, id: \.id) { tx in
-                    if let cat = categories.first(where: { $0.id == tx.categoryId }) {
-                        Button { onEdit(tx) } label: {
-                            TransactionRow(tx: tx, category: cat)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background(.thinMaterial) // なくてもOK
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
+                ForEach(rows) { row in
+                    Button {
+                        onEdit?(row.id)
+                    } label: {
+                        TransactionRow(row: row.content)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(.thinMaterial)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        if let onDelete {
                             Button(role: .destructive) {
-                                onDeleteIDs([tx.id])
+                                onDelete(row.id)
                             } label: {
                                 Label("削除", systemImage: "trash")
                             }
                         }
-                        
-                        Divider().opacity(0.12)
                     }
+                    
+                    Divider().opacity(0.12)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -393,6 +730,85 @@ private struct TransactionListCard: View {
                     .stroke(.secondary.opacity(0.12), lineWidth: 1)
             )
         }
+    }
+}
+
+extension TransactionListCard where RowID == UUID {
+    init(
+        transactions: [Transaction],
+        categories: [Category],
+        onEdit: @escaping (Transaction) -> Void,
+        onDeleteIDs: @escaping ([UUID]) -> Void
+    ) {
+        self.title = "履歴"
+        
+        self.rows = transactions.map { tx in
+            let cat = categories.first(where: { $0.id == tx.categoryId })
+            let color = cat?.color ?? .gray
+            let symbol = cat?.symbolName
+            
+            let content = TransactionRowContent(
+                title: cat?.name ?? "未分類",
+                color: color,
+                symbolName: symbol,
+                memo: tx.memo,
+                tags: tx.tags,                 // そのまま
+                amount: tx.amount,
+                isIncome: tx.type == .income,
+                date: tx.date
+            )
+            
+            return Row(id: tx.id, content: content)
+        }
+        
+        self.onEdit = { id in
+            if let tx = transactions.first(where: { $0.id == id }) {
+                onEdit(tx)
+            }
+        }
+        self.onDelete = { id in
+            onDeleteIDs([id])
+        }
+    }
+}
+
+extension TransactionListCard where RowID == CKRecord.ID {
+    init(
+        sharedTransactions: [SharedTransaction],
+        categories: [SharedCategory]
+    ) {
+        self.title = "共有家計簿の履歴"
+        
+        self.rows = sharedTransactions.sorted(by: { $0.date > $1.date }).map { tx in
+            let cat: SharedCategory? = {
+                if let cid = tx.categoryId {
+                    return categories.first(where: { $0.id == cid })
+                } else {
+                    // 名前ベースでのフォールバック
+                    return categories.first(where: { $0.name == tx.categoryName })
+                }
+            }()
+            
+            let hex = cat?.colorHex ?? tx.categoryColorHex
+            let color = Color.fromHex(hex) ?? .gray
+            let symbol = cat?.icon     // SharedCategory.icon を使う
+            
+            let content = TransactionRowContent(
+                title: tx.categoryName,
+                color: color,
+                symbolName: symbol,
+                memo: tx.memo ?? "",
+                tags: [],                 // 共有側はタグまだないなら空
+                amount: tx.amount,
+                isIncome: tx.type == .income,
+                date: tx.date
+            )
+            
+            return Row(id: tx.id, content: content)
+        }
+        
+        self.onEdit = nil
+        self.onDelete = nil
     }
 }
 

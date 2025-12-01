@@ -15,6 +15,7 @@ struct SettingsView: View {
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var pm: PurchaseManager
     @EnvironmentObject var lock: AppLockManager
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
@@ -57,7 +58,7 @@ struct SettingsView: View {
     }
     
     enum Sheet: Identifiable {
-        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock
+        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers
         var id: String { "sheet-\(self)" }
     }
     // 外部URL
@@ -192,7 +193,17 @@ struct SettingsView: View {
                         }
                         .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
-                        
+                    
+                    case .sharedLedgers:
+                        NavigationStack {
+                            SharedLedgerListScreen()
+                                .environmentObject(sharedLedgerStore)
+                                .navigationTitle("共有家計簿")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+
                     }
                 }
                 // 共有
@@ -347,6 +358,15 @@ struct SettingsView: View {
                 accent: accent,
                 trailingText: nil
             ) { sheet = .lock }
+            
+            SettingsRowButton(
+                title: "共有家計簿を管理",
+                systemImage: "person.2",
+                accent: accent,
+                trailingText: "\(sharedLedgerStore.ledgers.count)件"
+            ) {
+                sheet = .sharedLedgers
+            }
 
         } header: {
             Text("各種設定")

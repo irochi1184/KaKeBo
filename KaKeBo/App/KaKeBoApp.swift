@@ -11,7 +11,9 @@ import SwiftUI
 struct KaKeBoApp: App {
     @StateObject private var dataStore = DataStore()
     @StateObject private var themeStore = ThemeStore()
+    @StateObject private var sharedLedgerStore = SharedLedgerStore()
     @StateObject private var purchase = PurchaseManager()
+    @StateObject private var ledgerContext = LedgerContext()
     @StateObject private var lock = AppLockManager.shared
     
     @Environment(\.scenePhase) private var scenePhase
@@ -26,8 +28,10 @@ struct KaKeBoApp: App {
             RootTabView()
                 .environmentObject(dataStore)
                 .environmentObject(themeStore)
+                .environmentObject(sharedLedgerStore)
                 .environmentObject(purchase)
                 .environmentObject(lock)
+                .environmentObject(ledgerContext)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
                 .task { await purchase.load() }
             // 初回起動時のみ、ロック有効ならロック
