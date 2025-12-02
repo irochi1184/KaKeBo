@@ -39,11 +39,16 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             Group {
-                switch ledgerContext.mode {
-                case .personal:
-                    personalContent
-                case .shared:
-                    sharedContent
+                if ledgerContext.isRestored {
+                    switch ledgerContext.mode {
+                    case .personal:
+                        personalContent
+                    case .shared:
+                        sharedContent
+                    }
+                } else {
+                    // ローディング画面
+                    LedgerLoadingView()
                 }
             }
             .background(
@@ -51,32 +56,34 @@ struct HomeView: View {
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    ledgerModeMenu
-                }
-                ToolbarItem(placement: .principal) {
-                    YearMonthHeader(
-                        month: $selectedMonth,
-                        title: monthTitleForToolbar(selectedMonth, compact: hSize == .compact),
-                        accent: themeStore.theme.accentColor(for: scheme)
-                    )
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .allowsTightening(true)
-                    .layoutPriority(1)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    let accent = themeStore.theme.accentColor(for: scheme)
-                    Button {
-                        showAdd = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(accent)
+                if ledgerContext.isRestored {
+                    ToolbarItem(placement: .topBarLeading) {
+                        ledgerModeMenu
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(accent.opacity(0.2))
-                    .accessibilityLabel("新規追加")
+                    ToolbarItem(placement: .principal) {
+                        YearMonthHeader(
+                            month: $selectedMonth,
+                            title: monthTitleForToolbar(selectedMonth, compact: hSize == .compact),
+                            accent: themeStore.theme.accentColor(for: scheme)
+                        )
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .allowsTightening(true)
+                        .layoutPriority(1)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        let accent = themeStore.theme.accentColor(for: scheme)
+                        Button {
+                            showAdd = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(accent)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(accent.opacity(0.2))
+                        .accessibilityLabel("新規追加")
+                    }
                 }
             }
             // 個人用と共有用は AddTransactionView で判断
@@ -96,35 +103,8 @@ struct HomeView: View {
             store.applyFixedExpensesForCurrentMonth()
         }
         .task {
-            // 共有家計簿を読み込み
-            await sharedLedgerStore.reloadLedgers()
-            
-            // 1. デフォルトは個人用
-            ledgerContext.mode = .personal
-            ledgerContext.selectedSharedLedgerId = nil
-            
-            // 2. 保存されているモードが「共有」の場合は復元を試みる
-            if lastLedgerModeRaw == "shared" {
-                if let recordName = lastSharedLedgerRecordName,
-                   let ledger = sharedLedgerStore.ledgers.first(where: { $0.id.recordName == recordName }) {
-                    // → 前回開いていた共有家計簿がまだ存在する場合
-                    ledgerContext.mode = .shared
-                    ledgerContext.selectedSharedLedgerId = ledger.id
-                    await sharedLedgerStore.reloadTransactions(for: ledger)
-                } else if let first = sharedLedgerStore.ledgers.first {
-                    // → 見つからなかった場合は、共有家計簿の先頭を選択
-                    ledgerContext.mode = .shared
-                    ledgerContext.selectedSharedLedgerId = first.id
-                    await sharedLedgerStore.reloadTransactions(for: first)
-                } else {
-                    // → 共有家計簿がそもそも無い場合は個人用のまま
-                    ledgerContext.mode = .personal
-                }
-            }
-            
-            // 3. 共有モードではない or 共有復元に失敗 → 個人用のまま
-            //    ここで個人用の固定費展開だけやるなら：
-            store.applyFixedExpensesForCurrentMonth()
+            //   LedgerContext に任せる
+            await ledgerContext.restoreIfNeeded(sharedLedgerStore: sharedLedgerStore)
         }
     }
     
@@ -235,11 +215,7 @@ struct HomeView: View {
         Menu {
             // 個人用
             Button {
-                ledgerContext.mode = .personal
-                ledgerContext.selectedSharedLedgerId = nil
-                
-                lastLedgerModeRaw = "personal"
-                lastSharedLedgerRecordName = nil
+                ledgerContext.setPersonal()
             } label: {
                 Label(
                     "個人用家計簿",
@@ -252,12 +228,7 @@ struct HomeView: View {
                 Section("共有家計簿") {
                     ForEach(sharedLedgerStore.ledgers) { ledger in
                         Button {
-                            ledgerContext.mode = .shared
-                            ledgerContext.selectedSharedLedgerId = ledger.id
-                            
-                            lastLedgerModeRaw = "shared"
-                            lastSharedLedgerRecordName = ledger.id.recordName
-                            
+                            ledgerContext.setShared(id: ledger.id)
                             Task {
                                 await sharedLedgerStore.reloadTransactions(for: ledger)
                             }
