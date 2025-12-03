@@ -135,7 +135,7 @@ final class SharedLedgerStore: ObservableObject {
         return []
     }
 
-    
+    // MARK: - 家計簿
     func createLedger(name: String, icon: String, colorHex: String) async -> SharedLedger? {
         isLoading = true
         defer { isLoading = false }
@@ -163,7 +163,6 @@ final class SharedLedgerStore: ObservableObject {
         }
     }
     
-    @MainActor
     func updateLedger(_ ledger: SharedLedger, name: String, icon: String, colorHex: String) async {
         guard isOwned(ledger) else {
             // 招待された側は編集不可にするならこう
@@ -186,7 +185,6 @@ final class SharedLedgerStore: ObservableObject {
         }
     }
     
-    @MainActor
     func deleteLedger(_ ledger: SharedLedger) async {
         guard isOwned(ledger) else {
             print("deleteLedger: non-owned ledger, skip")
@@ -203,8 +201,7 @@ final class SharedLedgerStore: ObservableObject {
         }
     }
     
-    // MARK: - Transactions
-    
+    // MARK: - 取引
     func reloadTransactions(for ledger: SharedLedger) async {
         do {
             let ref = CKRecord.Reference(recordID: ledger.id, action: .none)
@@ -260,15 +257,11 @@ final class SharedLedgerStore: ObservableObject {
             list.sort(by: { $0.date < $1.date })
             transactionsByLedger[ledger.id] = list
         } catch {
-            print("❌ addTransaction failed:",
-                  "amount=\(amount)",
-                  "date=\(date)",
-                  "memo=\(memo ?? "")",
-                  "error=\(error)")
             self.lastError = error
         }
     }
     
+    // MARK: - カテゴリー
     func reloadCategories(for ledger: SharedLedger) async {
         do {
             let ref = CKRecord.Reference(recordID: ledger.id, action: .none)
@@ -291,12 +284,13 @@ final class SharedLedgerStore: ObservableObject {
         }
     }
 
+    @MainActor
     func createCategory(
         for ledger: SharedLedger,
         name: String,
         colorHex: String,
         icon: String
-    ) async {
+    ) async -> SharedCategory? {
         do {
             let current = categoriesByLedger[ledger.id] ?? []
             let sortOrder = (current.last?.sortOrder ?? 0) + 1
@@ -312,21 +306,67 @@ final class SharedLedgerStore: ObservableObject {
             let targetDB = database(for: ledger)
             
             let saved = try await targetDB.save(record)
-            guard let final = SharedCategory(record: saved) else { return }
+            guard let final = SharedCategory(record: saved) else { return nil }
             
             var list = categoriesByLedger[ledger.id] ?? []
             list.append(final)
             list.sort { $0.sortOrder < $1.sortOrder }
             categoriesByLedger[ledger.id] = list
+            
+            return final
         } catch {
             self.lastError = error
+            return nil
         }
     }
     
+    // 更新：こちらも Optional 返すと便利
+    @MainActor
+    func updateCategory(
+        _ category: SharedCategory,
+        in ledger: SharedLedger,
+        name: String,
+        colorHex: String,
+        icon: String
+    ) async -> SharedCategory? {
+        do {
+            let targetDB = database(for: ledger)
+            let record = try await targetDB.record(for: category.id)
+            record["name"] = name as CKRecordValue
+            record["colorHex"] = colorHex as CKRecordValue
+            record["icon"] = icon as CKRecordValue
+            
+            let saved = try await targetDB.save(record)
+            guard let updated = SharedCategory(record: saved) else { return nil }
+            
+            var list = categoriesByLedger[ledger.id] ?? []
+            if let idx = list.firstIndex(where: { $0.id == updated.id }) {
+                list[idx] = updated
+            }
+            categoriesByLedger[ledger.id] = list
+            return updated
+        } catch {
+            self.lastError = error
+            return nil
+        }
+    }
+
     private func database(for ledger: SharedLedger) -> CKDatabase {
         switch ledgerSourceMap[ledger.id] {
         case .shared: return sharedDB
         default:      return db
+        }
+    }
+    
+    func deleteCategory(_ id: CKRecord.ID, from ledger: SharedLedger) async {
+        do {
+            let targetDB = database(for: ledger)
+            try await targetDB.deleteRecord(withID: id)
+            var list = categoriesByLedger[ledger.id] ?? []
+            list.removeAll { $0.id == id }
+            categoriesByLedger[ledger.id] = list
+        } catch {
+            lastError = error
         }
     }
     

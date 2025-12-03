@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import CloudKit
 
 struct AddTransactionView: View {
     @EnvironmentObject var store: DataStore
@@ -23,6 +24,8 @@ struct AddTransactionView: View {
     @State private var type: TransactionType = .expense
     @State private var memo: String = ""
     @State private var selectedCategoryId: UUID?
+    @State private var selectedSharedCategoryId: CKRecord.ID?
+
     @State private var tags: [String] = []
     @State private var tagInput: String = ""
     
@@ -34,6 +37,7 @@ struct AddTransactionView: View {
     @State private var keypadHeight: CGFloat = 0
     @StateObject private var kb = KeyboardHeightReader()
     @State private var showAddCategory = false
+    @State private var showAddSharedCategory = false
     @State private var showPaywall = false
     
     // ★ レシートスキャン表示フラグ
@@ -161,11 +165,21 @@ struct AddTransactionView: View {
             VStack(spacing: 18) {
                 metaSection.luxCard()
                 
-                CategorySelector(
-                    selectedCategoryId: $selectedCategoryId,
-                    onTapAdd: { showAddCategory = true }
-                )
-                .environmentObject(store)
+                if ledgerContext.isPersonal {
+                    CategorySelector(
+                        selectedCategoryId: $selectedCategoryId,
+                        onTapAdd: {
+                            showAddCategory = true
+                        }
+                    )
+                } else {
+                    SharedCategorySelector(
+                        selectedCategoryId: $selectedSharedCategoryId,
+                        onTapAdd: {
+                            showAddSharedCategory = true
+                        }
+                    )
+                }
                 
                 // タグ
                 VStack(alignment: .leading, spacing: 8) {
@@ -263,6 +277,32 @@ struct AddTransactionView: View {
                 .navigationTitle("カテゴリ追加")
             }
         }
+        .sheet(
+            isPresented: $showAddSharedCategory,
+            onDismiss: {
+                // シートが閉じられたタイミングでカテゴリ再読込
+                if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+                    Task {
+                        await sharedLedgerStore.reloadCategories(for: ledger)
+                    }
+                }
+            }
+        ) {
+            if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+                NavigationStack {
+                    SharedCategoryEditorView(ledger: ledger) { newSharedCat in
+                        // 共有用：CKRecord.ID を即選択状態にする
+                        selectedSharedCategoryId = newSharedCat.id
+                    }
+                    .environmentObject(sharedLedgerStore)
+                    .navigationTitle("カテゴリ追加")
+                }
+            } else {
+                Text("共有家計簿が選択されていません")
+                    .padding()
+            }
+        }
+
     }
     
     private var metaSection: some View {
@@ -393,27 +433,34 @@ struct AddTransactionView: View {
         if ledgerContext.isShared,
            let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
             
-            let sharedType: SharedTransactionType = (type == .income) ? .income : .expense
+            // 共有カテゴリが選ばれているか？
+            guard
+                let sharedCatId = selectedSharedCategoryId,
+                let cats = sharedLedgerStore.categoriesByLedger[ledger.id],
+                let sharedCat = cats.first(where: { $0.id == sharedCatId }),
+                amount > 0
+            else {
+                // カテゴリ未選択 or 見つからない場合は、とりあえず未分類扱いで保存するならここで分岐しても良い
+                return
+            }
             
-            // Category → SharedCategory 相当の情報にブリッジ
-            let categoryName = chosen.name
-            let categoryColorHex = chosen.colorHex   // ← Category に colorHex がある前提
+            let sharedType: SharedTransactionType = (type == .income) ? .income : .expense
+            let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
             
             Task {
-                // いまのシグネチャに合わせる：categoryName / colorHex は SharedLedgerStore 側で決める
                 await sharedLedgerStore.addTransaction(
                     to: ledger,
                     amount: amount,
                     date: date,
                     type: sharedType,
                     memo: trimmedMemo.isEmpty ? nil : trimmedMemo,
-                    category: nil   // とりあえず未分類で登録（後でちゃんとカテゴリ連携する）
+                    category: sharedCat   // ← ちゃんと渡す！！
                 )
                 dismiss()
             }
             return
         }
-        
+
         // 念のため：どちらでもない場合は何もしないで閉じる
         dismiss()
     }
