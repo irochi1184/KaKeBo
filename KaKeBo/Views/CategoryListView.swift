@@ -37,6 +37,7 @@ struct CategoryListView: View {
     
     // クイック追加の折りたたみ
     @State private var showQuickAdd = true
+    @State private var isCreatingSharedCategory = false
     
     // 対象家計簿（個人 or 共有）
     @State private var owner: CategoryOwner = .personal
@@ -46,6 +47,12 @@ struct CategoryListView: View {
     // 個人用の制限（共有側は制限なしにしている）
     private var personalAtLimit: Bool {
         !purchase.isPremiumActive && store.categories.count >= freeCategoryLimit
+    }
+    
+    private var sharedAtLimit: Bool {
+        guard let ledger = currentSharedLedger else { return false }
+        let cats = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
+        return !purchase.isPremiumActive && cats.count >= freeCategoryLimit
     }
     
     /// 今見ているのが個人用かどうか
@@ -101,8 +108,9 @@ struct CategoryListView: View {
                                 showAdd = true
                             }
                         } else {
-                            // 共有用は直接追加（編集画面は SharedCategoryEditorView）
-                            if currentSharedLedger != nil {
+                            if sharedAtLimit {
+                                showPaywall = true
+                            } else {
                                 showAdd = true
                             }
                         }
@@ -282,6 +290,8 @@ private extension CategoryListView {
 // MARK: - 共有用セクション
 
 private extension CategoryListView {
+    
+    // MARK: 共有用クイック追加
     var sharedQuickAddSection: some View {
         Section {
             if let ledger = currentSharedLedger {
@@ -291,19 +301,42 @@ private extension CategoryListView {
                         currentSharedCategories.contains(where: { $0.name == p.name }) == false
                     },
                     onTap: { p in
+                        // 上限チェック
+                        if sharedAtLimit {
+                            showPaywall = true
+                            return
+                        }
+                        // 連打防止
+                        if isCreatingSharedCategory { return }
+                        
+                        isCreatingSharedCategory = true
+                        
                         Task {
-                            await sharedLedgerStore.createCategory(
+                            // 戻り値を明示的に捨てて警告を消す
+                            _ = await sharedLedgerStore.createCategory(
                                 for: ledger,
                                 name: p.name,
                                 colorHex: p.color.toHexString(),
                                 icon: p.symbol
                             )
-                            await sharedLedgerStore.reloadCategories(for: ledger)
+                            await MainActor.run {
+                                isCreatingSharedCategory = false
+                            }
                         }
                     },
-                    isLocked: false
+                    // 上限 or 作成中はロック見た目
+                    isLocked: sharedAtLimit || isCreatingSharedCategory
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                
+                if sharedAtLimit {
+                    Text("無料プランではカテゴリは \(freeCategoryLimit) 件までです。\nプレミアムプラン加入で上限無制限になります。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 6)
+                }
             } else {
                 Text("共有家計簿が選択されていません")
                     .font(.footnote)
@@ -313,6 +346,7 @@ private extension CategoryListView {
             Text("共有カテゴリのクイック追加")
         }
     }
+
     
     var sharedCategorySection: some View {
         Section {

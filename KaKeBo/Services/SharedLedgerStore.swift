@@ -360,13 +360,45 @@ final class SharedLedgerStore: ObservableObject {
     
     func deleteCategory(_ id: CKRecord.ID, from ledger: SharedLedger) async {
         do {
-            let targetDB = database(for: ledger)
-            try await targetDB.deleteRecord(withID: id)
-            var list = categoriesByLedger[ledger.id] ?? []
-            list.removeAll { $0.id == id }
-            categoriesByLedger[ledger.id] = list
+            let db = database(for: ledger)
+            
+            // ① カテゴリレコードを削除
+            try await db.deleteRecord(withID: id)
+            
+            // ② このカテゴリに紐づく取引を削除
+            let ledgerRef = CKRecord.Reference(recordID: ledger.id, action: .none)
+            let catRef    = CKRecord.Reference(recordID: id, action: .none)
+            
+            let predicate = NSPredicate(
+                format: "%K == %@ AND %K == %@",
+                SharedTransaction.FieldKey.ledgerRef, ledgerRef,
+                SharedTransaction.FieldKey.categoryRef, catRef
+            )
+
+            let query = CKQuery(
+                recordType: SharedTransaction.recordType,
+                predicate: predicate
+            )
+            
+            let records = try await queryRecords(query, in: db)
+            let txRecordIDs = records.map(\.recordID)
+            if !txRecordIDs.isEmpty {
+                _ = try await db.modifyRecords(saving: [], deleting: txRecordIDs)
+            }
+            
+            // ③ ローカルキャッシュからも削除
+            var cats = categoriesByLedger[ledger.id] ?? []
+            cats.removeAll { $0.id == id }
+            categoriesByLedger[ledger.id] = cats
+            
+            if var txs = transactionsByLedger[ledger.id] {
+                txs.removeAll { $0.categoryId == id }
+                transactionsByLedger[ledger.id] = txs
+            }
+            
         } catch {
             lastError = error
+            print("deleteCategory failed:", error)
         }
     }
     
