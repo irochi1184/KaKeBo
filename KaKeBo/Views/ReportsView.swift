@@ -206,6 +206,8 @@ struct ReportsView: View {
                     )
                     .environmentObject(store)
                     .environmentObject(themeStore)
+                    .environmentObject(ledgerContext)
+                    .environmentObject(sharedLedgerStore)
                 }
             }
             .onAppear {
@@ -413,7 +415,7 @@ private struct CategoryAnnual: Identifiable {
     let color: Color
     let symbol: String
     let amount: Int
-    let trendCategoryId: UUID?
+    let trendCategoryId: CategoryTrendKey?
 }
 
 private struct CategoryDonutAnnual: View {
@@ -579,7 +581,7 @@ private extension ReportsView {
         let categoryName: String
         let color: Color
         let symbol: String
-        let trendCategoryId: UUID?
+        let trendCategoryId: CategoryTrendKey?
     }
 
     var availableYears: [Int] {
@@ -649,7 +651,7 @@ private extension ReportsView {
 
     var categoryTotals: [CategoryAnnual] {
         // 年間の支出カテゴリ合計
-        var dict: [String: (total: Int, trendId: UUID?, sample: ReportTransaction?)] = [:]
+        var dict: [String: (total: Int, trendId: CategoryTrendKey?, sample: ReportTransaction?)] = [:]
         for tx in txThisYear where tx.type == .expense {
             let key = tx.categoryKey
             var entry = dict[key] ?? (0, tx.trendCategoryId, tx)
@@ -738,7 +740,7 @@ private extension ReportsView {
                     categoryName: cat?.name ?? tx.categoryName,
                     color: color,
                     symbol: cat?.icon ?? "tag.fill",
-                    trendCategoryId: nil
+                    trendCategoryId: tx.categoryId.map { CategoryTrendKey.shared($0) }
                 )
             }
         }
@@ -755,7 +757,7 @@ private extension ReportsView {
                 categoryName: cat?.name ?? "未分類",
                 color: cat?.color ?? .gray,
                 symbol: cat?.symbolName ?? "tag.fill",
-                trendCategoryId: cat?.id
+                trendCategoryId: cat.map { CategoryTrendKey.personal($0.id) }
             )
         }
     }
