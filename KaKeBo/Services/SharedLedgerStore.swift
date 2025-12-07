@@ -281,14 +281,17 @@ final class SharedLedgerStore: ObservableObject {
             updated.categoryColorHex = category?.colorHex ?? "#FF9500"
             updated.updatedAt = Date()
 
-            let record = updated.makeRecord()
             let targetDB = database(for: ledger)
+            let baseRecord = try await targetDB.record(for: tx.id)
+            let record = updated.makeRecord(existing: baseRecord)
             let saved = try await targetDB.save(record)
             guard let final = SharedTransaction(record: saved) else { return }
 
             var list = transactionsByLedger[ledger.id] ?? []
             if let idx = list.firstIndex(where: { $0.id == final.id }) {
                 list[idx] = final
+            } else {
+                list.append(final)
             }
             list.sort { $0.date < $1.date }
             transactionsByLedger[ledger.id] = list
