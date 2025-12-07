@@ -85,7 +85,7 @@ struct ReportsView: View {
                             
                             // ★ リスト（全カテゴリを表示しつつ、除外は薄く）
                             VStack(spacing: 8) {
-                                ForEach(categoryTotals.prefix(store.categories.count)) { c in
+                                ForEach(categoryTotals) { c in
                                     HStack(spacing: 10) {
                                         
                                         // 疑似チェックボックス（現状どおり）
@@ -218,6 +218,11 @@ struct ReportsView: View {
             .task(id: ledgerContext.mode) { await reloadSharedLedgerDataIfNeeded() }
             .onChange(of: ledgerContext.selectedSharedLedgerId) { _ in excludedCategoryIds.removeAll() }
             .onChange(of: ledgerContext.mode) { _ in excludedCategoryIds.removeAll() }
+            .onChange(of: availableYears) { years in
+                if years.contains(year) == false, let latest = years.max() {
+                    year = latest
+                }
+            }
         }
     }
 }
