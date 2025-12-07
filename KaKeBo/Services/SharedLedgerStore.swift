@@ -98,11 +98,10 @@ final class SharedLedgerStore: ObservableObject {
     func reloadLedgers() async {
         isLoading = true
         defer { isLoading = false }
-
+        
         do {
-            ledgerSourceMap.removeAll()
             let userId = try await currentUserId()
-
+            
             let owned  = try await fetchOwnedLedgers(for: userId)
             let shared = try await fetchSharedLedgers()
             
@@ -130,34 +129,10 @@ final class SharedLedgerStore: ObservableObject {
         }
         return all
     }
-
+    
     private func fetchSharedLedgers() async throws -> [SharedLedger] {
-        let query = CKQuery(
-            recordType: CKRecord.shareRecordType,
-            predicate: NSPredicate(value: true)
-        )
-
-        // 共有DBの share を全件取得
-        let shareRecords = try await queryRecords(query, in: sharedDB)
-        let shares = shareRecords.compactMap { $0 as? CKShare }
-
-        var ledgers: [SharedLedger] = []
-
-        for share in shares {
-            do {
-                let root = try await sharedDB.record(for: share.rootRecordID)
-                guard let ledger = SharedLedger(record: root) else { continue }
-
-                ledgers.append(ledger)
-                ledgerSourceMap[ledger.id] = .shared
-            } catch {
-                // 1件失敗しても他の share 取得は続行する
-                print("fetchSharedLedgers: failed to load shared root record:", error)
-                continue
-            }
-        }
-
-        return ledgers
+        // TODO: sharedDB 用の正しいクエリ実装は後でやる
+        return []
     }
 
     // MARK: - 家計簿
