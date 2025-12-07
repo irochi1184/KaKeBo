@@ -195,10 +195,10 @@ struct CalendarScreen: View {
             .onAppear { todoStore.load(for: month) }
             .onChange(of: month) { todoStore.load(for: month) }
             .task { await reloadSharedLedgerDataIfNeeded() }
-            .task(id: ledgerContext.isShared) { _ in
+            .task(id: ledgerContext.isShared) {
                 await reloadSharedLedgerDataIfNeeded()
             }
-            .task(id: ledgerContext.selectedSharedLedgerId) { _ in
+            .task(id: ledgerContext.selectedSharedLedgerId) {
                 await reloadSharedLedgerDataIfNeeded()
             }
         }
