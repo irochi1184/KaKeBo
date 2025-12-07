@@ -29,6 +29,7 @@ struct HomeView: View {
         return cal.date(from: comps) ?? Date()
     }()
     @State private var editingTx: Transaction? = nil
+    @State private var editingSharedTx: SharedTransaction? = nil
     
     // ▼ 追加：カード順序の状態とドラッグ中のカード
     @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .donut, .daily, .transactions])
@@ -94,6 +95,13 @@ struct HomeView: View {
             .sheet(item: $editingTx) { tx in
                 EditTransactionView(transaction: tx)
                     .environmentObject(store)
+            }
+            .sheet(item: $editingSharedTx) { tx in
+                if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+                    EditSharedTransactionView(ledger: ledger, transaction: tx)
+                        .environmentObject(sharedLedgerStore)
+                        .presentationDetents([.large])
+                }
             }
             .onChange(of: selectedMonth) { _, _ in
                 selectedMonth = monthStart(selectedMonth)
@@ -183,7 +191,8 @@ struct HomeView: View {
                             let cal = Calendar.current
                             return cal.isDate(tx.date, equalTo: selectedMonth, toGranularity: .month)
                         },
-                        categories: cats
+                        categories: cats,
+                        onEdit: { tx in editingSharedTx = tx }
                     )
                     .luxCard()
                     .padding(.horizontal)
@@ -746,10 +755,11 @@ extension TransactionListCard where RowID == UUID {
 extension TransactionListCard where RowID == CKRecord.ID {
     init(
         sharedTransactions: [SharedTransaction],
-        categories: [SharedCategory]
+        categories: [SharedCategory],
+        onEdit: ((SharedTransaction) -> Void)? = nil
     ) {
         self.title = "共有家計簿の履歴"
-        
+
         self.rows = sharedTransactions.sorted(by: { $0.date > $1.date }).map { tx in
             let cat: SharedCategory? = {
                 if let cid = tx.categoryId {
@@ -774,11 +784,15 @@ extension TransactionListCard where RowID == CKRecord.ID {
                 isIncome: tx.type == .income,
                 date: tx.date
             )
-            
+
             return Row(id: tx.id, content: content)
         }
-        
-        self.onEdit = nil
+
+        self.onEdit = { id in
+            if let tx = sharedTransactions.first(where: { $0.id == id }) {
+                onEdit?(tx)
+            }
+        }
         self.onDelete = nil
     }
 }
