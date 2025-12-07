@@ -19,13 +19,14 @@ struct ReportsView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var ledgerContext: LedgerContext
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @Environment(\.colorScheme) private var scheme
     
     // 表示対象の年（初期は今年）
     @State private var year: Int = Calendar.current.component(.year, from: Date())
     // グラフの表示モード（見やすさ切替）
     @State private var stackedBars: Bool = true
-    @State private var excludedCategoryIds: Set<UUID> = []
+    @State private var excludedCategoryIds: Set<String> = []
     @State private var trendTarget: CategoryAnnual? = nil
     
     var body: some View {
@@ -116,7 +117,10 @@ struct ReportsView: View {
                                     }
                                     .padding(.vertical, 4)
                                     .contentShape(Rectangle())                // ← 行全体をタップ領域に
-                                    .onTapGesture { trendTarget = c }         // ← 行タップで詳細へ
+                                    .onTapGesture {
+                                        guard c.trendCategoryId != nil else { return }
+                                        trendTarget = c
+                                    }         // ← 行タップで詳細へ
                                     Divider().opacity(0.2)
                                 }
                             }
@@ -194,12 +198,14 @@ struct ReportsView: View {
             }
 
             .navigationDestination(item: $trendTarget) { cat in
-                CategoryTrendView(
-                    year: year,
-                    initialCategoryIds: [cat.id]
-                )
-                .environmentObject(store)
-                .environmentObject(themeStore)
+                if let trendId = cat.trendCategoryId {
+                    CategoryTrendView(
+                        year: year,
+                        initialCategoryIds: [trendId]
+                    )
+                    .environmentObject(store)
+                    .environmentObject(themeStore)
+                }
             }
             .onAppear {
                 // データが今年に無ければ、最新年に寄せる
@@ -207,6 +213,11 @@ struct ReportsView: View {
                     year = latest
                 }
             }
+            .task { await reloadSharedLedgerDataIfNeeded() }
+            .task(id: ledgerContext.selectedSharedLedgerId) { await reloadSharedLedgerDataIfNeeded() }
+            .task(id: ledgerContext.mode) { await reloadSharedLedgerDataIfNeeded() }
+            .onChange(of: ledgerContext.selectedSharedLedgerId) { _ in excludedCategoryIds.removeAll() }
+            .onChange(of: ledgerContext.mode) { _ in excludedCategoryIds.removeAll() }
         }
     }
 }
@@ -391,11 +402,12 @@ extension CategoryAnnual: Hashable {
 
 // 年間カテゴリ合計
 private struct CategoryAnnual: Identifiable {
-    let id: UUID
+    let id: String
     let name: String
     let color: Color
     let symbol: String
     let amount: Int
+    let trendCategoryId: UUID?
 }
 
 private struct CategoryDonutAnnual: View {
@@ -547,53 +559,70 @@ private extension View {
 
 // MARK: - Data helpers
 private extension ReportsView {
+    private enum ReportTransactionType {
+        case income
+        case expense
+    }
+
+    private struct ReportTransaction {
+        let date: Date
+        let amount: Int
+        let type: ReportTransactionType
+        let memo: String
+        let categoryKey: String
+        let categoryName: String
+        let color: Color
+        let symbol: String
+        let trendCategoryId: UUID?
+    }
+
     var availableYears: [Int] {
         let cal = Calendar.current
-        let ys = store.transactions.map { cal.component(.year, from: $0.date) }
+        let ys = reportTransactions.map { cal.component(.year, from: $0.date) }
         return Array(Set(ys)).sorted()
     }
-    
-    var txThisYear: [Transaction] {
-        store.transactions.filter { Calendar.current.component(.year, from: $0.date) == year }
+
+    var txThisYear: [ReportTransaction] {
+        reportTransactions.filter { Calendar.current.component(.year, from: $0.date) == year }
     }
-    
+
     var yearIncome: Int {
         txThisYear.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
     }
-    
+
     var yearExpense: Int {
         txThisYear.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
     }
-    
+
     var yearBalance: Int { yearIncome - yearExpense }
-    
+
     var yearSavingsRate: Double {
         let inc = Double(yearIncome)
         guard inc > 0 else { return 0 }
         return Double(yearBalance) / inc
     }
-    
+
     var avgExpensePerMonth: Int {
         // 実データのある月数で割る or 12で割る、好みで。ここは実データ月数
         let usedMonths = Set(txThisYear.map { Calendar.current.component(.month, from: $0.date) })
         let denom = max(usedMonths.count, 1)
         return Int(Double(yearExpense) / Double(denom))
     }
-    
+
     var monthlyIncome: [Int] {
         (1...12).map { m in
             txThisYear.filter { Calendar.current.component(.month, from: $0.date) == m && $0.type == .income }
                 .reduce(0) { $0 + $1.amount }
         }
     }
-    
+
     var monthlyExpense: [Int] {
         (1...12).map { m in
             txThisYear.filter { Calendar.current.component(.month, from: $0.date) == m && $0.type == .expense }
                 .reduce(0) { $0 + $1.amount }
         }
     }
-    
+
     var bestMonth: (month: Int, balance: Int)? {
         let balances = (1...12).map { m -> (Int, Int) in
             let inc = txThisYear.filter { Calendar.current.component(.month, from: $0.date) == m && $0.type == .income }.reduce(0){$0+$1.amount}
@@ -602,7 +631,7 @@ private extension ReportsView {
         }
         return balances.max(by: { $0.1 < $1.1 })
     }
-    
+
     var worstMonth: (month: Int, balance: Int)? {
         let balances = (1...12).map { m -> (Int, Int) in
             let inc = txThisYear.filter { Calendar.current.component(.month, from: $0.date) == m && $0.type == .income }.reduce(0){$0+$1.amount}
@@ -611,61 +640,72 @@ private extension ReportsView {
         }
         return balances.min(by: { $0.1 < $1.1 })
     }
-    
+
     var categoryTotals: [CategoryAnnual] {
         // 年間の支出カテゴリ合計
-        var dict: [UUID: Int] = [:]
+        var dict: [String: (total: Int, trendId: UUID?, sample: ReportTransaction?)] = [:]
         let cal = Calendar.current
-        for tx in store.transactions where tx.type == .expense && cal.component(.year, from: tx.date) == year {
-            dict[tx.categoryId, default: 0] += tx.amount
+        for tx in txThisYear where tx.type == .expense {
+            let key = tx.categoryKey
+            var entry = dict[key] ?? (0, tx.trendCategoryId, tx)
+            entry.total += tx.amount
+            entry.trendId = tx.trendCategoryId
+            entry.sample = tx
+            dict[key] = entry
         }
-        return dict.compactMap { (id, sum) in
-            guard let cat = store.categories.first(where: { $0.id == id }) else { return nil }
-            return CategoryAnnual(id: id, name: cat.name, color: cat.color, symbol: cat.symbolName, amount: sum)
+        return dict.compactMap { (_, value) in
+            guard let sample = value.sample else { return nil }
+            return CategoryAnnual(
+                id: sample.categoryKey,
+                name: sample.categoryName,
+                color: sample.color,
+                symbol: sample.symbol,
+                amount: value.total,
+                trendCategoryId: value.trendId
+            )
         }
         .sorted { $0.amount > $1.amount }
     }
-    
+
     var yearOverYear: YoYSummary? {
         let prev = year - 1
         guard availableYears.contains(prev) else { return nil }
-        
+
         let cal = Calendar.current
-        let thisY = store.transactions.filter { cal.component(.year, from: $0.date) == year }
-        let lastY = store.transactions.filter { cal.component(.year, from: $0.date) == prev }
-        
+        let thisY = reportTransactions.filter { cal.component(.year, from: $0.date) == year }
+        let lastY = reportTransactions.filter { cal.component(.year, from: $0.date) == prev }
+
         let incThis = thisY.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
         let expThis = thisY.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
         let balThis = incThis - expThis
-        
+
         let incPrev = lastY.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
         let expPrev = lastY.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
         let balPrev = incPrev - expPrev
-        
+
         return .init(
             incomeDiff: incThis - incPrev,
             expenseDiff: expThis - expPrev,
             balanceDiff: balThis - balPrev
         )
     }
-    
+
     // CSV Export（年/月/カテゴリ/タイプ/金額/メモ/日付）
     func csvData() -> ShareableResource {
         let cal = Calendar.current
-        let rows: [[String]] = store.transactions
+        let rows: [[String]] = reportTransactions
             .filter { cal.component(.year, from: $0.date) == year }
             .sorted { $0.date < $1.date }
             .map { tx in
                 let month = cal.component(.month, from: tx.date)
-                let cat = store.categories.first(where: { $0.id == tx.categoryId })?.name ?? "-"
                 let type = (tx.type == .income) ? "収入" : "支出"
                 let amount = "\(tx.amount)"
                 let memo = tx.memo.replacingOccurrences(of: "\"", with: "\"\"")
                 let df = DateFormatter()
                 df.locale = Locale(identifier: "ja_JP"); df.dateFormat = "yyyy-MM-dd"
-                return ["\(year)", "\(month)", "\"\(cat)\"", type, amount, "\"\(memo)\"", df.string(from: tx.date)]
+                return ["\(year)", "\(month)", "\"\(tx.categoryName)\"", type, amount, "\"\(memo)\"", df.string(from: tx.date)]
             }
-        
+
         var csv = "year,month,category,type,amount,memo,date\n"
         for r in rows { csv += r.joined(separator: ",") + "\n" }
         let data = csv.data(using: .utf8) ?? Data()
@@ -673,6 +713,58 @@ private extension ReportsView {
     }
     var filteredCategoryTotals: [CategoryAnnual] {
         categoryTotals.filter { !excludedCategoryIds.contains($0.id) }
+    }
+
+    private var reportTransactions: [ReportTransaction] {
+        if ledgerContext.isShared {
+            guard let ledger = currentSharedLedger else { return [] }
+
+            let categories = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
+            let txs = sharedLedgerStore.transactionsByLedger[ledger.id] ?? []
+            return txs.map { tx in
+                let cat = categories.first { $0.id == tx.categoryId }
+                let color = Color.fromHex(cat?.colorHex ?? tx.categoryColorHex) ?? .gray
+                return ReportTransaction(
+                    date: tx.date,
+                    amount: tx.amount,
+                    type: tx.type == .income ? .income : .expense,
+                    memo: tx.memo ?? "",
+                    categoryKey: tx.categoryId?.recordName ?? tx.categoryName,
+                    categoryName: cat?.name ?? tx.categoryName,
+                    color: color,
+                    symbol: cat?.icon ?? "tag.fill",
+                    trendCategoryId: nil
+                )
+            }
+        }
+
+        // Personal ledger fallback
+        return store.transactions.map { tx in
+            let cat = store.categories.first(where: { $0.id == tx.categoryId })
+            return ReportTransaction(
+                date: tx.date,
+                amount: tx.amount,
+                type: tx.type == .income ? .income : .expense,
+                memo: tx.memo,
+                categoryKey: tx.categoryId.uuidString,
+                categoryName: cat?.name ?? "未分類",
+                color: cat?.color ?? .gray,
+                symbol: cat?.symbolName ?? "tag.fill",
+                trendCategoryId: cat?.id
+            )
+        }
+    }
+
+    private var currentSharedLedger: SharedLedger? {
+        ledgerContext.currentSharedLedger(from: sharedLedgerStore)
+    }
+
+    private func reloadSharedLedgerDataIfNeeded() async {
+        guard ledgerContext.isShared,
+              let ledger = currentSharedLedger else { return }
+
+        await sharedLedgerStore.reloadCategories(for: ledger)
+        await sharedLedgerStore.reloadTransactions(for: ledger)
     }
 }
 
