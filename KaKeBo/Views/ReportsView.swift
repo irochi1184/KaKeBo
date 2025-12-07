@@ -18,6 +18,7 @@ struct YoYSummary {
 struct ReportsView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.colorScheme) private var scheme
     
     // 表示対象の年（初期は今年）
@@ -178,6 +179,14 @@ struct ReportsView: View {
             .background(
                 themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea()
             )
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if ledgerContext.isRestored {
+                    ToolbarItem(placement: .topBarLeading) {
+                        LedgerModePicker()
+                    }
+                }
+            }
             .navigationDestination(item: $trendTarget) { cat in
                 CategoryTrendView(
                     year: year,

@@ -10,6 +10,7 @@ import SwiftUI
 struct AllTransactionsView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.colorScheme) private var scheme
     
     // 検索テキスト
@@ -93,6 +94,14 @@ struct AllTransactionsView: View {
                 .listStyle(.plain)
             }
             .background(themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea())
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if ledgerContext.isRestored {
+                    ToolbarItem(placement: .topBarLeading) {
+                        LedgerModePicker()
+                    }
+                }
+            }
         }
         .sheet(isPresented: $showFilter) {
             FilterSheet(
