@@ -509,7 +509,7 @@ extension SharedLedgerStore {
                     continue
                 }
                 
-                await createCategory(
+                _ = await createCategory(
                     for: ledger,
                     name: name,
                     colorHex: colorHex,
@@ -627,7 +627,7 @@ extension SharedLedgerStore {
                 continue
             }
             
-            await createCategory(
+            _ = await createCategory(
                 for: ledger,
                 name: name,
                 colorHex: colorHex,

@@ -8,6 +8,7 @@
 import SwiftUI
 import Charts
 import UniformTypeIdentifiers
+import CloudKit
 
 struct YoYSummary {
     let incomeDiff: Int
@@ -216,10 +217,10 @@ struct ReportsView: View {
             .task { await reloadSharedLedgerDataIfNeeded() }
             .task(id: ledgerContext.selectedSharedLedgerId) { await reloadSharedLedgerDataIfNeeded() }
             .task(id: ledgerContext.mode) { await reloadSharedLedgerDataIfNeeded() }
-            .onChange(of: ledgerContext.selectedSharedLedgerId) { _ in excludedCategoryIds.removeAll() }
-            .onChange(of: ledgerContext.mode) { _ in excludedCategoryIds.removeAll() }
-            .onChange(of: availableYears) { years in
-                if years.contains(year) == false, let latest = years.max() {
+            .onChange(of: ledgerContext.selectedSharedLedgerId) { excludedCategoryIds.removeAll() }
+            .onChange(of: ledgerContext.mode) { excludedCategoryIds.removeAll() }
+            .onChange(of: availableYears) { _, newYears in
+                if !newYears.contains(year), let latest = newYears.max() {
                     year = latest
                 }
             }
@@ -587,7 +588,7 @@ private extension ReportsView {
         return Array(Set(ys)).sorted()
     }
 
-    var txThisYear: [ReportTransaction] {
+    private var txThisYear: [ReportTransaction] {
         reportTransactions.filter { Calendar.current.component(.year, from: $0.date) == year }
     }
 
@@ -649,7 +650,6 @@ private extension ReportsView {
     var categoryTotals: [CategoryAnnual] {
         // 年間の支出カテゴリ合計
         var dict: [String: (total: Int, trendId: UUID?, sample: ReportTransaction?)] = [:]
-        let cal = Calendar.current
         for tx in txThisYear where tx.type == .expense {
             let key = tx.categoryKey
             var entry = dict[key] ?? (0, tx.trendCategoryId, tx)
