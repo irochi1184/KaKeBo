@@ -11,6 +11,7 @@ import UIKit
 struct CalendarScreen: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.colorScheme) private var scheme
     public var cal: Calendar { .current }
     @StateObject private var keyboard = KeyboardHeightReader()
@@ -120,6 +121,11 @@ struct CalendarScreen: View {
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if ledgerContext.isRestored {
+                    ToolbarItem(placement: .topBarLeading) {
+                        LedgerModePicker()
+                    }
+                }
                 ToolbarItem(placement: .principal) {
                     YearMonthHeader(
                         month: $month,
