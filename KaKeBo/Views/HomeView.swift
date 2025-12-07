@@ -99,11 +99,6 @@ struct HomeView: View {
             .sheet(item: $editingSharedTx) { tx in
                 if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
                     EditTransactionView(sharedLedger: ledger, transaction: tx)
-                        .environmentObject(store)
-                        .environmentObject(themeStore)
-                        .environmentObject(purchase)
-                        .environmentObject(sharedLedgerStore)
-                        .environmentObject(ledgerContext)
                         .presentationDetents([.large])
                 }
             }
