@@ -260,6 +260,45 @@ final class SharedLedgerStore: ObservableObject {
             self.lastError = error
         }
     }
+
+    func updateTransaction(
+        _ tx: SharedTransaction,
+        in ledger: SharedLedger,
+        amount: Int,
+        date: Date,
+        type: SharedTransactionType,
+        memo: String?,
+        category: SharedCategory?
+    ) async {
+        do {
+            var updated = tx
+            updated.amount = amount
+            updated.date = date
+            updated.type = type
+            updated.memo = memo
+            updated.categoryId = category?.id
+            updated.categoryName = category?.name ?? "未分類"
+            updated.categoryColorHex = category?.colorHex ?? "#FF9500"
+            updated.updatedAt = Date()
+
+            let targetDB = database(for: ledger)
+            let baseRecord = try await targetDB.record(for: tx.id)
+            let record = updated.makeRecord(existing: baseRecord)
+            let saved = try await targetDB.save(record)
+            guard let final = SharedTransaction(record: saved) else { return }
+
+            var list = transactionsByLedger[ledger.id] ?? []
+            if let idx = list.firstIndex(where: { $0.id == final.id }) {
+                list[idx] = final
+            } else {
+                list.append(final)
+            }
+            list.sort { $0.date < $1.date }
+            transactionsByLedger[ledger.id] = list
+        } catch {
+            self.lastError = error
+        }
+    }
     
     // MARK: - カテゴリー
     func reloadCategories(for ledger: SharedLedger) async {
