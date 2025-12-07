@@ -34,22 +34,6 @@ struct ReportsView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     
-                    // MARK: Year selector + Export
-                    HStack(spacing: 12) {
-                        YearPicker(selectedYear: $year, availableYears: availableYears, accent: accent)
-                            .tint(accent)
-                        Spacer()
-//                        ShareLink(item: csvData(), preview: SharePreview("\(String(year))年レポート", image: Image(systemName: "doc")))
-//                        {
-//                            Image(systemName: "square.and.arrow.up")
-//                                .font(.headline)
-//                                .padding(10)
-//                                .background(Circle().fill(accent.opacity(0.15)))
-//                        }
-//                        .tint(accent)
-                    }
-                    .padding(.horizontal)
-                    
                     // MARK: KPI Card
                     KPIHeader(
                         income: yearIncome,
@@ -174,19 +158,41 @@ struct ReportsView: View {
                     .cardBackground(scheme)
                     .padding(.bottom, 24)
                 }
-                .padding(.top, 12)
             }
             .background(
                 themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea()
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if ledgerContext.isRestored {
-                    ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarLeading) {
+                    if ledgerContext.isRestored {
                         LedgerModePicker()
                     }
                 }
+                ToolbarItem(placement: .principal) {
+                        YearPicker(
+                            selectedYear: $year,
+                            availableYears: availableYears,
+                            accent: accent
+                        )
+                        .tint(accent)
+                }
+                
+                // もし右上に共有ボタン（CSV出力）も置きたいならオプションでこれを追加
+                /*
+                 ToolbarItem(placement: .topBarTrailing) {
+                 ShareLink(
+                 item: csvData(),
+                 preview: SharePreview("\(String(year))年レポート",
+                 image: Image(systemName: "doc"))
+                 ) {
+                 Image(systemName: "square.and.arrow.up")
+                 .font(.headline)
+                 }
+                 }
+                 */
             }
+
             .navigationDestination(item: $trendTarget) { cat in
                 CategoryTrendView(
                     year: year,

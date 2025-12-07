@@ -55,17 +55,24 @@ struct AllTransactionsView: View {
         let accent = themeStore.theme.accentColor(for: scheme)
         NavigationStack {
             VStack(spacing: 0) {
-                
                 // 検索バー + フィルタを横並び
-                SearchHeader(
-                    text: $searchText,
-                    isFiltering: isFiltering,
-                    accent: accent,
-                    onTapFilter: { showFilter = true },
-                    onClear: resetFilters
-                )
+                HStack(alignment: .center, spacing: 12) {
+                    if ledgerContext.isRestored {
+                        LedgerModePicker(style: .circleIcon)
+                            .tint(accent)
+                            .padding(.leading, 4)
+                    }
+                    
+                    SearchHeader(
+                        text: $searchText,
+                        isFiltering: isFiltering,
+                        accent: accent,
+                        onTapFilter: { showFilter = true },
+                        onClear: resetFilters
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 .padding(.horizontal)
-                .padding(.top, 8)
                 .padding(.bottom, 6)
                 
                 // サマリー
@@ -95,13 +102,6 @@ struct AllTransactionsView: View {
             }
             .background(themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if ledgerContext.isRestored {
-                    ToolbarItem(placement: .topBarLeading) {
-                        LedgerModePicker()
-                    }
-                }
-            }
         }
         .sheet(isPresented: $showFilter) {
             FilterSheet(
