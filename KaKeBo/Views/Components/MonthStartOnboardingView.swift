@@ -2,7 +2,7 @@
 //  Views/Components/MonthStartOnboardingView.swift
 //  KaKeBo
 //
-//  Created by OpenAI on 2025/02/23.
+//  Created by 有田健一郎 on 2025/12/08.
 //
 
 import SwiftUI
@@ -39,12 +39,15 @@ struct MonthStartOnboardingView: View {
                 ))
 
                 if settings.isCustomStartEnabled {
-                    Stepper(value: Binding(
+                    Picker("開始日", selection: Binding(
                         get: { settings.startDay },
-                        set: { settings.startDay = min(max($0, 1), 31) }
-                    ), in: 1...31) {
-                        Text("毎月\(settings.startDay)日スタート")
+                        set: { settings.startDay = $0 }
+                    )) {
+                        ForEach(1...31, id: \.self) { day in
+                            Text("\(day)日").tag(day)
+                        }
                     }
+                    .pickerStyle(.wheel)
 
                     Picker("土日祝日に当たる場合", selection: Binding(
                         get: { settings.holidayAdjustment },

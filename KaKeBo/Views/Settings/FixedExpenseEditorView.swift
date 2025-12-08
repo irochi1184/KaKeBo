@@ -236,6 +236,7 @@ struct FixedExpenseEditorView: View {
                         Spacer()
                         if c.id == categoryId { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }

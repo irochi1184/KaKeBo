@@ -2,7 +2,7 @@
 //  Views/Components/LedgerModePicker.swift
 //  KaKeBo
 //
-//  Created by OpenAI ChatGPT on 2025/12/09.
+//  Created by 有田健一郎 on 2025/12/09.
 //
 
 import SwiftUI

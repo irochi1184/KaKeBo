@@ -2,7 +2,7 @@
 //  Models/MonthStartSettings.swift
 //  KaKeBo
 //
-//  Created by OpenAI on 2025/02/23.
+//  Created by 有田健一郎 on 2025/12/08.
 //
 
 import Foundation
@@ -33,8 +33,8 @@ enum MonthStartAdjustment: String, Codable, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .none: return "そのまま"
-        case .previousWeekday: return "直前の平日にする"
-        case .nextWeekday: return "直後の平日にする"
+        case .previousWeekday: return "直前の平日"
+        case .nextWeekday: return "直後の平日"
         }
     }
 }

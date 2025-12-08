@@ -2,7 +2,7 @@
 //  Utilities/MonthStartResolver.swift
 //  KaKeBo
 //
-//  Created by OpenAI on 2025/02/23.
+//  Created by 有田健一郎 on 2025/12/08.
 //
 
 import Foundation

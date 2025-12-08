@@ -416,15 +416,15 @@ private struct ShareInvitationSheet: View {
                             container: CKContainer.default()
                         )
                         .frame(maxWidth: .infinity)
-                        .padding(12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(Color(.systemBackground))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-                        )
+//                        .padding(12)
+//                        .background(
+//                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+//                                .fill(Color(.systemBackground))
+//                        )
+//                        .overlay(
+//                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+//                                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+//                        )
                     }
                 }
                 .padding(20)
@@ -504,7 +504,7 @@ private struct ShareInvitationSheet: View {
             Image(systemName: icon)
                 .font(.subheadline)
                 .frame(width: 24)
-                .foregroundStyle(.accentColor)
+                .foregroundStyle(.accent)
             Text(text)
                 .font(.subheadline)
             Spacer()

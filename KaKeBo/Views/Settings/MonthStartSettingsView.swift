@@ -2,7 +2,7 @@
 //  Views/Settings/MonthStartSettingsView.swift
 //  KaKeBo
 //
-//  Created by OpenAI on 2025/02/23.
+//  Created by 有田健一郎 on 2025/12/08.
 //
 
 import SwiftUI
@@ -31,12 +31,43 @@ struct MonthStartSettingsView: View {
                 ))
 
                 if monthStartStore.settings.isCustomStartEnabled {
-                    Stepper(value: Binding(
-                        get: { monthStartStore.settings.startDay },
-                        set: { monthStartStore.settings.startDay = min(max($0, 1), 31) }
-                    ), in: 1...31) {
-                        Text("毎月\(monthStartStore.settings.startDay)日から始める")
+                    
+                    // MARK: - 開始日の選択（チップスタイル）
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("開始日")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(1...31, id: \.self) { day in
+                                    let isSelected = (day == monthStartStore.settings.startDay)
+                                    
+                                    Button {
+                                        monthStartStore.settings.startDay = day
+                                    } label: {
+                                        Text("\(day)日")
+                                            .font(.callout)
+                                            .padding(.vertical, 6)
+                                            .padding(.horizontal, 10)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .fill(isSelected
+                                                          ? Color.accentColor.opacity(0.18)
+                                                          : Color(.systemGray5))
+                                            )
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(2)
+                        }
                     }
+                    .padding(.vertical, 4)
 
                     Picker("土日祝日に当たる場合", selection: Binding(
                         get: { monthStartStore.settings.holidayAdjustment },

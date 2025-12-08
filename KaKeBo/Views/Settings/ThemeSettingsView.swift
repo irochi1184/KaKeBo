@@ -50,7 +50,7 @@ struct ThemeSettingsView: View {
 
             // === 入力・電卓設定 ===
             Section("入力・電卓") {
-                Toggle("自作の電卓キーパッドを使う", isOn: Binding(
+                Toggle("カスタム電卓キーパッドを使う", isOn: Binding(
                     get: { working.prefersCustomKeypad },
                     set: { newVal in var w = working; w.prefersCustomKeypad = newVal; working = w }
                 ))
