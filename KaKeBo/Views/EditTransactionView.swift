@@ -39,6 +39,7 @@ struct EditTransactionView: View {
     // 編集ステート（Add と同構成）
     @State private var date: Date
     @State private var amount: Int
+    @State private var amountText: String
     @State private var type: TransactionType
     @State private var memo: String
     @State private var selectedCategoryId: UUID?
@@ -51,6 +52,7 @@ struct EditTransactionView: View {
     // キーボード制御（Add と揃える）
     @State private var isKeyboardVisible = false
     @FocusState private var memoFocused: Bool
+    @FocusState private var amountFieldFocused: Bool
     @FocusState private var tagFieldFocused: Bool
     @State private var showCustomKeypad = true          // 初期表示：自作キーパッド表示
     @State private var keypadHeight: CGFloat = 0        // 自作キーパッド高さ（閉じるボタン位置調整用）
@@ -62,6 +64,7 @@ struct EditTransactionView: View {
         self.mode = .personal(transaction)
         _date = State(initialValue: transaction.date)
         _amount = State(initialValue: transaction.amount)
+        _amountText = State(initialValue: String(transaction.amount))
         _type = State(initialValue: transaction.type)
         _memo = State(initialValue: transaction.memo)
         _selectedCategoryId = State(initialValue: transaction.categoryId)
@@ -73,6 +76,7 @@ struct EditTransactionView: View {
         self.mode = .shared(ledger: sharedLedger, transaction: transaction)
         _date = State(initialValue: transaction.date)
         _amount = State(initialValue: transaction.amount)
+        _amountText = State(initialValue: String(transaction.amount))
         _type = State(initialValue: transaction.type == .income ? .income : .expense)
         _memo = State(initialValue: transaction.memo ?? "")
         _selectedCategoryId = State(initialValue: nil)
@@ -86,7 +90,7 @@ struct EditTransactionView: View {
     
     // 実効的に必要な下パディング（overlay配置のキーパッドと重ならないため）
     private var contentBottomPadding: CGFloat {
-        guard showCustomKeypad else { return 0 }
+        guard prefersCustomKeypad && showCustomKeypad else { return 0 }
         // キーパッドの実高さ ー 見た目の持ち上げ量 + 余白 + セーフエリア
         return max(0, (keypadHeight - keypadLift)) + 16 + safeBottomInset
     }
@@ -109,8 +113,11 @@ struct EditTransactionView: View {
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
-    
+    private var prefersCustomKeypad: Bool { themeStore.theme.prefersCustomKeypad }
+    private var keypadColor: Color { themeStore.theme.keypadColor(isIncome: type == .income) }
+
     var body: some View {
+        let usesCustomKeypad = prefersCustomKeypad
         NavigationStack {
             contentScroll
                 .background(bgGradient.ignoresSafeArea())
@@ -119,19 +126,20 @@ struct EditTransactionView: View {
                 .toolbar { toolbarContent }
             // ▼ safeAreaInsetは使わず、overlayで下部配置（白抜け防止のため下地を敷く）
                 .overlay(alignment: .bottom) {
-                    if showCustomKeypad {
+                    if usesCustomKeypad && showCustomKeypad {
                         ZStack(alignment: .bottom) {
                             // 下地：透明領域でマテリアルが白発光するのを防ぐ
                             Rectangle()
                                 .fill(themeStore.theme.backgroundColor(for: scheme))
                                 .frame(height: safeBottomInset + 100)
                                 .ignoresSafeArea(edges: .bottom)
-                            
+
                             NumericKeypad(
                                 amount: $amount,
                                 maxDigits: 9,
                                 style: .attached,
                                 isIncome: type == .income,
+                                baseColorOverride: keypadColor,
                                 sizeScale: keypadScale,
                                 preferredHeightRatio: keypadHeightRatio,
                                 onHeightChange: { h in keypadHeight = h }
@@ -144,7 +152,7 @@ struct EditTransactionView: View {
                 }
             // 右下・独立した「閉じる」ボタン（キーパッドの表示テキストに被らないよう高め）
                 .overlay(alignment: .bottomTrailing) {
-                    if showCustomKeypad {
+                    if usesCustomKeypad && showCustomKeypad {
                         CloseKeyboardButton {
                             showCustomKeypad = false
                         }
@@ -178,6 +186,21 @@ struct EditTransactionView: View {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isKeyboardVisible = false
                     }
+                }
+                .onAppear {
+                    if !usesCustomKeypad { showCustomKeypad = false }
+                    amountText = amount == 0 ? "" : String(amount)
+                }
+                .onChange(of: usesCustomKeypad) { _, newValue in
+                    if !newValue { showCustomKeypad = false; amountFieldFocused = false }
+                }
+                .onChange(of: amount) { _, newValue in
+                    amountText = newValue == 0 ? "" : String(newValue)
+                }
+                .onChange(of: amountText) { _, newValue in
+                    let filtered = newValue.filter { $0.isNumber }
+                    if filtered != newValue { amountText = filtered }
+                    if let val = Int(filtered) { amount = val } else { amount = 0 }
                 }
         }
     }
@@ -283,7 +306,7 @@ struct EditTransactionView: View {
                     }.luxCard()
                 }
                 
-                Spacer(minLength: showCustomKeypad ? (isSmallPhone ? 12 : 20) : 0)
+                Spacer(minLength: prefersCustomKeypad && showCustomKeypad ? (isSmallPhone ? 12 : 20) : 0)
             }
             .padding(.top, 12)
             .padding(.horizontal)
@@ -343,29 +366,48 @@ struct EditTransactionView: View {
             // 金額（疑似入力欄・タップで自作キーボード）
             VStack(alignment: .leading, spacing: 6) {
                 Text("金額").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                HStack {
-                    Spacer()
-                    Text(currency(amount))
+                if prefersCustomKeypad {
+                    HStack {
+                        Spacer()
+                        Text(currency(amount))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.secondary.opacity(0.1))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.2))
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        // メモ/タグのフォーカスを外してシステムKBを閉じる → 自作キーパッドを出す
+                        memoFocused = false
+                        tagFieldFocused = false
+                        withAnimation(.easeInOut(duration: 0.2)) { if prefersCustomKeypad { showCustomKeypad = true } }
+                    }
+                    .accessibilityAddTraits(.isButton)
+                } else {
+                    TextField("0", text: $amountText)
+                        .keyboardType(.numberPad)
+                        .focused($amountFieldFocused)
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
+                        .multilineTextAlignment(.trailing)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.secondary.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.secondary.opacity(0.2))
+                        )
                 }
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.secondary.opacity(0.1))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.secondary.opacity(0.2))
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    // メモ/タグのフォーカスを外してシステムKBを閉じる → 自作キーパッドを出す
-                    memoFocused = false
-                    tagFieldFocused = false
-                    withAnimation(.easeInOut(duration: 0.2)) { showCustomKeypad = true }
-                }
-                .accessibilityAddTraits(.isButton)
             }
             
             // メモ
