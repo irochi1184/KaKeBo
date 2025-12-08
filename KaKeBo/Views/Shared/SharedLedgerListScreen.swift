@@ -10,13 +10,14 @@ import CloudKit
 
 struct SharedLedgerListScreen: View {
     @EnvironmentObject var store: SharedLedgerStore
-    
+
     @State private var showNewLedgerSheet = false
     @State private var editingLedger: SharedLedger? = nil
     @State private var ledgerToDelete: SharedLedger? = nil
     @State private var showDeleteConfirm = false
+    @State private var shareTargetLedger: SharedLedger? = nil
     @State private var sharePayload: SharedLedgerStore.SharePayload? = nil
-    @State private var showShareSheet = false
+    @State private var shareLoading = false
     @State private var shareErrorMessage: String? = nil
     @State private var showShareError = false
     
@@ -33,6 +34,11 @@ struct SharedLedgerListScreen: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
             }
+
+            if shareLoading {
+                sharingLoadingView
+                    .padding(.horizontal, 20)
+            }
         }
         .task {
             await store.reloadLedgers()
@@ -48,13 +54,11 @@ struct SharedLedgerListScreen: View {
                 .environmentObject(store)
         }
         // 共有シート
-        .sheet(isPresented: $showShareSheet) {
-            if let payload = sharePayload {
-                CloudSharingView(
-                    share: payload.share,
-                    container: CKContainer.default()
-                )
-            }
+        .sheet(item: $sharePayload, onDismiss: { sharePayload = nil }) { payload in
+            ShareInvitationSheet(
+                payload: payload,
+                ledger: shareTargetLedger
+            )
         }
         .confirmationDialog(
             "この共有家計簿を削除しますか？",
@@ -290,17 +294,22 @@ struct SharedLedgerListScreen: View {
     }
     
     private func presentShare(for ledger: SharedLedger) {
+        shareTargetLedger = ledger
+        sharePayload = nil
+        shareLoading = true
+
         Task {
             do {
                 let payload = try await store.prepareShare(for: ledger)
                 await MainActor.run {
                     self.sharePayload = payload
-                    self.showShareSheet = true
+                    self.shareLoading = false
                 }
             } catch {
                 await MainActor.run {
                     self.shareErrorMessage = error.localizedDescription
                     self.showShareError = true
+                    self.shareLoading = false
                 }
             }
         }
@@ -330,9 +339,176 @@ struct SharedLedgerListScreen: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.secondary)
-                .shadow(radius: 2)
+                .fill(Color(.systemBackground).opacity(0.95))
         )
+        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+    }
+
+    private var sharingLoadingView: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .progressViewStyle(.circular)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("招待の準備中…")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("共有リンクを作成しています。数秒お待ちください。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.systemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 6)
+    }
+}
+
+// MARK: - 招待シート
+
+private struct ShareInvitationSheet: View {
+    let payload: SharedLedgerStore.SharePayload
+    let ledger: SharedLedger?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    headerSection
+
+                    if let ledger {
+                        ledgerSummary(for: ledger)
+                    }
+
+                    infoSection
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("このリンクを共有すると？")
+                            .font(.headline)
+                        VStack(alignment: .leading, spacing: 10) {
+                            infoRow(icon: "person.crop.circle.badge.plus", text: "受け取った相手が共有メンバーとして参加できます")
+                            infoRow(icon: "lock.open.display", text: "参加すると最新の収支やカテゴリがリアルタイムに同期されます")
+                            infoRow(icon: "hand.tap", text: "招待を取り消したい場合は、メンバー管理からいつでも解除できます")
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color(.secondarySystemGroupedBackground))
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("招待リンク")
+                            .font(.headline)
+                        Text("下のボタンから共有オプションを選択してください。")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        CloudSharingView(
+                            share: payload.share,
+                            container: CKContainer.default()
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color(.systemBackground))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                        )
+                    }
+                }
+                .padding(20)
+            }
+            .navigationTitle("共有家計簿を招待")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("リンクを送ってメンバーを招待しましょう")
+                .font(.title3.weight(.semibold))
+            Text("メッセージやメール、SNSなど好きな方法で共有できます。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func ledgerSummary(for ledger: SharedLedger) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.12))
+                    .frame(width: 50, height: 50)
+                Image(systemName: ledger.icon)
+                    .font(.title3)
+                    .foregroundStyle(Color.blue)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(ledger.name)
+                    .font(.headline)
+                Text("作成日: \(ledger.createdAt.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.tertiarySystemGroupedBackground))
+        )
+    }
+
+    private var infoSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("招待の手順")
+                .font(.headline)
+            VStack(alignment: .leading, spacing: 12) {
+                stepRow(number: 1, text: "リンクをコピーまたはAirDropなどで共有する")
+                stepRow(number: 2, text: "受け取った相手が開いて参加リクエストを承諾する")
+                stepRow(number: 3, text: "メンバーの承認後、共同で家計簿を編集できます")
+            }
+        }
+    }
+
+    private func stepRow(number: Int, text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text("\(number)")
+                .font(.subheadline.weight(.bold))
+                .frame(width: 26, height: 26)
+                .foregroundStyle(.white)
+                .background(
+                    Circle().fill(Color.accentColor)
+                )
+            Text(text)
+                .font(.subheadline)
+            Spacer()
+        }
+    }
+
+    private func infoRow(icon: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.subheadline)
+                .frame(width: 24)
+                .foregroundStyle(.accentColor)
+            Text(text)
+                .font(.subheadline)
+            Spacer()
+        }
     }
 }
 
