@@ -513,9 +513,11 @@ final class SharedLedgerStore: ObservableObject {
 }
 
 extension SharedLedgerStore {
-    struct SharePayload {
+    struct SharePayload: Identifiable {
         let share: CKShare
         let rootRecord: CKRecord
+
+        var id: CKRecord.ID { share.recordID }
     }
     
     /// 個人用カテゴリ・取引のコピーを「裏で」開始する
