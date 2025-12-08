@@ -9,6 +9,7 @@ import SwiftUI
 import Charts
 import UniformTypeIdentifiers
 import CloudKit
+import Combine
 
 struct YoYSummary {
     let incomeDiff: Int
@@ -29,6 +30,7 @@ struct ReportsView: View {
     @State private var stackedBars: Bool = true
     @State private var excludedCategoryIds: Set<String> = []
     @State private var trendTarget: CategoryAnnual? = nil
+    @State private var breakdownVersion: Int = 0
     
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
@@ -82,6 +84,7 @@ struct ReportsView: View {
                             
                             // ★ フィルタ済みを渡す
                             CategoryDonutAnnual(breakdown: filteredCategoryTotals, insideThreshold: insideThreshold)
+                                .id(breakdownVersion)
                                 .frame(height: 240)
                             
                             // ★ リスト（全カテゴリを表示しつつ、除外は薄く）
@@ -225,6 +228,12 @@ struct ReportsView: View {
                 if !newYears.contains(year), let latest = newYears.max() {
                     year = latest
                 }
+            }
+            .onReceive(store.$transactions) { _ in
+                breakdownVersion &+= 1
+            }
+            .onReceive(sharedLedgerStore.$transactionsByLedger) { _ in
+                breakdownVersion &+= 1
             }
         }
     }
