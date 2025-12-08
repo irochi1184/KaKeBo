@@ -71,9 +71,6 @@ final class SharedLedgerStore: ObservableObject {
     private func queryRecords(_ query: CKQuery, in db: CKDatabase) async throws -> [CKRecord] {
         var allRecords: [CKRecord] = []
         
-        // 1ページ目
-        var current = try await db.records(matching: query)
-        
         func append(from matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)]) {
             for (_, result) in matchResults {
                 if case .success(let record) = result {
@@ -82,12 +79,46 @@ final class SharedLedgerStore: ObservableObject {
             }
         }
         
-        append(from: current.matchResults)
-        
-        // 2ページ目以降があれば cursor をたどる
-        while let cursor = current.queryCursor {
-            current = try await db.records(continuingMatchFrom: cursor)
+        if db.databaseScope == .shared {
+            // 共有DB：ゾーンごとにクエリする
+            let zones = try await db.allRecordZones()
+            
+            for zone in zones {
+                var current = try await db.records(
+                    matching: query,
+                    inZoneWith: zone.zoneID,
+                    desiredKeys: nil,
+                    resultsLimit: 0    // 0 = 上限なし
+                )
+                append(from: current.matchResults)
+                
+                while let cursor = current.queryCursor {
+                    current = try await db.records(
+                        continuingMatchFrom: cursor,
+                        desiredKeys: nil,
+                        resultsLimit: 0
+                    )
+                    append(from: current.matchResults)
+                }
+            }
+        } else {
+            // private / public DB：今まで通りでOK
+            var current = try await db.records(
+                matching: query,
+                inZoneWith: nil,
+                desiredKeys: nil,
+                resultsLimit: 0
+            )
             append(from: current.matchResults)
+            
+            while let cursor = current.queryCursor {
+                current = try await db.records(
+                    continuingMatchFrom: cursor,
+                    desiredKeys: nil,
+                    resultsLimit: 0
+                )
+                append(from: current.matchResults)
+            }
         }
         
         return allRecords
@@ -102,37 +133,72 @@ final class SharedLedgerStore: ObservableObject {
         do {
             let userId = try await currentUserId()
             
-            let owned  = try await fetchOwnedLedgers(for: userId)
-            let shared = try await fetchSharedLedgers()
+            // ① 自分が owner の Ledger（privateDB）
+            let owned = try await fetchOwnedLedgers(for: userId)
+            let ownedIDs = Set(owned.map(\.id))
             
+            // ② 自分に共有されている Ledger（sharedDB）
+            let shared = try await fetchSharedLedgers(excluding: ownedIDs)
+            
+            // ③ マージして createdAt でソート
             let all = (owned + shared).sorted(by: { $0.createdAt < $1.createdAt })
             self.ledgers = all
+            
         } catch {
             self.lastError = error
             print("reloadLedgers error:", error)
         }
     }
-    
+
     // 自分が owner の Ledger（今までの挙動）
     private func fetchOwnedLedgers(for userId: String) async throws -> [SharedLedger] {
-        let predicate = NSPredicate(format: "%K == %@", SharedLedger.FieldKey.ownerUserId, userId)
+        // CloudKit 側では条件なしで全部取る
+        let predicate = NSPredicate(value: true)
         let query = CKQuery(recordType: SharedLedger.recordType, predicate: predicate)
         
-        var all: [SharedLedger] = []
         let records = try await queryRecords(query, in: db)
+        var result: [SharedLedger] = []
         
         for record in records {
-            if let ledger = SharedLedger(record: record) {
-                all.append(ledger)
+            guard let ledger = SharedLedger(record: record) else { continue }
+            
+            // ① ownerUserId が設定されている場合
+            if let owner = record[SharedLedger.FieldKey.ownerUserId] as? String,
+               owner == userId {
+                result.append(ledger)
                 ledgerSourceMap[ledger.id] = .private
+                continue
+            }
+            
+            // ② ownerUserId が無い古いデータ → creator が自分ならオーナー扱い
+            if let creator = record.creatorUserRecordID,
+               creator.recordName == userId {
+                result.append(ledger)
+                ledgerSourceMap[ledger.id] = .private
+                continue
             }
         }
-        return all
+        
+        return result
     }
-    
-    private func fetchSharedLedgers() async throws -> [SharedLedger] {
-        // TODO: sharedDB 用の正しいクエリ実装は後でやる
-        return []
+
+    // 自分が「共有されている」家計簿（受け取った側のレジャー）
+    private func fetchSharedLedgers(excluding ownedIDs: Set<CKRecord.ID>) async throws -> [SharedLedger] {
+        let predicate = NSPredicate(value: true)
+        let query = CKQuery(recordType: SharedLedger.recordType, predicate: predicate)
+        
+        let records = try await queryRecords(query, in: sharedDB)
+        var result: [SharedLedger] = []
+        
+        for record in records {
+            guard let ledger = SharedLedger(record: record) else { continue }
+            guard !ownedIDs.contains(ledger.id) else { continue }
+            
+            result.append(ledger)
+            ledgerSourceMap[ledger.id] = .shared
+        }
+        
+        return result
     }
 
     // MARK: - 家計簿
