@@ -638,11 +638,11 @@ extension SharedLedgerStore {
     /// 指定した共有家計簿用の CKShare を用意して返す
     /// 既に share がある場合はそれを再利用、無ければ新規作成する
     func prepareShare(for ledger: SharedLedger) async throws -> SharePayload {
-        // ルートレコードを取得
+        // ① 常にサーバー側の最新 rootRecord を取得
         let rootRecord = try await db.record(for: ledger.id)
         
-        // すでに共有設定済みなら share を再利用
-        if let shareRef = rootRecord.share {                        // ← 型: CKRecord.Reference
+        // ② すでに共有設定済みなら share を再利用
+        if let shareRef = rootRecord.share {
             let shareRecord = try await db.record(for: shareRef.recordID)
             guard let share = shareRecord as? CKShare else {
                 throw NSError(
@@ -654,28 +654,57 @@ extension SharedLedgerStore {
             return SharePayload(share: share, rootRecord: rootRecord)
         }
         
-        // 新しい share を作成
+        // ③ 新しい share を作成（必ず rootRecord を渡す）
         let share = CKShare(rootRecord: rootRecord)
         share[CKShare.SystemFieldKey.title] = ledger.name as CKRecordValue
         
-        // レコードと share を一緒に保存
-        let result = try await db.modifyRecords(
+        // ④ root + share を同じ modifyRecords で保存
+        let (saveResults, _) = try await db.modifyRecords(
             saving: [rootRecord, share],
             deleting: []
         )
         
-        // saveResults から CKShare だけを取り出す
-        let savedShares: [CKShare] = result.saveResults.compactMap { (_, res) in
-            switch res {
-            case .success(let record):
-                return record as? CKShare
-            case .failure:
-                return nil
-            }
+        // ⑤ rootRecord の結果を確認
+        let rootResult = saveResults[rootRecord.recordID]
+        let savedRoot: CKRecord
+        switch rootResult {
+        case .success(let record):
+            savedRoot = record
+        case .failure(let error):
+            throw error   // root の保存に失敗してたら即エラーにする
+        case .none:
+            throw NSError(
+                domain: "SharedLedgerStore",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "rootRecord の保存結果が取得できませんでした。"]
+            )
         }
         
-        let finalShare = savedShares.first ?? share
-        return SharePayload(share: finalShare, rootRecord: rootRecord)
+        // ⑥ share の結果を確認
+        let shareResult = saveResults[share.recordID]
+        let savedShare: CKShare
+        switch shareResult {
+        case .success(let record):
+            guard let s = record as? CKShare else {
+                throw NSError(
+                    domain: "SharedLedgerStore",
+                    code: -3,
+                    userInfo: [NSLocalizedDescriptionKey: "保存されたレコードが CKShare ではありません。"]
+                )
+            }
+            savedShare = s
+        case .failure(let error):
+            throw error    // ← ここで CKError.code12 とかが返ってくる
+        case .none:
+            throw NSError(
+                domain: "SharedLedgerStore",
+                code: -4,
+                userInfo: [NSLocalizedDescriptionKey: "share の保存結果が取得できませんでした。"]
+            )
+        }
+        
+        // ⑦ 成功したものだけ返す（未保存 share は絶対に返さない）
+        return SharePayload(share: savedShare, rootRecord: savedRoot)
     }
         
     /// 個人用家計簿の全カテゴリを共有家計簿にコピー

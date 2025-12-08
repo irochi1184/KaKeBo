@@ -53,7 +53,7 @@ struct AllTransactionsView: View {
         var result: [String] = []
         let tagSource: [String]
         if ledgerContext.mode == .shared,
-           let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+           ledgerContext.currentSharedLedger(from: sharedLedgerStore) != nil {
             tagSource = []
         } else {
             tagSource = store.transactions.flatMap { $0.tags }
