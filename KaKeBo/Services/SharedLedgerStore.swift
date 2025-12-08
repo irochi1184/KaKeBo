@@ -82,13 +82,15 @@ final class SharedLedgerStore: ObservableObject {
         in db: CKDatabase,
         zoneID: CKRecordZone.ID? = nil
     ) async throws -> [CKRecord] {
+        
         var allRecords: [CKRecord] = []
+        
         let resolvedZoneID: CKRecordZone.ID? = {
             if let zoneID { return zoneID }
             if db.databaseScope == .private { return SharedLedger.zoneID }
             return nil
         }()
-
+        
         func append(from matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)]) {
             for (_, result) in matchResults {
                 if case .success(let record) = result {
@@ -96,25 +98,25 @@ final class SharedLedgerStore: ObservableObject {
                 }
             }
         }
-
+        
         if db.databaseScope == .shared {
-            // 共有DB：ゾーンごとにクエリする
-            let zones: [CKRecordZone] = {
-                if let resolvedZoneID {
-                    return [CKRecordZone(zoneID: resolvedZoneID)]
-                }
-                return (try? await db.allRecordZones()) ?? []
-            }()
-
+            // async を直接使う
+            let zones: [CKRecordZone]
+            if let resolvedZoneID {
+                zones = [CKRecordZone(zoneID: resolvedZoneID)]
+            } else {
+                zones = try await db.allRecordZones()
+            }
+            
             for zone in zones {
                 var current = try await db.records(
                     matching: query,
                     inZoneWith: zone.zoneID,
                     desiredKeys: nil,
-                    resultsLimit: 0    // 0 = 上限なし
+                    resultsLimit: 0
                 )
                 append(from: current.matchResults)
-
+                
                 while let cursor = current.queryCursor {
                     current = try await db.records(
                         continuingMatchFrom: cursor,
@@ -125,7 +127,7 @@ final class SharedLedgerStore: ObservableObject {
                 }
             }
         } else {
-            // private / public DB：今まで通りでOK
+            // private / public
             var current = try await db.records(
                 matching: query,
                 inZoneWith: resolvedZoneID,
@@ -146,6 +148,7 @@ final class SharedLedgerStore: ObservableObject {
         
         return allRecords
     }
+
     
     // MARK: - Ledger
     
