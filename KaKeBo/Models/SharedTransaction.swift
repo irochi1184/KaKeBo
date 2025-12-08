@@ -124,7 +124,10 @@ extension SharedTransaction {
     ) -> SharedTransaction {
         let now = Date()
         return SharedTransaction(
-            id: CKRecord.ID(recordName: UUID().uuidString),
+            id: CKRecord.ID(
+                recordName: UUID().uuidString,
+                zoneID: SharedLedger.zoneID
+            ),
             ledgerId: ledgerId,
             amount: amount,
             date: date,

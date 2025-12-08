@@ -82,7 +82,10 @@ extension SharedCategory {
     ) -> SharedCategory {
         let now = Date()
         return SharedCategory(
-            id: CKRecord.ID(recordName: UUID().uuidString),
+            id: CKRecord.ID(
+                recordName: UUID().uuidString,
+                zoneID: SharedLedger.zoneID
+            ),
             ledgerId: ledgerId,
             name: name,
             colorHex: colorHex,
