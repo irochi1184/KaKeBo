@@ -340,11 +340,19 @@ struct AddTransactionView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("金額").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
                 if prefersCustomKeypad {
-                    HStack {
-                        Spacer()
-                        Text(currency(amount))
-                            .font(.title3.weight(.semibold))
-                            .monospacedDigit()
+                    ZStack {
+                        HStack {
+                            Spacer()
+                            Text(currency(amount))
+                                .font(.title3.weight(.semibold))
+                                .monospacedDigit()
+                        }
+                        // 物理キーボード入力用の透明なテキストフィールド
+                        TextField("0", text: $amountText)
+                            .keyboardType(.numberPad)
+                            .focused($amountFieldFocused)
+                            .opacity(0.01)
+                            .allowsHitTesting(false)
                     }
                     .padding(10)
                     .background(
@@ -359,6 +367,7 @@ struct AddTransactionView: View {
                     .onTapGesture {
                         memoFocused = false
                         tagFieldFocused = false
+                        amountFieldFocused = true
                         withAnimation(.easeInOut(duration: 0.2)) { if prefersCustomKeypad { showCustomKeypad = true } }
                     }
                     .accessibilityAddTraits(.isButton)
