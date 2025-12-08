@@ -157,6 +157,18 @@ struct AddTransactionView: View {
                                 // 既にメモがあれば追記、なければ置換
                                 memo = memo.isEmpty ? m : "\(memo) \(m)"
                             }
+                            if let hint = r.categoryHint {
+                                if ledgerContext.isPersonal {
+                                    if let cat = store.categories.first(where: { $0.name.contains(hint) }) {
+                                        selectedCategoryId = cat.id
+                                    }
+                                } else if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore),
+                                          let cats = sharedLedgerStore.categoriesByLedger[ledger.id] {
+                                    if let cat = cats.first(where: { $0.name.contains(hint) }) {
+                                        selectedSharedCategoryId = cat.id
+                                    }
+                                }
+                            }
                             // 金額編集しやすいよう自作キーパッドを出しておく
                             if usesCustomKeypad { showCustomKeypad = true }
                         }
