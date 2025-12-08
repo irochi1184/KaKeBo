@@ -16,6 +16,7 @@ struct NumericKeypad: View {
     var showLeadingZero: Bool = false
     var style: Style = .attached
     var isIncome: Bool = false
+    var baseColorOverride: Color? = nil
     // サイズ調整用
     var sizeScale: CGFloat = 1.0
     var preferredHeightRatio: CGFloat? = nil
@@ -244,7 +245,7 @@ struct NumericKeypad: View {
     }
     
     // MARK: - 見た目系
-    private var baseColor: Color { isIncome ? .green : .red }
+    private var baseColor: Color { baseColorOverride ?? (isIncome ? .green : .red) }
     private var labelColor: Color { baseColor.opacity(0.85) }
     private var chipBackground: Color { baseColor.opacity(scheme == .dark ? 0.25 : 0.15) }
     private var chipBorder: Color { baseColor.opacity(0.4) }

@@ -47,7 +47,39 @@ struct ThemeSettingsView: View {
                     }
                 }
             }
-            
+
+            // === 入力・電卓設定 ===
+            Section("入力・電卓") {
+                Toggle("自作の電卓キーパッドを使う", isOn: Binding(
+                    get: { working.prefersCustomKeypad },
+                    set: { newVal in var w = working; w.prefersCustomKeypad = newVal; working = w }
+                ))
+
+                if purchase.isPremiumActive {
+                    ColorPicker(
+                        "収入カラー",
+                        selection: Binding(
+                            get: { working.keypadIncomeRGBA.swiftUIColor },
+                            set: { c in var w = working; w.keypadIncomeRGBA = .init(c); w.markAsCustom(); working = w }
+                        ),
+                        supportsOpacity: false
+                    )
+                    ColorPicker(
+                        "支出カラー",
+                        selection: Binding(
+                            get: { working.keypadExpenseRGBA.swiftUIColor },
+                            set: { c in var w = working; w.keypadExpenseRGBA = .init(c); w.markAsCustom(); working = w }
+                        ),
+                        supportsOpacity: false
+                    )
+                } else {
+                    HStack(spacing: 12) {
+                        Image(systemName: "lock.fill").foregroundStyle(accent)
+                        Text("プレミアムで電卓の収入/支出カラーを自由に変更できます。")
+                    }
+                }
+            }
+
             // === プレビュー ===
             Section("プレビュー") {
                 Picker("表示モード", selection: $previewMode) {

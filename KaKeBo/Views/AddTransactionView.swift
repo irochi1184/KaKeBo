@@ -21,6 +21,7 @@ struct AddTransactionView: View {
     // MARK: - States
     @State private var date: Date = Date()
     @State private var amount: Int = 0
+    @State private var amountText: String = "0"
     @State private var type: TransactionType = .expense
     @State private var memo: String = ""
     @State private var selectedCategoryId: UUID?
@@ -28,10 +29,11 @@ struct AddTransactionView: View {
 
     @State private var tags: [String] = []
     @State private var tagInput: String = ""
-    
+
     // キーボード／UI
     @State private var isKeyboardVisible = false
     @FocusState private var memoFocused: Bool
+    @FocusState private var amountFieldFocused: Bool
     @FocusState private var tagFieldFocused: Bool
     @State private var showCustomKeypad = true
     @State private var keypadHeight: CGFloat = 0
@@ -53,6 +55,7 @@ struct AddTransactionView: View {
     ) {
         _selectedCategoryId = State(initialValue: defaultCategoryId)
         _amount = State(initialValue: defaultAmount ?? 0)
+        _amountText = State(initialValue: defaultAmount.map { String($0) } ?? "0")
         _date   = State(initialValue: defaultDate ?? Date())
         _type   = State(initialValue: defaultType)
         _memo   = State(initialValue: defaultMemo ?? "")
@@ -73,25 +76,29 @@ struct AddTransactionView: View {
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
-    
+    private var prefersCustomKeypad: Bool { themeStore.theme.prefersCustomKeypad }
+    private var keypadColor: Color { themeStore.theme.keypadColor(isIncome: type == .income) }
+
     // MARK: - Body
     var body: some View {
+        let usesCustomKeypad = prefersCustomKeypad
         NavigationStack {
             contentScroll
                 .background(bgGradient.ignoresSafeArea())
                 .navigationTitle("新規追加")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
-            
+
             // カスタム電卓
                 .safeAreaInset(edge: .bottom) {
-                    if showCustomKeypad {
+                    if usesCustomKeypad && showCustomKeypad {
                         ZStack {
                             NumericKeypad(
                                 amount: $amount,
                                 maxDigits: 9,
                                 style: .attached,
                                 isIncome: type == .income,
+                                baseColorOverride: keypadColor,
                                 sizeScale: keypadScale,
                                 preferredHeightRatio: keypadHeightRatio,
                                 onHeightChange: { h in keypadHeight = h }
@@ -101,10 +108,10 @@ struct AddTransactionView: View {
                         .offset(y: -keypadLift)
                     }
                 }
-            
+
             // 自作キーパッドの閉じる
                 .overlay(alignment: .bottomTrailing) {
-                    if showCustomKeypad {
+                    if usesCustomKeypad && showCustomKeypad {
                         CloseKeyboardButton { showCustomKeypad = false }
                             .padding(.trailing, 12)
                             .padding(.bottom,
@@ -151,10 +158,25 @@ struct AddTransactionView: View {
                                 memo = memo.isEmpty ? m : "\(memo) \(m)"
                             }
                             // 金額編集しやすいよう自作キーパッドを出しておく
-                            showCustomKeypad = true
+                            if usesCustomKeypad { showCustomKeypad = true }
                         }
                         .navigationTitle("レシート読み取り")
                     }
+                }
+                .onAppear {
+                    if !usesCustomKeypad { showCustomKeypad = false }
+                    amountText = amount == 0 ? "" : String(amount)
+                }
+                .onChange(of: usesCustomKeypad) { _, newValue in
+                    if !newValue { showCustomKeypad = false; amountFieldFocused = false }
+                }
+                .onChange(of: amount) { _, newValue in
+                    amountText = newValue == 0 ? "" : String(newValue)
+                }
+                .onChange(of: amountText) { _, newValue in
+                    let filtered = newValue.filter { $0.isNumber }
+                    if filtered != newValue { amountText = filtered }
+                    if let val = Int(filtered) { amount = val } else { amount = 0 }
                 }
         }
     }
@@ -317,28 +339,47 @@ struct AddTransactionView: View {
             // 金額
             VStack(alignment: .leading, spacing: 6) {
                 Text("金額").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                HStack {
-                    Spacer()
-                    Text(currency(amount))
+                if prefersCustomKeypad {
+                    HStack {
+                        Spacer()
+                        Text(currency(amount))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.secondary.opacity(0.1))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.2))
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        memoFocused = false
+                        tagFieldFocused = false
+                        withAnimation(.easeInOut(duration: 0.2)) { if prefersCustomKeypad { showCustomKeypad = true } }
+                    }
+                    .accessibilityAddTraits(.isButton)
+                } else {
+                    TextField("0", text: $amountText)
+                        .keyboardType(.numberPad)
+                        .focused($amountFieldFocused)
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
+                        .multilineTextAlignment(.trailing)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.secondary.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.secondary.opacity(0.2))
+                        )
                 }
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.secondary.opacity(0.1))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.secondary.opacity(0.2))
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    memoFocused = false
-                    tagFieldFocused = false
-                    withAnimation(.easeInOut(duration: 0.2)) { showCustomKeypad = true }
-                }
-                .accessibilityAddTraits(.isButton)
             }
             
             // メモ

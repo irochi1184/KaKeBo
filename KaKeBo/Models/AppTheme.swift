@@ -53,16 +53,21 @@ struct AppTheme: Codable, Equatable {
     
     // 現在有効なプリセット（カスタム編集をしたら custom に）
     var activePreset: Preset = .default
-    
+
     // アクセント
     var useSameAccentForBoth: Bool = true
     var accentLightRGBA: RGBAColor = .init(Color.blue) // 例：デフォルト
     var accentDarkRGBA:  RGBAColor = .init(Color.blue)
-    
+
     // 背景
     var useSameBackgroundForBoth: Bool = false
     var backgroundLightRGBA: RGBAColor = .init(Color(red: 250/255, green: 250/255, blue: 250/255))
     var backgroundDarkRGBA:  RGBAColor = .init(Color(red: 18/255, green: 18/255, blue: 18/255))
+
+    // 入力まわり
+    var prefersCustomKeypad: Bool = true
+    var keypadIncomeRGBA: RGBAColor = .init(Color.green)
+    var keypadExpenseRGBA: RGBAColor = .init(Color.red)
     
     mutating func apply(_ preset: Preset) {
         activePreset = preset
@@ -124,5 +129,9 @@ struct AppTheme: Codable, Equatable {
         }
         if useSameBackgroundForBoth { return backgroundLightRGBA.swiftUIColor }
         return scheme == .dark ? backgroundDarkRGBA.swiftUIColor : backgroundLightRGBA.swiftUIColor
+    }
+
+    func keypadColor(isIncome: Bool) -> Color {
+        isIncome ? keypadIncomeRGBA.swiftUIColor : keypadExpenseRGBA.swiftUIColor
     }
 }
