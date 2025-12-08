@@ -367,19 +367,11 @@ struct EditTransactionView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("金額").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
                 if prefersCustomKeypad {
-                    ZStack {
-                        HStack {
-                            Spacer()
-                            Text(currency(amount))
-                                .font(.title3.weight(.semibold))
-                                .monospacedDigit()
-                        }
-                        // 物理キーボードからの入力を受け付ける透明なテキストフィールド
-                        TextField("0", text: $amountText)
-                            .keyboardType(.numberPad)
-                            .focused($amountFieldFocused)
-                            .opacity(0.01)
-                            .allowsHitTesting(false)
+                    HStack {
+                        Spacer()
+                        Text(currency(amount))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
                     }
                     .padding(10)
                     .background(
@@ -395,7 +387,6 @@ struct EditTransactionView: View {
                         // メモ/タグのフォーカスを外してシステムKBを閉じる → 自作キーパッドを出す
                         memoFocused = false
                         tagFieldFocused = false
-                        amountFieldFocused = true
                         withAnimation(.easeInOut(duration: 0.2)) { if prefersCustomKeypad { showCustomKeypad = true } }
                     }
                     .accessibilityAddTraits(.isButton)
