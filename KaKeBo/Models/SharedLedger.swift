@@ -22,6 +22,10 @@ struct SharedLedger: Identifiable, Hashable {
 
 extension SharedLedger {
     static let recordType = "SharedLedger"
+    static let zoneID = CKRecordZone.ID(
+        zoneName: "SharedLedgerZone",
+        ownerName: CKCurrentUserDefaultName
+    )
     
     enum FieldKey {
         static let name = "name"
@@ -67,7 +71,10 @@ extension SharedLedger {
     static func new(name: String, icon: String, colorHex: String, ownerUserId: String) -> SharedLedger {
         let now = Date()
         return SharedLedger(
-            id: CKRecord.ID(recordName: UUID().uuidString),
+            id: CKRecord.ID(
+                recordName: UUID().uuidString,
+                zoneID: Self.zoneID
+            ),
             name: name,
             icon: icon,
             colorHex: colorHex,
