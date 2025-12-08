@@ -39,13 +39,17 @@ final class SharedLedgerStore: ObservableObject {
     }
     
     private var ledgerSourceMap: [CKRecord.ID: LedgerSource] = [:]
-    
+
     init(container: CKContainer = .default()) {
         self.container = container
         self.db = container.privateCloudDatabase
         self.sharedDB = container.sharedCloudDatabase
+
+        Task {
+            try? await self.ensureSharedZone()
+        }
     }
-    
+
     private let lastOpenedLedgerKey = "LastOpenedSharedLedgerRecordName"
     
     // 最後に開いた家計簿を記録
@@ -62,15 +66,29 @@ final class SharedLedgerStore: ObservableObject {
     }
     
     // MARK: - Helper
-    
+
     private func currentUserId() async throws -> String {
         let user = try await container.userRecordID()
         return user.recordName
     }
-    
-    private func queryRecords(_ query: CKQuery, in db: CKDatabase) async throws -> [CKRecord] {
+
+    private func ensureSharedZone() async throws {
+        let zone = CKRecordZone(zoneID: SharedLedger.zoneID)
+        _ = try await db.modifyRecordZones(saving: [zone], deleting: [])
+    }
+
+    private func queryRecords(
+        _ query: CKQuery,
+        in db: CKDatabase,
+        zoneID: CKRecordZone.ID? = nil
+    ) async throws -> [CKRecord] {
         var allRecords: [CKRecord] = []
-        
+        let resolvedZoneID: CKRecordZone.ID? = {
+            if let zoneID { return zoneID }
+            if db.databaseScope == .private { return SharedLedger.zoneID }
+            return nil
+        }()
+
         func append(from matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)]) {
             for (_, result) in matchResults {
                 if case .success(let record) = result {
@@ -78,11 +96,16 @@ final class SharedLedgerStore: ObservableObject {
                 }
             }
         }
-        
+
         if db.databaseScope == .shared {
             // 共有DB：ゾーンごとにクエリする
-            let zones = try await db.allRecordZones()
-            
+            let zones: [CKRecordZone] = {
+                if let resolvedZoneID {
+                    return [CKRecordZone(zoneID: resolvedZoneID)]
+                }
+                return (try? await db.allRecordZones()) ?? []
+            }()
+
             for zone in zones {
                 var current = try await db.records(
                     matching: query,
@@ -91,7 +114,7 @@ final class SharedLedgerStore: ObservableObject {
                     resultsLimit: 0    // 0 = 上限なし
                 )
                 append(from: current.matchResults)
-                
+
                 while let cursor = current.queryCursor {
                     current = try await db.records(
                         continuingMatchFrom: cursor,
@@ -105,7 +128,7 @@ final class SharedLedgerStore: ObservableObject {
             // private / public DB：今まで通りでOK
             var current = try await db.records(
                 matching: query,
-                inZoneWith: nil,
+                inZoneWith: resolvedZoneID,
                 desiredKeys: nil,
                 resultsLimit: 0
             )
@@ -215,10 +238,12 @@ final class SharedLedgerStore: ObservableObject {
                 ownerUserId: userId
             )
             let record = ledger.makeRecord()
-            
+
             let saved = try await db.save(record)
             let final = SharedLedger(record: saved) ?? ledger
-            
+
+            ledgerSourceMap[final.id] = .private
+
             ledgers.append(final)
             ledgers.sort { $0.createdAt < $1.createdAt }
             
