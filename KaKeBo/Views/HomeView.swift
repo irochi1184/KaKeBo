@@ -15,6 +15,7 @@ struct HomeView: View {
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @EnvironmentObject var ledgerContext: LedgerContext
+    @EnvironmentObject var monthStartStore: MonthStartStore
     @State private var showAdd = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var hSize
@@ -22,6 +23,7 @@ struct HomeView: View {
     // 最後に開いたモード／共有家計簿IDを保存
     @AppStorage("home.lastLedgerMode") private var lastLedgerModeRaw: String = "personal"
     @AppStorage("home.lastSharedLedgerRecordName") private var lastSharedLedgerRecordName: String?
+    @AppStorage("monthStart.onboardingDone") private var monthStartOnboardingDone = false
     
     @State private var selectedMonth: Date = {
         let cal = Calendar.current
@@ -30,12 +32,16 @@ struct HomeView: View {
     }()
     @State private var editingTx: Transaction? = nil
     @State private var editingSharedTx: SharedTransaction? = nil
+
+    @State private var showMonthStartIntro = false
     
     // ▼ 追加：カード順序の状態とドラッグ中のカード
     @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .donut, .daily, .transactions])
     @State private var dragging: DashboardCard?
-    
+
     private let dropUTIs: [UTType] = [.plainText] // onDrag のペイロード種別
+
+    private var monthResolver: MonthStartResolver { monthStartStore.resolver() }
     
     var body: some View {
         NavigationStack {
@@ -102,12 +108,29 @@ struct HomeView: View {
                         .presentationDetents([.large])
                 }
             }
+            .sheet(isPresented: $showMonthStartIntro) {
+                NavigationStack {
+                    MonthStartOnboardingView(
+                        settings: $monthStartStore.settings,
+                        onFinish: {
+                            monthStartOnboardingDone = true
+                            showMonthStartIntro = false
+                        }
+                    )
+                    .navigationTitle("月の開始日")
+                    .navigationBarTitleDisplayMode(.inline)
+                }
+                .onDisappear { monthStartOnboardingDone = true }
+            }
             .onChange(of: selectedMonth) { _, _ in
                 selectedMonth = monthStart(selectedMonth)
             }
         }
         .onAppear {
             store.applyFixedExpensesForCurrentMonth()
+            if !monthStartOnboardingDone {
+                showMonthStartIntro = true
+            }
         }
         .task {
             //   LedgerContext に任せる
@@ -184,11 +207,10 @@ struct HomeView: View {
                     
                     // ④ 当月の履歴リスト
 //                    let monthTxs = sharedThisMonthTx(allTxs: allTxs)
-                    
+
                     TransactionListCard(
                         sharedTransactions: allTxs.filter { tx in
-                            let cal = Calendar.current
-                            return cal.isDate(tx.date, equalTo: selectedMonth, toGranularity: .month)
+                            isInCurrentMonth(tx.date)
                         },
                         categories: cats,
                         onEdit: { tx in editingSharedTx = tx }
@@ -299,9 +321,16 @@ struct HomeView: View {
 
 // MARK: - ヘルパ（選択月に基づく集計）
 extension HomeView {
+    private func isInCurrentMonth(_ date: Date) -> Bool {
+        monthResolver.contains(date, inMonthOf: selectedMonth)
+    }
+
+    private func isInMonth(_ date: Date, anchor: Date) -> Bool {
+        monthResolver.contains(date, inMonthOf: anchor)
+    }
+
     private var thisMonthTx: [Transaction] {
-        let cal = Calendar.current
-        return store.transactions.filter { cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
+        store.transactions.filter { isInCurrentMonth($0.date) }
     }
     
     private var monthIncome: Int {
@@ -316,9 +345,8 @@ extension HomeView {
     
     // 円グラフ：カテゴリ別支出（選択月）
     private var expenseBreakdown: [CategorySlice] {
-        let cal = Calendar.current
         let expenseTx = store.transactions.filter {
-            $0.type == .expense && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+            $0.type == .expense && isInCurrentMonth($0.date)
         }
         var dict: [UUID: Int] = [:]
         for tx in expenseTx { dict[tx.categoryId, default: 0] += tx.amount }
@@ -328,10 +356,9 @@ extension HomeView {
         }
         .sorted { $0.value > $1.value }
     }
-    
+
     private var incomeBreakdown: [CategorySlice] {
-        let cal = Calendar.current
-        let tx = store.transactions.filter { $0.type == .income && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
+        let tx = store.transactions.filter { $0.type == .income && isInCurrentMonth($0.date) }
         var dict: [UUID: Int] = [:]
         tx.forEach { dict[$0.categoryId, default: 0] += $0.amount }
         return dict.compactMap { (id, sum) in
@@ -340,12 +367,12 @@ extension HomeView {
         }.sorted { $0.value > $1.value }
     }
 
-    
+
     // 棒グラフ：日別支出（選択月）
     private var dailySeries: [DailyPoint] {
         let cal = Calendar.current
         let expenseTx = store.transactions.filter {
-            $0.type == .expense && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+            $0.type == .expense && isInCurrentMonth($0.date)
         }
         var dict: [Date: Int] = [:]
         for tx in expenseTx {
@@ -354,26 +381,23 @@ extension HomeView {
         }
         return dict.keys.sorted().map { day in DailyPoint(date: day, amount: dict[day] ?? 0) }
     }
-    
+
     private var allThisMonthTransactions: [Transaction] {
-        let cal = Calendar.current
         return store.transactions
-            .filter { cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
+            .filter { isInCurrentMonth($0.date) }
             .sorted { $0.date > $1.date }
     }
-    
+
     // MARK: - 共有家計簿：月次集計
     private func sharedMonthIncome(txs: [SharedTransaction]) -> Int {
-        let cal = Calendar.current
         return txs
-            .filter { $0.type == .income && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
+            .filter { $0.type == .income && isInCurrentMonth($0.date) }
             .reduce(0) { $0 + $1.amount }
     }
-    
+
     private func sharedMonthExpense(txs: [SharedTransaction]) -> Int {
-        let cal = Calendar.current
         return txs
-            .filter { $0.type == .expense && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month) }
+            .filter { $0.type == .expense && isInCurrentMonth($0.date) }
             .reduce(0) { $0 + $1.amount }
     }
     
@@ -385,23 +409,22 @@ extension HomeView {
         let cal = Calendar.current
         let prev = cal.date(byAdding: .month, value: -1, to: selectedMonth) ?? selectedMonth
         return allTxs
-            .filter { $0.type == .expense && cal.isDate($0.date, equalTo: prev, toGranularity: .month) }
+            .filter { $0.type == .expense && isInMonth($0.date, anchor: prev) }
             .reduce(0) { $0 + $1.amount }
     }
-    
+
     private func sharedPrevMonthIncome(allTxs: [SharedTransaction]) -> Int {
         let cal = Calendar.current
         let prev = cal.date(byAdding: .month, value: -1, to: selectedMonth) ?? selectedMonth
         return allTxs
-            .filter { $0.type == .income && cal.isDate($0.date, equalTo: prev, toGranularity: .month) }
+            .filter { $0.type == .income && isInMonth($0.date, anchor: prev) }
             .reduce(0) { $0 + $1.amount }
     }
-    
+
     // MARK: - 共有家計簿：カテゴリ別円グラフ
     private func sharedExpenseBreakdown(allTxs: [SharedTransaction]) -> [CategorySlice] {
-        let cal = Calendar.current
         let expenseTx = allTxs.filter {
-            $0.type == .expense && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+            $0.type == .expense && isInCurrentMonth($0.date)
         }
         
         // カテゴリ名ごとに合計
@@ -425,9 +448,8 @@ extension HomeView {
     }
     
     private func sharedIncomeBreakdown(allTxs: [SharedTransaction]) -> [CategorySlice] {
-        let cal = Calendar.current
         let incomeTx = allTxs.filter {
-            $0.type == .income && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+            $0.type == .income && isInCurrentMonth($0.date)
         }
         
         var dict: [String: (total: Int, color: Color)] = [:]
@@ -453,7 +475,7 @@ extension HomeView {
     private func sharedDailySeries(allTxs: [SharedTransaction]) -> [DailyPoint] {
         let cal = Calendar.current
         let expenseTx = allTxs.filter {
-            $0.type == .expense && cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+            $0.type == .expense && isInCurrentMonth($0.date)
         }
         
         var dict: [Date: Int] = [:]
@@ -468,9 +490,8 @@ extension HomeView {
     }
     
     private func sharedThisMonthTx(allTxs: [SharedTransaction]) -> [SharedTransaction] {
-        let cal = Calendar.current
         return allTxs.filter {
-            cal.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+            isInCurrentMonth($0.date)
         }
     }
     
@@ -514,15 +535,15 @@ extension HomeView {
         let cal = Calendar.current
         let prev = cal.date(byAdding: .month, value: -1, to: selectedMonth) ?? selectedMonth
         return store.transactions
-            .filter { $0.type == .expense && cal.isDate($0.date, equalTo: prev, toGranularity: .month) }
+            .filter { $0.type == .expense && isInMonth($0.date, anchor: prev) }
             .reduce(0) { $0 + $1.amount }
     }
-    
+
     private var prevMonthIncome: Int {
         let cal = Calendar.current
         let prev = cal.date(byAdding: .month, value: -1, to: selectedMonth) ?? selectedMonth
         return store.transactions
-            .filter { $0.type == .income && cal.isDate($0.date, equalTo: prev, toGranularity: .month) }
+            .filter { $0.type == .income && isInMonth($0.date, anchor: prev) }
             .reduce(0) { $0 + $1.amount }
     }
 }

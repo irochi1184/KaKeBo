@@ -16,6 +16,7 @@ struct SettingsView: View {
     @EnvironmentObject var pm: PurchaseManager
     @EnvironmentObject var lock: AppLockManager
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
+    @EnvironmentObject var monthStartStore: MonthStartStore
     
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
@@ -58,7 +59,7 @@ struct SettingsView: View {
     }
     
     enum Sheet: Identifiable {
-        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers
+        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers, monthStart
         var id: String { "sheet-\(self)" }
     }
     // 外部URL
@@ -166,7 +167,7 @@ struct SettingsView: View {
                         }
                         .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
-                        
+
                     case .theme:
                         NavigationStack {
                             ThemeSettingsView()
@@ -175,7 +176,7 @@ struct SettingsView: View {
                         }
                         .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
-                        
+
                     case .help:
                         NavigationStack {
                             HelpFAQView()
@@ -184,7 +185,7 @@ struct SettingsView: View {
                         }
                         .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
-                        
+
                     case .lock:
                         NavigationStack {
                             LockSettingsView()
@@ -193,12 +194,21 @@ struct SettingsView: View {
                         }
                         .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
-                    
+
                     case .sharedLedgers:
                         NavigationStack {
                             SharedLedgerListScreen()
                                 .environmentObject(sharedLedgerStore)
                                 .navigationTitle("共有家計簿")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+
+                    case .monthStart:
+                        NavigationStack {
+                            MonthStartSettingsView()
+                                .navigationTitle("月の開始日")
                                 .navigationBarTitleDisplayMode(.inline)
                         }
                         .presentationDetents([.large, .medium])
@@ -358,7 +368,14 @@ struct SettingsView: View {
                 accent: accent,
                 trailingText: nil
             ) { sheet = .lock }
-            
+
+            SettingsRowButton(
+                title: "月の開始日を設定",
+                systemImage: "calendar.badge.plus",
+                accent: accent,
+                trailingText: monthStartSummary
+            ) { sheet = .monthStart }
+
             SettingsRowButton(
                 title: "共有家計簿を管理",
                 systemImage: "person.2",
@@ -502,6 +519,18 @@ struct SettingsView: View {
     }
     
     private func showLockSettingsSheet() { showLockSheet = true }
+
+    private var monthStartSummary: String {
+        let s = monthStartStore.settings
+        let prefix = s.isCustomStartEnabled ? "毎月\(s.startDay)日" : "毎月1日"
+        let suffix: String
+        switch s.holidayAdjustment {
+        case .none: suffix = "休日はそのまま"
+        case .previousWeekday: suffix = "休日は前倒し"
+        case .nextWeekday: suffix = "休日は後ろ倒し"
+        }
+        return s.isCustomStartEnabled ? "\(prefix) / \(suffix)" : prefix
+    }
 }
 
 // ======================================================

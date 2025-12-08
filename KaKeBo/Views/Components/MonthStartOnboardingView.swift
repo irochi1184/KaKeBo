@@ -1,0 +1,102 @@
+//
+//  Views/Components/MonthStartOnboardingView.swift
+//  KaKeBo
+//
+//  Created by OpenAI on 2025/02/23.
+//
+
+import SwiftUI
+
+struct MonthStartOnboardingView: View {
+    @Binding var settings: MonthStartSettings
+    let onFinish: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var resolver: MonthStartResolver {
+        MonthStartResolver(settings: settings, holidayProvider: JapaneseHolidayProvider())
+    }
+
+    private var previewText: String {
+        let f = DateFormatter(); f.locale = Locale(identifier: "ja_JP"); f.dateFormat = "M月d日（E）から"
+        return f.string(from: resolver.startDate(for: Date()))
+    }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("家計管理を自分のサイクルに合わせましょう")
+                    .font(.headline)
+                Text("月の開始日を決めると、ホームの集計やグラフがその日を基準に表示されます。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle("カスタム開始日を使う", isOn: Binding(
+                    get: { settings.isCustomStartEnabled },
+                    set: { settings.isCustomStartEnabled = $0 }
+                ))
+
+                if settings.isCustomStartEnabled {
+                    Stepper(value: Binding(
+                        get: { settings.startDay },
+                        set: { settings.startDay = min(max($0, 1), 31) }
+                    ), in: 1...31) {
+                        Text("毎月\(settings.startDay)日スタート")
+                    }
+
+                    Picker("土日祝日に当たる場合", selection: Binding(
+                        get: { settings.holidayAdjustment },
+                        set: { settings.holidayAdjustment = $0 }
+                    )) {
+                        ForEach(MonthStartAdjustment.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                HStack {
+                    Image(systemName: "calendar")
+                        .foregroundStyle(.secondary)
+                    Text("今月は \(previewText)")
+                    Spacer()
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                )
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(UIColor.secondarySystemBackground))
+            )
+
+            Spacer()
+
+            VStack(spacing: 12) {
+                Button(role: .cancel) {
+                    onFinish()
+                    dismiss()
+                } label: {
+                    Text("あとで決める")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    onFinish()
+                    dismiss()
+                } label: {
+                    Text(settings.isCustomStartEnabled ? "この設定で開始する" : "1日開始で続ける")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+    }
+}
