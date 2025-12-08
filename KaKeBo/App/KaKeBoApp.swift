@@ -15,6 +15,7 @@ struct KaKeBoApp: App {
     @StateObject private var purchase = PurchaseManager()
     @StateObject private var ledgerContext = LedgerContext()
     @StateObject private var lock = AppLockManager.shared
+    @StateObject private var monthStartStore = MonthStartStore()
     
     @Environment(\.scenePhase) private var scenePhase
     
@@ -32,6 +33,7 @@ struct KaKeBoApp: App {
                 .environmentObject(purchase)
                 .environmentObject(lock)
                 .environmentObject(ledgerContext)
+                .environmentObject(monthStartStore)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
                 .task { await purchase.load() }
             // 初回起動時のみ、ロック有効ならロック
