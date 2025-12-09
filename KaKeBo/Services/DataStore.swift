@@ -116,7 +116,7 @@ final class DataStore: ObservableObject {
         if let dtos = loadJSON([TransactionDTO].self, from: transactionsURL) {
             transactions = dtos.map { dto in
                 let typeVal: TransactionType = (dto.type.lowercased() == "income") ? .income : .expense
-                return Transaction(id: dto.id, date: dto.date, amount: dto.amount, type: typeVal, memo: dto.memo, categoryId: dto.categoryId)
+                return Transaction(id: dto.id, date: dto.date, amount: dto.amount, type: typeVal, memo: dto.memo, categoryId: dto.categoryId, tags: dto.tags ?? [])
             }
         } else if let old = loadJSON([Transaction].self, from: transactionsURL) {
             transactions = old
@@ -132,7 +132,7 @@ final class DataStore: ObservableObject {
         let dtos: [TransactionDTO] = transactions.map { tx in
             let typeStr: String
             switch tx.type { case .income: typeStr = "income"; case .expense: typeStr = "expense" }
-            return TransactionDTO(id: tx.id, date: tx.date, amount: tx.amount, type: typeStr, categoryId: tx.categoryId, memo: tx.memo)
+            return TransactionDTO(id: tx.id, date: tx.date, amount: tx.amount, type: typeStr, categoryId: tx.categoryId, memo: tx.memo, tags: tx.tags)
         }
         saveJSON(dtos, to: transactionsURL)
         
@@ -148,7 +148,7 @@ final class DataStore: ObservableObject {
         let dtos: [TransactionDTO] = transactions.map { tx in
             let typeStr: String
             switch tx.type { case .income: typeStr = "income"; case .expense: typeStr = "expense" }
-            return TransactionDTO(id: tx.id, date: tx.date, amount: tx.amount, type: typeStr, categoryId: tx.categoryId, memo: tx.memo)
+            return TransactionDTO(id: tx.id, date: tx.date, amount: tx.amount, type: typeStr, categoryId: tx.categoryId, memo: tx.memo, tags: tx.tags)
         }
         saveJSON(dtos, to: transactionsURL)
         WidgetCenter.shared.reloadAllTimelines()
@@ -269,7 +269,8 @@ extension DataStore {
                     amount: t.amount,
                     type: .expense,
                     memo: t.memo ?? t.title,
-                    categoryId: t.categoryId
+                    categoryId: t.categoryId,
+                    tags: []
                 )
                 transactions.insert(tx, at: 0)
                 posted.insert(t.id)
@@ -298,7 +299,8 @@ extension DataStore {
             amount: t.amount,
             type: .expense,
             memo: t.memo ?? t.title,
-            categoryId: t.categoryId
+            categoryId: t.categoryId,
+            tags: []
         )
         transactions.insert(tx, at: 0)
         saveTransactions()

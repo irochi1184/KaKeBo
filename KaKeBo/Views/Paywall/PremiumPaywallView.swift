@@ -105,6 +105,12 @@ struct PremiumPaywallView: View {
                 subtitle: "無料プランは5件まで。6件目以降の固定費テンプレートの登録・運用が可能に。自動計上で漏れゼロへ。",
                 accent: accent
             )
+            FeatureCard(
+                icon: "tag.fill",
+                title: "タグを無制限に管理",
+                subtitle: "支出やメモに自由にタグを付けて分類。無制限で追加・編集が可能に。目的別の分析や検索がよりスムーズに。",
+                accent: accent
+            )
         }
         .padding(14)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
@@ -122,6 +128,10 @@ struct PremiumPaywallView: View {
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
+            
+            TrialBanner(text: "今なら1週間無料でサブスクをお試しいただけます")
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .padding(.bottom, 2)
             
             if pm.isLoading {
                 ProgressView().padding(.vertical, 24)
@@ -144,7 +154,6 @@ struct PremiumPaywallView: View {
                 }
             }
             
-            // 🟡 買い切り補足をここに追加
             Text("こちらは一度購入いただくと永久的に全ての機能をご利用いただけます。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -300,5 +309,30 @@ private struct LegalBlock: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.primary.opacity(0.08))
         )
+    }
+}
+
+private struct TrialBanner: View {
+    let text: String
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "gift.fill")
+                .imageScale(.medium)
+                .font(.body)
+                .symbolRenderingMode(.hierarchical)
+            Text(text)
+                .font(.subheadline)
+                .lineLimit(2)
+                .minimumScaleFactor(0.9)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(.quaternary, lineWidth: 0.5)
+        }
+        .accessibilityLabel("無料お試しのお知らせ")
     }
 }

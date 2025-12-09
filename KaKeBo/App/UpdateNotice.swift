@@ -59,16 +59,15 @@ private struct UpdateNoticeCard: View {
     // 文言はここだけ編集すればOK
     private var title: String { "KaKeBo \(AppVersion.current) アップデート" }
     private let newFeatures: [String] = [
-        "アプリ起動時にパスコードで保護できる『アプリロック機能』を追加",
-        "パスワード桁数を4〜10桁から自由に設定可能に改良",
-        "Face ID・Touch ID によるロック解除に対応",
-        "レシートを撮影・または写真から選択して金額を自動入力できるOCR機能を追加"
+        "共有家計簿に対応し、ホーム/カレンダー/レポート/履歴で個人用と共有を切り替え可能に",
+        "月の開始日を1〜31日から自由に設定できるように改善",
+        "カスタムキーボードの ON / OFF を無料ユーザーでも切り替え可能に",
+        "プレミアムユーザーはカスタムキーボードの色を自由にカスタマイズ可能に",
+        "レシート撮影（OCR）の精度を改善し、金額入力がより正確に",
+        "固定費に設定できるカテゴリーの選択範囲を拡張",
+        "取引の追加や編集後、レポートのグラフ表示がすぐに更新されるように改善"
     ]
-    private let others: [String] = [
-        "通知の軽微な修正",
-        "一部デバイスのレイアウト崩れを修正",
-        "レポート画面のシェア機能を廃止"
-    ]
+    private let others: [String] = []
     
     @State private var showDetail = false
     
@@ -85,11 +84,13 @@ private struct UpdateNoticeCard: View {
                                    items: newFeatures,
                                    symbol: "checkmark.seal.fill",
                                    tint: accent)
-                    
-                    FeatureSection(title: "その他",
-                                   items: others,
-                                   symbol: "wrench.adjustable",
-                                   tint: .secondary)
+
+                    if !others.isEmpty {
+                        FeatureSection(title: "その他",
+                                       items: others,
+                                       symbol: "wrench.adjustable",
+                                       tint: .secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 2)

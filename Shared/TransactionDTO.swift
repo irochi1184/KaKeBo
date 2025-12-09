@@ -16,14 +16,16 @@ public struct TransactionDTO: Codable, Identifiable {
     public let type: String   // "income" or "expense"
     public let categoryId: UUID
     public let memo: String
+    let tags: [String]?
     
-    public init(id: UUID, date: Date, amount: Int, type: String, categoryId: UUID, memo: String) {
+    public init(id: UUID, date: Date, amount: Int, type: String, categoryId: UUID, memo: String, tags: [String]) {
         self.id = id
         self.date = date
         self.amount = amount
         self.type = type
         self.categoryId = categoryId
         self.memo = memo
+        self.tags = tags
     }
 }
 
@@ -51,6 +53,7 @@ public protocol TransactionConvertible {
     var typeRawValue: String { get }
     var categoryId: UUID { get }
     var memo: String { get }
+    var tags: [String] { get }
 }
 
 public extension TransactionDTO {
@@ -62,6 +65,7 @@ public extension TransactionDTO {
         self.type = tx.typeRawValue.lowercased()
         self.categoryId = tx.categoryId
         self.memo = tx.memo
+        self.tags = tx.tags
     }
 }
 

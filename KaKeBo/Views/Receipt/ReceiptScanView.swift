@@ -11,6 +11,8 @@ import VisionKit
 import PhotosUI
 import AVFoundation
 import UIKit
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 struct ReceiptScanView: View {
     @Environment(\.dismiss) private var dismiss
@@ -88,7 +90,7 @@ struct ReceiptScanView: View {
             PhotoPickerBridge { uiImage in
                 Task {
                     do {
-                        guard let cg = uiImage.cgImage else {
+                        guard let cg = preprocessImageForOCR(uiImage) else {
                             errorMessage = "画像の読み込みに失敗しました。"; return
                         }
                         let text = try await recognizeText(from: cg)
@@ -177,7 +179,7 @@ fileprivate struct DataScannerContainer: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> DataScannerViewController {
         let vc = DataScannerViewController(
             recognizedDataTypes: [.text()],
-            qualityLevel: .balanced,
+            qualityLevel: .accurate,
             recognizesMultipleItems: true,
             isHighFrameRateTrackingEnabled: false,
             isHighlightingEnabled: true
@@ -226,12 +228,35 @@ fileprivate func recognizeText(from image: CGImage) async throws -> String {
     request.recognitionLanguages = ["ja-JP", "en-US"]
     request.usesLanguageCorrection = true
     request.recognitionLevel = .accurate
-    
+    request.minimumTextHeight = 0.015
+
     let handler = VNImageRequestHandler(cgImage: image, options: [:])
     try handler.perform([request])
-    
+
     let text = request.results?
         .compactMap { $0.topCandidates(1).first?.string }
         .joined(separator: "\n")
     return text ?? ""
+}
+
+// MARK: - 画像前処理
+fileprivate func preprocessImageForOCR(_ image: UIImage) -> CGImage? {
+    guard var ciImage = CIImage(image: image) else { return image.cgImage }
+
+    // コントラストを強め、彩度を落とすことで文字のエッジを際立たせる
+    let colorControls = CIFilter.colorControls()
+    colorControls.inputImage = ciImage
+    colorControls.contrast = 1.2
+    colorControls.saturation = 0.0
+    colorControls.brightness = 0.0
+    ciImage = colorControls.outputImage ?? ciImage
+
+    // 軽く露出補正をかけて暗部の文字を拾いやすくする
+    let exposure = CIFilter.exposureAdjust()
+    exposure.inputImage = ciImage
+    exposure.ev = 0.3
+    ciImage = exposure.outputImage ?? ciImage
+
+    let context = CIContext()
+    return context.createCGImage(ciImage, from: ciImage.extent)
 }

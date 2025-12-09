@@ -7,27 +7,40 @@
 
 import SwiftUI
 import UIKit
+import CloudKit
 
 struct AddTransactionView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
+    @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject var purchase: PurchaseManager
     
     // MARK: - States
     @State private var date: Date = Date()
     @State private var amount: Int = 0
+    @State private var amountText: String = "0"
     @State private var type: TransactionType = .expense
     @State private var memo: String = ""
     @State private var selectedCategoryId: UUID?
-    
+    @State private var selectedSharedCategoryId: CKRecord.ID?
+
+    @State private var tags: [String] = []
+    @State private var tagInput: String = ""
+
     // キーボード／UI
     @State private var isKeyboardVisible = false
     @FocusState private var memoFocused: Bool
+    @FocusState private var amountFieldFocused: Bool
+    @FocusState private var tagFieldFocused: Bool
     @State private var showCustomKeypad = true
     @State private var keypadHeight: CGFloat = 0
     @StateObject private var kb = KeyboardHeightReader()
     @State private var showAddCategory = false
+    @State private var showAddSharedCategory = false
+    @State private var showPaywall = false
     
     // ★ レシートスキャン表示フラグ
     @State private var showReceiptScanner = false
@@ -42,6 +55,7 @@ struct AddTransactionView: View {
     ) {
         _selectedCategoryId = State(initialValue: defaultCategoryId)
         _amount = State(initialValue: defaultAmount ?? 0)
+        _amountText = State(initialValue: defaultAmount.map { String($0) } ?? "0")
         _date   = State(initialValue: defaultDate ?? Date())
         _type   = State(initialValue: defaultType)
         _memo   = State(initialValue: defaultMemo ?? "")
@@ -62,25 +76,29 @@ struct AddTransactionView: View {
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
-    
+    private var prefersCustomKeypad: Bool { themeStore.theme.prefersCustomKeypad }
+    private var keypadColor: Color { themeStore.theme.keypadColor(isIncome: type == .income) }
+
     // MARK: - Body
     var body: some View {
+        let usesCustomKeypad = prefersCustomKeypad
         NavigationStack {
             contentScroll
                 .background(bgGradient.ignoresSafeArea())
                 .navigationTitle("新規追加")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
-            
+
             // カスタム電卓
                 .safeAreaInset(edge: .bottom) {
-                    if showCustomKeypad {
+                    if usesCustomKeypad && showCustomKeypad {
                         ZStack {
                             NumericKeypad(
                                 amount: $amount,
                                 maxDigits: 9,
                                 style: .attached,
                                 isIncome: type == .income,
+                                baseColorOverride: keypadColor,
                                 sizeScale: keypadScale,
                                 preferredHeightRatio: keypadHeightRatio,
                                 onHeightChange: { h in keypadHeight = h }
@@ -90,10 +108,10 @@ struct AddTransactionView: View {
                         .offset(y: -keypadLift)
                     }
                 }
-            
+
             // 自作キーパッドの閉じる
                 .overlay(alignment: .bottomTrailing) {
-                    if showCustomKeypad {
+                    if usesCustomKeypad && showCustomKeypad {
                         CloseKeyboardButton { showCustomKeypad = false }
                             .padding(.trailing, 12)
                             .padding(.bottom,
@@ -139,11 +157,38 @@ struct AddTransactionView: View {
                                 // 既にメモがあれば追記、なければ置換
                                 memo = memo.isEmpty ? m : "\(memo) \(m)"
                             }
+                            if let hint = r.categoryHint {
+                                if ledgerContext.isPersonal {
+                                    if let cat = store.categories.first(where: { $0.name.contains(hint) }) {
+                                        selectedCategoryId = cat.id
+                                    }
+                                } else if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore),
+                                          let cats = sharedLedgerStore.categoriesByLedger[ledger.id] {
+                                    if let cat = cats.first(where: { $0.name.contains(hint) }) {
+                                        selectedSharedCategoryId = cat.id
+                                    }
+                                }
+                            }
                             // 金額編集しやすいよう自作キーパッドを出しておく
-                            showCustomKeypad = true
+                            if usesCustomKeypad { showCustomKeypad = true }
                         }
                         .navigationTitle("レシート読み取り")
                     }
+                }
+                .onAppear {
+                    if !usesCustomKeypad { showCustomKeypad = false }
+                    amountText = amount == 0 ? "" : String(amount)
+                }
+                .onChange(of: usesCustomKeypad) { _, newValue in
+                    if !newValue { showCustomKeypad = false; amountFieldFocused = false }
+                }
+                .onChange(of: amount) { _, newValue in
+                    amountText = newValue == 0 ? "" : String(newValue)
+                }
+                .onChange(of: amountText) { _, newValue in
+                    let filtered = newValue.filter { $0.isNumber }
+                    if filtered != newValue { amountText = filtered }
+                    if let val = Int(filtered) { amount = val } else { amount = 0 }
                 }
         }
     }
@@ -154,11 +199,102 @@ struct AddTransactionView: View {
             VStack(spacing: 18) {
                 metaSection.luxCard()
                 
-                CategorySelector(
-                    selectedCategoryId: $selectedCategoryId,
-                    onTapAdd: { showAddCategory = true }
-                )
-                .environmentObject(store)
+                if ledgerContext.isPersonal {
+                    CategorySelector(
+                        selectedCategoryId: $selectedCategoryId,
+                        onTapAdd: {
+                            showAddCategory = true
+                        }
+                    )
+                } else {
+                    SharedCategorySelector(
+                        selectedCategoryId: $selectedSharedCategoryId,
+                        onTapAdd: {
+                            showAddSharedCategory = true
+                        }
+                    )
+                }
+                
+                // タグ
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("タグ（任意）")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    if purchase.isPremiumActive {
+                        // 入力フィールド（空白・カンマ・読点・# で確定）
+                        HStack(spacing: 6) {
+                            TextField("例：家族 個人 (最大8文字)", text: $tagInput)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .submitLabel(.done)
+                                .focused($tagFieldFocused)
+                                .onSubmit { commitTagInput() }
+                                .onChange(of: tagInput) { _, newValue in
+                                    // 8文字を超えたら自動でカット
+                                    if newValue.count > 8 {
+                                        tagInput = String(newValue.prefix(8))
+                                    }
+                                    // 区切り文字が来たら即確定
+                                    if tagInput.contains(where: { " ,、　#".contains($0) }) {
+                                        commitTagInput()
+                                    }
+                                }
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(themeStore.theme.backgroundColor(for: scheme))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(.secondary.opacity(0.2), lineWidth: 1)
+                                )
+                            
+                            if !tagInput.isEmpty {
+                                Button {
+                                    commitTagInput()
+                                } label: {
+                                    Text("追加")
+                                        .font(.subheadline.weight(.semibold))
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                        
+                        // 付与済みタグ（削除ボタン付）
+                        if !tags.isEmpty {
+                            TagListView(
+                                tags: tags,
+                                onRemove: { t in removeTag(t) }
+                            )
+                        }
+                        
+                        // 最近使ったタグ（直近5件・トグル式）
+                        if !recentTags.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("最近使ったタグ")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                                
+                                SuggestedTagListView(
+                                    suggestions: recentTags,
+                                    isOn: { tags.contains($0) },
+                                    onToggle: { t in toggleTag(t) }
+                                )
+                            }
+                        }
+                    } else {
+                        LockedCustomSection(accent: themeStore.theme.accentColor(for: scheme)) {
+                            showPaywall = true
+                        }
+                    }
+                }
+                .luxCard()
+                .sheet(isPresented: $showPaywall) {
+                    PremiumPaywallView(accent: themeStore.theme.accentColor(for: scheme))
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+                }
                 
                 Spacer(minLength: showCustomKeypad ? (isSmallPhone ? 20 : 60) : 0)
             }
@@ -175,6 +311,32 @@ struct AddTransactionView: View {
                 .navigationTitle("カテゴリ追加")
             }
         }
+        .sheet(
+            isPresented: $showAddSharedCategory,
+            onDismiss: {
+                // シートが閉じられたタイミングでカテゴリ再読込
+                if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+                    Task {
+                        await sharedLedgerStore.reloadCategories(for: ledger)
+                    }
+                }
+            }
+        ) {
+            if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+                NavigationStack {
+                    SharedCategoryEditorView(ledger: ledger) { newSharedCat in
+                        // 共有用：CKRecord.ID を即選択状態にする
+                        selectedSharedCategoryId = newSharedCat.id
+                    }
+                    .environmentObject(sharedLedgerStore)
+                    .navigationTitle("カテゴリ追加")
+                }
+            } else {
+                Text("共有家計簿が選択されていません")
+                    .padding()
+            }
+        }
+
     }
     
     private var metaSection: some View {
@@ -189,27 +351,47 @@ struct AddTransactionView: View {
             // 金額
             VStack(alignment: .leading, spacing: 6) {
                 Text("金額").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                HStack {
-                    Spacer()
-                    Text(currency(amount))
+                if prefersCustomKeypad {
+                    HStack {
+                        Spacer()
+                        Text(currency(amount))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.secondary.opacity(0.1))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.2))
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        memoFocused = false
+                        tagFieldFocused = false
+                        withAnimation(.easeInOut(duration: 0.2)) { if prefersCustomKeypad { showCustomKeypad = true } }
+                    }
+                    .accessibilityAddTraits(.isButton)
+                } else {
+                    TextField("0", text: $amountText)
+                        .keyboardType(.numberPad)
+                        .focused($amountFieldFocused)
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
+                        .multilineTextAlignment(.trailing)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.secondary.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.secondary.opacity(0.2))
+                        )
                 }
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.secondary.opacity(0.1))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.secondary.opacity(0.2))
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    memoFocused = false
-                    withAnimation(.easeInOut(duration: 0.2)) { showCustomKeypad = true }
-                }
-                .accessibilityAddTraits(.isButton)
             }
             
             // メモ
@@ -260,6 +442,7 @@ struct AddTransactionView: View {
             Button {
                 // キーボードを閉じてからスキャナへ
                 memoFocused = false
+                tagFieldFocused = false
                 showCustomKeypad = false
                 showReceiptScanner = true
             } label: {
@@ -282,19 +465,124 @@ struct AddTransactionView: View {
             amount > 0
         else { return }
         
-        let tx = Transaction(
-            date: date,
-            amount: amount,
-            type: type,
-            memo: memo,
-            categoryId: chosen.id
-        )
-        store.addTransaction(tx)
+        let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // ▼ 1. 個人用家計簿のとき（今まで通り）
+        if ledgerContext.isPersonal {
+            let tx = Transaction(
+                date: date,
+                amount: amount,
+                type: type,
+                memo: trimmedMemo,
+                categoryId: chosen.id,
+                tags: tags
+            )
+            store.addTransaction(tx)
+            dismiss()
+            return
+        }
+        
+        // ▼ 2. 共有家計簿のとき（CloudKit に保存）
+        if ledgerContext.isShared,
+           let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+            
+            // 共有カテゴリが選ばれているか？
+            guard
+                let sharedCatId = selectedSharedCategoryId,
+                let cats = sharedLedgerStore.categoriesByLedger[ledger.id],
+                let sharedCat = cats.first(where: { $0.id == sharedCatId }),
+                amount > 0
+            else {
+                // カテゴリ未選択 or 見つからない場合は、とりあえず未分類扱いで保存するならここで分岐しても良い
+                return
+            }
+            
+            let sharedType: SharedTransactionType = (type == .income) ? .income : .expense
+            let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            Task {
+                await sharedLedgerStore.addTransaction(
+                    to: ledger,
+                    amount: amount,
+                    date: date,
+                    type: sharedType,
+                    memo: trimmedMemo.isEmpty ? nil : trimmedMemo,
+                    category: sharedCat   // ← ちゃんと渡す！！
+                )
+                dismiss()
+            }
+            return
+        }
+
+        // 念のため：どちらでもない場合は何もしないで閉じる
         dismiss()
+    }
+    
+    // MARK: - タグ周り
+    private func normalized(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "　", with: " ") // 全角空白→半角
+    }
+    private func commitTagInput() {
+        // 区切り文字で分割し、空要素を除外・重複除去
+        let seps = CharacterSet(charactersIn: " ,、　#")
+        let parts = normalized(tagInput)
+            .components(separatedBy: seps)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !parts.isEmpty else {
+            tagInput = ""
+            return
+        }
+        for p in parts { addTag(p) }
+        tagInput = ""
+    }
+    private func addTag(_ t: String) {
+        let v = normalized(t)
+        guard !v.isEmpty else { return }
+        
+        // ★ 文字数制限（8文字まで）
+        let limited = String(v.prefix(8))
+        
+        // 重複を防いで追加
+        if !tags.contains(limited) {
+            tags.append(limited)
+        }
+    }
+    private func toggleTag(_ t: String) {
+        let limited = String(t.prefix(8))
+        if let i = tags.firstIndex(of: limited) {
+            tags.remove(at: i)
+        } else {
+            if !tags.contains(limited) { tags.append(limited) }
+        }
+    }
+
+    private func removeTag(_ t: String) {
+        tags.removeAll { $0 == t }
+    }
+    
+    // 直近5件の「最近使ったタグ」
+    private var recentTags: [String] {
+        let stream = store.transactions
+            .flatMap { $0.tags.map { String($0.prefix(8)) } } // ★ 8文字に統一
+            .reversed()
+        
+        var seen = Set<String>()
+        var result: [String] = []
+        for t in stream {
+            if !seen.contains(t) {
+                seen.insert(t)
+                result.append(t)
+            }
+            if result.count >= 5 { break }
+        }
+        return result
     }
 }
 
-// MARK: - Buttons & Utils
+// MARK: - Buttons & Utils（既存）
+
 struct SaveButton: View {
     let isEnabled: Bool
     let accent: Color
@@ -344,5 +632,184 @@ private extension UIApplication {
             .compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }
             .first { $0.isKeyWindow }
+    }
+}
+
+// ===== 共通：等間隔フロー配置レイアウト =====
+struct FlowLayout<Data: RandomAccessCollection, Content: View>: View where Data.Element: Hashable {
+    let items: Data
+    let spacing: CGFloat
+    let lineSpacing: CGFloat
+    @ViewBuilder let content: (Data.Element) -> Content
+    
+    init(items: Data, spacing: CGFloat = 8, lineSpacing: CGFloat = 8, @ViewBuilder content: @escaping (Data.Element) -> Content) {
+        self.items = items
+        self.spacing = spacing
+        self.lineSpacing = lineSpacing
+        self.content = content
+    }
+    
+    var body: some View {
+        GeometryReader { geo in
+            self.generate(in: geo.size)
+        }
+        .frame(minHeight: 0)
+    }
+    
+    private func generate(in size: CGSize) -> some View {
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        return ZStack(alignment: .topLeading) {
+            ForEach(Array(items), id: \.self) { item in
+                content(item)
+                    .fixedSize() // ★ 内在サイズを尊重（広がらない）
+                    .alignmentGuide(.leading) { d in
+                        // 次を置いたらはみ出す？ → 改行
+                        if x + d.width > size.width {
+                            x = 0
+                            y += d.height + lineSpacing
+                        }
+                        let result = x
+                        x += d.width + spacing // ★ 等間隔で進める
+                        return result
+                    }
+                    .alignmentGuide(.top) { _ in y }
+            }
+        }
+    }
+}
+
+// ===== 安定版：等間隔フローレイアウト（iOS 16+） =====
+struct FlowTagLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+    
+    func sizeThatFits(proposal: ProposedViewSize,
+                      subviews: Subviews,
+                      cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        
+        for s in subviews {
+            let size = s.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                // 改行
+                x = 0
+                y += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            lineHeight = max(lineHeight, size.height)
+            x += size.width + spacing
+        }
+        return CGSize(width: width, height: y + lineHeight)
+    }
+    
+    func placeSubviews(in bounds: CGRect,
+                       proposal: ProposedViewSize,
+                       subviews: Subviews,
+                       cache: inout ()) {
+        let width = bounds.width
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        
+        for s in subviews {
+            let size = s.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                // 改行
+                x = 0
+                y += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            s.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + y),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(size))
+            lineHeight = max(lineHeight, size.height)
+            x += size.width + spacing
+        }
+    }
+}
+
+// ===== タグチップ（1行固定・最大8文字・省略） =====
+struct TagChip: View {
+    let text: String
+    var leadingIcon: Image? = nil
+    var trailingIcon: Image? = nil
+    var selected: Bool = false
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            if let leadingIcon { leadingIcon.imageScale(.small) }
+            Text(String(text.prefix(8)))
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if let trailingIcon { trailingIcon.imageScale(.small) }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(
+            Capsule().fill(selected ? Color.accentColor.opacity(0.18)
+                           : Color.secondary.opacity(0.12))
+        )
+        .contentShape(Capsule())
+        .fixedSize(horizontal: true, vertical: true) // ← 幅が内容にフィットして安定
+    }
+}
+
+struct TagListView: View {
+    let tags: [String]
+    let onRemove: (String) -> Void
+    
+    var body: some View {
+        FlowTagLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(tags, id: \.self) { t in
+                TagChip(text: t, trailingIcon: Image(systemName: "xmark.circle.fill"))
+                    .onTapGesture { onRemove(t) }  // チップ全体で削除
+                    .accessibilityLabel("\(t) を削除")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeInOut(duration: 0.2), value: tags)
+    }
+}
+
+struct SuggestedTagListView: View {
+    let suggestions: [String]
+    let isOn: (String) -> Bool
+    let onToggle: (String) -> Void
+    
+    var body: some View {
+        FlowTagLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(suggestions.map { String($0.prefix(8)) }, id: \.self) { t in
+                let selected = isOn(t)
+                TagChip(text: t,
+                        leadingIcon: Image(systemName: selected ? "checkmark.circle.fill" : "plus.circle"),
+                        selected: selected)
+                .onTapGesture { onToggle(t) }
+                .accessibilityLabel("\(t) を\(selected ? "外す" : "追加")")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct LockedCustomSection: View {
+    let accent: Color
+    let onTapUpgrade: () -> Void
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill").foregroundStyle(accent)
+                Text("プレミアムプランに加入で、タグの追加・編集が無制限に利用できます。")
+                Spacer()
+            }
+            Button("プレミアムを確認") { onTapUpgrade() }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+        }
+        .padding(8)
     }
 }
