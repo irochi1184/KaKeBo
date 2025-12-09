@@ -9,9 +9,11 @@ import SwiftUI
 
 struct DayDetailSheet: View {
     @EnvironmentObject var store: DataStore
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var todoStore: TodoStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject var dayNotes: DayNotesStore
     private var dayTodos: [CalendarTodo] { todoStore.todos(on: date) }
@@ -19,14 +21,27 @@ struct DayDetailSheet: View {
     let date: Date
     let accent: Color
     private var cal: Calendar { .current }
-    
+
     @State private var editingTx: Transaction? = nil
+    @State private var editingSharedTx: SharedTransaction? = nil
     @State private var showAdd = false
     @State private var showAddTodoSheet = false
     @State private var pendingNewTitle: String = ""
-    
-    private var dayTx: [Transaction] {
+
+    private var personalDayTx: [Transaction] {
         store.transactions
+            .filter { cal.isDate($0.date, inSameDayAs: date) }
+            .sorted { $0.date > $1.date }
+    }
+
+    private var sharedDayTx: [SharedTransaction] {
+        guard
+            ledgerContext.isShared,
+            let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore)
+        else { return [] }
+
+        let txs = sharedLedgerStore.transactionsByLedger[ledger.id] ?? []
+        return txs
             .filter { cal.isDate($0.date, inSameDayAs: date) }
             .sorted { $0.date > $1.date }
     }
@@ -36,73 +51,10 @@ struct DayDetailSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 List {
                     Section("この日の記録") {
-                        if dayTx.isEmpty {
-                            HStack {
-                                Image(systemName: "calendar.badge.exclamationmark")
-                                    .foregroundStyle(.secondary)
-                                Text("この日には記録がありません")
-                                    .foregroundStyle(.secondary)
-                            }
+                        if ledgerContext.isShared {
+                            sharedTransactionSection
                         } else {
-                            ForEach(dayTx) { tx in
-                                var displayTags: [String] {
-                                    tx.tags.map { String($0.prefix(8)) }
-                                }
-                                if let cat = store.categories.first(where: { $0.id == tx.categoryId }) {
-                                    Button { editingTx = tx } label: {
-                                        HStack(spacing: 12) {
-                                            ZStack {
-                                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                    .fill(cat.color.opacity(0.12))
-                                                Image(systemName: cat.symbolName).foregroundStyle(cat.color)
-                                            }
-                                            .frame(width: 32, height: 32)
-                                            
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                HStack(spacing: 8) {
-                                                    Text(cat.name)
-                                                        .font(.subheadline.weight(.medium))
-                                                        .lineLimit(1)
-                                                    
-                                                    // タグチップ（最大4個表示）
-                                                    if !displayTags.isEmpty {
-                                                        HStack(spacing: 6) {
-                                                            ForEach(displayTags.prefix(4), id: \.self) { t in
-                                                                TagMiniChip(text: t)
-                                                            }
-                                                        }
-                                                    }
-                                                    
-                                                    Spacer(minLength: 0)
-                                                }
-                                                if !tx.memo.isEmpty {
-                                                    Text(tx.memo).font(.caption).foregroundStyle(.secondary)
-                                                }
-                                            }
-                                            Spacer()
-                                            Text(currency(tx.amount))
-                                                .foregroundStyle(tx.type == .income ? .green : .primary)
-                                        }
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        Button { editingTx = tx } label: {
-                                            Label("編集", systemImage: "pencil")
-                                        }
-                                        .tint(.blue)
-                                        
-                                        Button(role: .destructive) {
-                                            store.deleteTransactions(with: [tx.id])
-                                        } label: {
-                                            Label("削除", systemImage: "trash")
-                                        }
-                                        .tint(.red)
-                                    }
-                                }
-                            }
-                            // 右上の EditButton での削除にも対応（取引用）
-                            .onDelete(perform: delete)
+                            personalTransactionSection
                         }
                     }
                     
@@ -136,7 +88,7 @@ struct DayDetailSheet: View {
                                     }
                                 )
                             }
-                            .onDelete(perform: delete)
+                            .onDelete(perform: deleteTodos)
                         }
                     } header: {
                         Text("この日のToDo")
@@ -167,7 +119,7 @@ struct DayDetailSheet: View {
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     // 編集モード切替（削除可）
-                    EditButton().disabled(dayTx.isEmpty)
+                    EditButton().disabled(ledgerContext.isShared || personalDayTx.isEmpty)
                     // 追加（＋）
                     Button {
                         showAdd = true
@@ -185,6 +137,12 @@ struct DayDetailSheet: View {
                 EditTransactionView(transaction: tx)
                     .environmentObject(store)
             }
+            .sheet(item: $editingSharedTx) { tx in
+                if let ledger = currentSharedLedger {
+                    EditTransactionView(sharedLedger: ledger, transaction: tx)
+                        .environmentObject(sharedLedgerStore)
+                }
+            }
             // その日の新規追加
             .sheet(isPresented: $showAdd) {
                 AddTransactionView(
@@ -194,9 +152,9 @@ struct DayDetailSheet: View {
                 )
                 .environmentObject(store)
             }
-            .sheet(isPresented: $showAddTodoSheet) {
-                AddTodoMiniSheet(
-                    accent: accent,
+                .sheet(isPresented: $showAddTodoSheet) {
+                    AddTodoMiniSheet(
+                        accent: accent,
                     title: $pendingNewTitle,
                     onAdd: {
                         let t = pendingNewTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -211,7 +169,127 @@ struct DayDetailSheet: View {
                 .presentationDragIndicator(.visible)
                 .background(themeStore.theme.backgroundColor(for: scheme))
             }
+            .task { await reloadSharedLedgerDataIfNeeded() }
         }
+    }
+
+    @ViewBuilder
+    private var personalTransactionSection: some View {
+        if personalDayTx.isEmpty {
+            emptyTransactionMessage
+        } else {
+            ForEach(personalDayTx) { tx in
+                var displayTags: [String] { tx.tags.map { String($0.prefix(8)) } }
+
+                if let cat = store.categories.first(where: { $0.id == tx.categoryId }) {
+                    Button { editingTx = tx } label: {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(cat.color.opacity(0.12))
+                                Image(systemName: cat.symbolName).foregroundStyle(cat.color)
+                            }
+                            .frame(width: 32, height: 32)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 8) {
+                                    Text(cat.name)
+                                        .font(.subheadline.weight(.medium))
+                                        .lineLimit(1)
+
+                                    if !displayTags.isEmpty {
+                                        HStack(spacing: 6) {
+                                            ForEach(displayTags.prefix(4), id: \.self) { t in
+                                                TagMiniChip(text: t)
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(minLength: 0)
+                                }
+                                if !tx.memo.isEmpty {
+                                    Text(tx.memo).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Text(currency(tx.amount))
+                                .foregroundStyle(tx.type == .income ? .green : .primary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button { editingTx = tx } label: {
+                            Label("編集", systemImage: "pencil")
+                        }
+                        .tint(.blue)
+
+                        Button(role: .destructive) {
+                            store.deleteTransactions(with: [tx.id])
+                        } label: {
+                            Label("削除", systemImage: "trash")
+                        }
+                        .tint(.red)
+                    }
+                }
+            }
+            .onDelete(perform: deletePersonalTransactions)
+        }
+    }
+
+    @ViewBuilder
+    private var sharedTransactionSection: some View {
+        if sharedDayTx.isEmpty {
+            emptyTransactionMessage
+        } else {
+            ForEach(sharedDayTx) { tx in
+                Button { editingSharedTx = tx } label: {
+                    sharedRow(for: tx)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var emptyTransactionMessage: some View {
+        HStack {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .foregroundStyle(.secondary)
+            Text("この日には記録がありません")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func sharedRow(for tx: SharedTransaction) -> some View {
+        let color = sharedColor(for: tx)
+        let symbol = sharedSymbol(for: tx)
+        let memo = (tx.memo ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(color.opacity(0.12))
+                Image(systemName: symbol).foregroundStyle(color)
+            }
+            .frame(width: 32, height: 32)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text(tx.categoryName)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
+                if !memo.isEmpty {
+                    Text(memo).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Text(currency(tx.amount))
+                .foregroundStyle(tx.type == .income ? .green : .primary)
+        }
+        .contentShape(Rectangle())
     }
     
     private var dateTitle: String {
@@ -227,11 +305,49 @@ struct DayDetailSheet: View {
         f.groupingSeparator = ","
         return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
     }
-    
-    // EditButton（編集モード）時の削除（確認なし）
-    private func delete(at offsets: IndexSet) {
-        let ids = offsets.map { dayTx[$0].id }
+
+    private var currentSharedLedger: SharedLedger? {
+        ledgerContext.currentSharedLedger(from: sharedLedgerStore)
+    }
+
+    private var sharedCategories: [SharedCategory] {
+        guard let ledger = currentSharedLedger else { return [] }
+        return sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
+    }
+
+    private func sharedCategory(for tx: SharedTransaction) -> SharedCategory? {
+        if let cid = tx.categoryId {
+            return sharedCategories.first(where: { $0.id == cid })
+        }
+        return sharedCategories.first(where: { $0.name == tx.categoryName })
+    }
+
+    private func reloadSharedLedgerDataIfNeeded() async {
+        guard ledgerContext.isShared,
+              let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) else { return }
+
+        await sharedLedgerStore.reloadCategories(for: ledger)
+        await sharedLedgerStore.reloadTransactions(for: ledger)
+    }
+
+    private func sharedColor(for tx: SharedTransaction) -> Color {
+        let hex = sharedCategory(for: tx)?.colorHex ?? tx.categoryColorHex
+        return Color.fromHex(hex) ?? .gray
+    }
+
+    private func sharedSymbol(for tx: SharedTransaction) -> String {
+        sharedCategory(for: tx)?.icon ?? "tag.fill"
+    }
+
+    private func deletePersonalTransactions(at offsets: IndexSet) {
+        let ids = offsets.map { personalDayTx[$0].id }
         store.deleteTransactions(with: ids)
+    }
+
+    private func deleteTodos(at offsets: IndexSet) {
+        let ids = offsets.map { dayTodos[$0].id }
+        todoStore.delete(ids: ids)
+        todoStore.save(for: date)
     }
     
     private struct DayTodoRow: View {

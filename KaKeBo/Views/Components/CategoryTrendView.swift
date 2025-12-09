@@ -7,16 +7,19 @@
 
 import SwiftUI
 import Charts
+import CloudKit
 
 struct CategoryTrendView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var ledgerContext: LedgerContext
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @Environment(\.colorScheme) private var scheme
-    
+
     let year: Int
-    let initialCategoryIds: [UUID]
+    let initialCategoryIds: [CategoryTrendKey]
     
-    @State private var selectedIds: Set<UUID> = []
+    @State private var selectedIds: Set<CategoryTrendKey> = []
     @State private var stacked: Bool = false          // false=横並び, true=積み上げ
     @State private var showPicker = false
     
@@ -40,17 +43,44 @@ struct CategoryTrendView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { selectedIds = Set(initialCategoryIds) }
         .sheet(isPresented: $showPicker) {
-            CategoryComparePicker(
-                allCategories: store.categories,
-                selected: $selectedIds,
-                accent: accent
-            )
-            .presentationDetents([.medium, .large])
+            if ledgerContext.isShared, let ledger = currentSharedLedger {
+                SharedCategoryComparePicker(
+                    categories: sharedLedgerStore.categoriesByLedger[ledger.id] ?? [],
+                    selected: $selectedIds,
+                    accent: accent
+                )
+                .presentationDetents([.medium, .large])
+            } else {
+                CategoryComparePicker(
+                    allCategories: store.categories,
+                    selected: $selectedIds,
+                    accent: accent
+                )
+                .presentationDetents([.medium, .large])
+            }
         }
         // iOS17+: 過剰表示時のみバウンス
         .scrollBounceBehavior(.basedOnSize)
         .scrollIndicators(.hidden)
     }
+}
+
+// MARK: - Models
+
+enum CategoryTrendKey: Hashable, Identifiable {
+    case personal(UUID)
+    case shared(CKRecord.ID)
+
+    var id: String {
+        switch self {
+        case .personal(let id):
+            return "personal-" + id.uuidString
+        case .shared(let id):
+            return "shared-" + id.recordName
+        }
+    }
+
+    var chartKey: String { id }
 }
 
 // MARK: - Subviews
@@ -225,29 +255,85 @@ private extension CategoryTrendView {
 // MARK: - 補助データ
 
 private extension CategoryTrendView {
-    var selectedCategories: [CategoryDisplay] {
-        let filtered: [Category] = store.categories.filter { selectedIds.contains($0.id) }
-        return filtered.map {
-            CategoryDisplay(id: $0.id, key: $0.id.uuidString, name: $0.name, color: $0.color)
+    var allTrendCategories: [TrendCategory] {
+        if ledgerContext.isShared, let ledger = currentSharedLedger {
+            let cats = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
+            return cats.map { cat in
+                TrendCategory(
+                    key: .shared(cat.id),
+                    name: cat.name,
+                    color: Color.fromHex(cat.colorHex) ?? .gray
+                )
+            }
+        }
+
+        return store.categories.map { cat in
+            TrendCategory(
+                key: .personal(cat.id),
+                name: cat.name,
+                color: cat.color
+            )
         }
     }
-    
+
+    var trendTransactions: [TrendTransaction] {
+        if ledgerContext.isShared, let ledger = currentSharedLedger {
+            let categories = Dictionary(uniqueKeysWithValues:
+                                            (sharedLedgerStore.categoriesByLedger[ledger.id] ?? [])
+                                            .map { ($0.id, $0) })
+            return (sharedLedgerStore.transactionsByLedger[ledger.id] ?? []).map { tx in
+                let cat = tx.categoryId.flatMap { categories[$0] }
+                let key = tx.categoryId.map { CategoryTrendKey.shared($0) }
+                return TrendTransaction(
+                    amount: tx.amount,
+                    date: tx.date,
+                    memo: tx.memo ?? "",
+                    type: tx.type == .income ? .income : .expense,
+                    categoryKey: key,
+                    categoryName: cat?.name ?? tx.categoryName
+                )
+            }
+        }
+
+        return store.transactions.map { tx in
+            TrendTransaction(
+                amount: tx.amount,
+                date: tx.date,
+                memo: tx.memo,
+                type: tx.type == .income ? .income : .expense,
+                categoryKey: .personal(tx.categoryId),
+                categoryName: store.categories.first(where: { $0.id == tx.categoryId })?.name ?? "未分類"
+            )
+        }
+    }
+
+    var currentSharedLedger: SharedLedger? {
+        ledgerContext.currentSharedLedger(from: sharedLedgerStore)
+    }
+
+    var selectedCategories: [CategoryDisplay] {
+        let filtered: [TrendCategory] = allTrendCategories.filter { selectedIds.contains($0.key) }
+        return filtered.map {
+            CategoryDisplay(id: $0.key, key: $0.key.chartKey, name: $0.name, color: $0.color)
+        }
+    }
+
     var chartRows: [ChartRow] {
         var rows: [ChartRow] = []
         let cal = Calendar.current
-        let selected: [Category] = store.categories.filter { selectedIds.contains($0.id) }
-        
+        let selected: [CategoryDisplay] = selectedCategories
+        let txs = trendTransactions
+
         for cat in selected {
             var monthly: [Int] = Array(repeating: 0, count: 12)
-            for t in store.transactions {
-                guard t.categoryId == cat.id, t.type == .expense else { continue }
+            for t in txs where t.type == .expense && t.categoryKey == cat.id {
                 let y = cal.component(.year, from: t.date)
                 let m = cal.component(.month, from: t.date)
                 if y == year, (1...12).contains(m) {
                     monthly[m - 1] += t.amount
                 }
             }
-            let key: String = cat.id.uuidString
+            let key: String = cat.key
             for m in 1...12 {
                 rows.append(ChartRow(month: m, amount: monthly[m - 1], categoryKey: key))
             }
@@ -306,10 +392,30 @@ private extension CategoryTrendView {
 // MARK: - モデル
 
 private struct CategoryDisplay: Identifiable, Hashable {
-    let id: UUID
-    let key: String    // 色・識別用（UUID文字列）
+    let id: CategoryTrendKey
+    let key: String    // 色・識別用（UUID/CKRecord 文字列）
     let name: String   // UI表示用
     let color: Color
+}
+
+private struct TrendCategory {
+    let key: CategoryTrendKey
+    let name: String
+    let color: Color
+}
+
+private enum TrendTransactionType {
+    case income
+    case expense
+}
+
+private struct TrendTransaction {
+    let amount: Int
+    let date: Date
+    let memo: String
+    let type: TrendTransactionType
+    let categoryKey: CategoryTrendKey?
+    let categoryName: String
 }
 
 private struct ChartRow: Identifiable {
@@ -346,25 +452,66 @@ private struct StyleScaleIfNeeded: ViewModifier {
 
 private struct CategoryComparePicker: View {
     let allCategories: [Category]
-    @Binding var selected: Set<UUID>
+    @Binding var selected: Set<CategoryTrendKey>
     let accent: Color
     @Environment(\.dismiss) private var dismiss
-    
+
     var body: some View {
         NavigationStack {
             List {
                 ForEach(allCategories, id: \.id) { cat in
+                    let key: CategoryTrendKey = .personal(cat.id)
                     HStack {
                         Button {
-                            if selected.contains(cat.id) { selected.remove(cat.id) }
-                            else { selected.insert(cat.id) }
+                            if selected.contains(key) { selected.remove(key) }
+                            else { selected.insert(key) }
                         } label: {
-                            Image(systemName: selected.contains(cat.id) ? "checkmark.square.fill" : "square")
-                                .foregroundStyle(selected.contains(cat.id) ? cat.color : .secondary)
+                            Image(systemName: selected.contains(key) ? "checkmark.square.fill" : "square")
+                                .foregroundStyle(selected.contains(key) ? cat.color : .secondary)
                         }
                         .buttonStyle(.plain)
                         Label(cat.name, systemImage: cat.symbolName)
                             .foregroundStyle(cat.color)
+                    }
+                }
+            }
+            .navigationTitle("比較するカテゴリ")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("閉じる") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("適用") { dismiss() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(accent)
+                }
+            }
+        }
+    }
+}
+
+private struct SharedCategoryComparePicker: View {
+    let categories: [SharedCategory]
+    @Binding var selected: Set<CategoryTrendKey>
+    let accent: Color
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(categories, id: \.id) { cat in
+                    let key: CategoryTrendKey = .shared(cat.id)
+                    HStack {
+                        Button {
+                            if selected.contains(key) { selected.remove(key) }
+                            else { selected.insert(key) }
+                        } label: {
+                            Image(systemName: selected.contains(key) ? "checkmark.square.fill" : "square")
+                                .foregroundStyle(selected.contains(key) ? Color.fromHex(cat.colorHex) ?? .secondary : .secondary)
+                        }
+                        .buttonStyle(.plain)
+                        Label(cat.name, systemImage: cat.icon)
+                            .foregroundStyle(Color.fromHex(cat.colorHex) ?? .primary)
                     }
                 }
             }
@@ -534,9 +681,9 @@ private extension CategoryTrendView {
     
     var totalSelectedYear: Int {
         let cal = Calendar.current
-        return store.transactions.filter { t in
+        return trendTransactions.filter { t in
             t.type == .expense &&
-            selectedIds.contains(t.categoryId) &&
+            (t.categoryKey.map { selectedIds.contains($0) } ?? false) &&
             cal.component(.year, from: t.date) == year
         }
         .reduce(0) { $0 + $1.amount }
@@ -546,7 +693,7 @@ private extension CategoryTrendView {
     var monthlyTotals: [Int] {
         var bins = Array(repeating: 0, count: 12)
         let cal = Calendar.current
-        for t in store.transactions where t.type == .expense && selectedIds.contains(t.categoryId) {
+        for t in trendTransactions where t.type == .expense && (t.categoryKey.map { selectedIds.contains($0) } ?? false) {
             let y = cal.component(.year, from: t.date)
             let m = cal.component(.month, from: t.date)
             if y == year, (1...12).contains(m) {
@@ -573,11 +720,11 @@ private extension CategoryTrendView {
     // 戻り値: (name, color, amount, ratio)
     var categoryShares: [(name: String, color: Color, amount: Int, ratio: CGFloat)] {
         let cal = Calendar.current
-        let cats = store.categories.filter { selectedIds.contains($0.id) }
-        let totals: [(Category, Int)] = cats.map { cat in
-            let sum = store.transactions.filter { t in
+        let cats = selectedCategories
+        let totals: [(CategoryDisplay, Int)] = cats.map { cat in
+            let sum = trendTransactions.filter { t in
                 t.type == .expense &&
-                t.categoryId == cat.id &&
+                t.categoryKey == cat.id &&
                 cal.component(.year, from: t.date) == year
             }
                 .reduce(0) { $0 + $1.amount }
@@ -590,24 +737,23 @@ private extension CategoryTrendView {
                 (cat.name, cat.color, amt, CGFloat(amt) / CGFloat(grand))
             }
     }
-    
+
     // トップ5明細（選択カテゴリ × 対象年）
     var topTransactions: [(amount: Int, date: Date, memo: String, categoryName: String)] {
         let cal = Calendar.current
         let selectedSet = Set(selectedIds)
-        let nameById = Dictionary(uniqueKeysWithValues: store.categories.map { ($0.id, $0.name) })
-        
-        let filtered = store.transactions.filter { t in
+
+        let filtered = trendTransactions.filter { t in
             t.type == .expense &&
-            selectedSet.contains(t.categoryId) &&
+            (t.categoryKey.map { selectedSet.contains($0) } ?? false) &&
             cal.component(.year, from: t.date) == year
         }
-        
+
         return filtered
             .sorted { $0.amount > $1.amount }
             .prefix(5)
             .map { t in
-                (t.amount, t.date, t.memo, nameById[t.categoryId] ?? "-")
+                (t.amount, t.date, t.memo, t.categoryName)
             }
     }
     

@@ -5,13 +5,6 @@
 //  Created by 有田健一郎 on 2025/10/19.
 //
 
-//
-//  Stores/ReminderStore.swift
-//  KaKeBo
-//
-//  Rebuilt: 2025/11/03
-//
-
 import SwiftUI
 import Foundation
 import Combine

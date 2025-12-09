@@ -11,6 +11,8 @@ import UIKit
 struct CalendarScreen: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var ledgerContext: LedgerContext
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @Environment(\.colorScheme) private var scheme
     public var cal: Calendar { .current }
     @StateObject private var keyboard = KeyboardHeightReader()
@@ -120,6 +122,11 @@ struct CalendarScreen: View {
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if ledgerContext.isRestored {
+                    ToolbarItem(placement: .topBarLeading) {
+                        LedgerModePicker()
+                    }
+                }
                 ToolbarItem(placement: .principal) {
                     YearMonthHeader(
                         month: $month,
@@ -187,6 +194,13 @@ struct CalendarScreen: View {
             }
             .onAppear { todoStore.load(for: month) }
             .onChange(of: month) { todoStore.load(for: month) }
+            .task { await reloadSharedLedgerDataIfNeeded() }
+            .task(id: ledgerContext.isShared) {
+                await reloadSharedLedgerDataIfNeeded()
+            }
+            .task(id: ledgerContext.selectedSharedLedgerId) {
+                await reloadSharedLedgerDataIfNeeded()
+            }
         }
         .safeAreaInset(edge: .bottom) {
             // キーボードの重なり分だけ下に “空き” を作る
@@ -197,30 +211,58 @@ struct CalendarScreen: View {
     }
     
     // MARK: - 集計
-    private var transactionsThisMonth: [Transaction] {
+    private var personalTransactionsThisMonth: [Transaction] {
         store.transactions.filter { cal.isDate($0.date, equalTo: month, toGranularity: .month) }
     }
-    
+
+    private var sharedTransactionsThisMonth: [SharedTransaction] {
+        guard
+            ledgerContext.isShared,
+            let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore)
+        else { return [] }
+
+        let all = sharedLedgerStore.transactionsByLedger[ledger.id] ?? []
+        return all.filter { cal.isDate($0.date, equalTo: month, toGranularity: .month) }
+    }
+
     /// 日別 “支出” 合計
     private var expenseBuckets: [Date: Int] {
-        var dict: [Date: Int] = [:]
-        for tx in transactionsThisMonth where tx.type == .expense {
-            let key = cal.startOfDay(for: tx.date)
-            dict[key, default: 0] += tx.amount
+        if ledgerContext.isShared {
+            var dict: [Date: Int] = [:]
+            for tx in sharedTransactionsThisMonth where tx.type == .expense {
+                let key = cal.startOfDay(for: tx.date)
+                dict[key, default: 0] += tx.amount
+            }
+            return dict
+        } else {
+            var dict: [Date: Int] = [:]
+            for tx in personalTransactionsThisMonth where tx.type == .expense {
+                let key = cal.startOfDay(for: tx.date)
+                dict[key, default: 0] += tx.amount
+            }
+            return dict
         }
-        return dict
     }
-    
+
     /// 日別 “収入” 合計
     private var incomeBuckets: [Date: Int] {
-        var dict: [Date: Int] = [:]
-        for tx in transactionsThisMonth where tx.type == .income {
-            let key = cal.startOfDay(for: tx.date)
-            dict[key, default: 0] += tx.amount
+        if ledgerContext.isShared {
+            var dict: [Date: Int] = [:]
+            for tx in sharedTransactionsThisMonth where tx.type == .income {
+                let key = cal.startOfDay(for: tx.date)
+                dict[key, default: 0] += tx.amount
+            }
+            return dict
+        } else {
+            var dict: [Date: Int] = [:]
+            for tx in personalTransactionsThisMonth where tx.type == .income {
+                let key = cal.startOfDay(for: tx.date)
+                dict[key, default: 0] += tx.amount
+            }
+            return dict
         }
-        return dict
     }
-    
+
     /// 今月の最大支出・最大収入（セルの濃淡に使用）
     private var maxExpenseInMonth: Int { expenseBuckets.values.max() ?? 0 }
     private var maxIncomeInMonth:  Int { incomeBuckets.values.max() ?? 0 }
@@ -272,6 +314,14 @@ struct CalendarScreen: View {
             amount: amount,
             memo: memo
         )
+    }
+
+    private func reloadSharedLedgerDataIfNeeded() async {
+        guard ledgerContext.isShared,
+              let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) else { return }
+
+        await sharedLedgerStore.reloadCategories(for: ledger)
+        await sharedLedgerStore.reloadTransactions(for: ledger)
     }
 
 }

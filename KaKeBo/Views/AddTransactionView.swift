@@ -7,10 +7,13 @@
 
 import SwiftUI
 import UIKit
+import CloudKit
 
 struct AddTransactionView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
+    @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject var purchase: PurchaseManager
@@ -18,20 +21,25 @@ struct AddTransactionView: View {
     // MARK: - States
     @State private var date: Date = Date()
     @State private var amount: Int = 0
+    @State private var amountText: String = "0"
     @State private var type: TransactionType = .expense
     @State private var memo: String = ""
     @State private var selectedCategoryId: UUID?
+    @State private var selectedSharedCategoryId: CKRecord.ID?
+
     @State private var tags: [String] = []
     @State private var tagInput: String = ""
-    
+
     // キーボード／UI
     @State private var isKeyboardVisible = false
     @FocusState private var memoFocused: Bool
+    @FocusState private var amountFieldFocused: Bool
     @FocusState private var tagFieldFocused: Bool
     @State private var showCustomKeypad = true
     @State private var keypadHeight: CGFloat = 0
     @StateObject private var kb = KeyboardHeightReader()
     @State private var showAddCategory = false
+    @State private var showAddSharedCategory = false
     @State private var showPaywall = false
     
     // ★ レシートスキャン表示フラグ
@@ -47,6 +55,7 @@ struct AddTransactionView: View {
     ) {
         _selectedCategoryId = State(initialValue: defaultCategoryId)
         _amount = State(initialValue: defaultAmount ?? 0)
+        _amountText = State(initialValue: defaultAmount.map { String($0) } ?? "0")
         _date   = State(initialValue: defaultDate ?? Date())
         _type   = State(initialValue: defaultType)
         _memo   = State(initialValue: defaultMemo ?? "")
@@ -67,25 +76,29 @@ struct AddTransactionView: View {
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
-    
+    private var prefersCustomKeypad: Bool { themeStore.theme.prefersCustomKeypad }
+    private var keypadColor: Color { themeStore.theme.keypadColor(isIncome: type == .income) }
+
     // MARK: - Body
     var body: some View {
+        let usesCustomKeypad = prefersCustomKeypad
         NavigationStack {
             contentScroll
                 .background(bgGradient.ignoresSafeArea())
                 .navigationTitle("新規追加")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
-            
+
             // カスタム電卓
                 .safeAreaInset(edge: .bottom) {
-                    if showCustomKeypad {
+                    if usesCustomKeypad && showCustomKeypad {
                         ZStack {
                             NumericKeypad(
                                 amount: $amount,
                                 maxDigits: 9,
                                 style: .attached,
                                 isIncome: type == .income,
+                                baseColorOverride: keypadColor,
                                 sizeScale: keypadScale,
                                 preferredHeightRatio: keypadHeightRatio,
                                 onHeightChange: { h in keypadHeight = h }
@@ -95,10 +108,10 @@ struct AddTransactionView: View {
                         .offset(y: -keypadLift)
                     }
                 }
-            
+
             // 自作キーパッドの閉じる
                 .overlay(alignment: .bottomTrailing) {
-                    if showCustomKeypad {
+                    if usesCustomKeypad && showCustomKeypad {
                         CloseKeyboardButton { showCustomKeypad = false }
                             .padding(.trailing, 12)
                             .padding(.bottom,
@@ -144,11 +157,38 @@ struct AddTransactionView: View {
                                 // 既にメモがあれば追記、なければ置換
                                 memo = memo.isEmpty ? m : "\(memo) \(m)"
                             }
+                            if let hint = r.categoryHint {
+                                if ledgerContext.isPersonal {
+                                    if let cat = store.categories.first(where: { $0.name.contains(hint) }) {
+                                        selectedCategoryId = cat.id
+                                    }
+                                } else if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore),
+                                          let cats = sharedLedgerStore.categoriesByLedger[ledger.id] {
+                                    if let cat = cats.first(where: { $0.name.contains(hint) }) {
+                                        selectedSharedCategoryId = cat.id
+                                    }
+                                }
+                            }
                             // 金額編集しやすいよう自作キーパッドを出しておく
-                            showCustomKeypad = true
+                            if usesCustomKeypad { showCustomKeypad = true }
                         }
                         .navigationTitle("レシート読み取り")
                     }
+                }
+                .onAppear {
+                    if !usesCustomKeypad { showCustomKeypad = false }
+                    amountText = amount == 0 ? "" : String(amount)
+                }
+                .onChange(of: usesCustomKeypad) { _, newValue in
+                    if !newValue { showCustomKeypad = false; amountFieldFocused = false }
+                }
+                .onChange(of: amount) { _, newValue in
+                    amountText = newValue == 0 ? "" : String(newValue)
+                }
+                .onChange(of: amountText) { _, newValue in
+                    let filtered = newValue.filter { $0.isNumber }
+                    if filtered != newValue { amountText = filtered }
+                    if let val = Int(filtered) { amount = val } else { amount = 0 }
                 }
         }
     }
@@ -159,11 +199,21 @@ struct AddTransactionView: View {
             VStack(spacing: 18) {
                 metaSection.luxCard()
                 
-                CategorySelector(
-                    selectedCategoryId: $selectedCategoryId,
-                    onTapAdd: { showAddCategory = true }
-                )
-                .environmentObject(store)
+                if ledgerContext.isPersonal {
+                    CategorySelector(
+                        selectedCategoryId: $selectedCategoryId,
+                        onTapAdd: {
+                            showAddCategory = true
+                        }
+                    )
+                } else {
+                    SharedCategorySelector(
+                        selectedCategoryId: $selectedSharedCategoryId,
+                        onTapAdd: {
+                            showAddSharedCategory = true
+                        }
+                    )
+                }
                 
                 // タグ
                 VStack(alignment: .leading, spacing: 8) {
@@ -261,6 +311,32 @@ struct AddTransactionView: View {
                 .navigationTitle("カテゴリ追加")
             }
         }
+        .sheet(
+            isPresented: $showAddSharedCategory,
+            onDismiss: {
+                // シートが閉じられたタイミングでカテゴリ再読込
+                if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+                    Task {
+                        await sharedLedgerStore.reloadCategories(for: ledger)
+                    }
+                }
+            }
+        ) {
+            if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+                NavigationStack {
+                    SharedCategoryEditorView(ledger: ledger) { newSharedCat in
+                        // 共有用：CKRecord.ID を即選択状態にする
+                        selectedSharedCategoryId = newSharedCat.id
+                    }
+                    .environmentObject(sharedLedgerStore)
+                    .navigationTitle("カテゴリ追加")
+                }
+            } else {
+                Text("共有家計簿が選択されていません")
+                    .padding()
+            }
+        }
+
     }
     
     private var metaSection: some View {
@@ -275,28 +351,47 @@ struct AddTransactionView: View {
             // 金額
             VStack(alignment: .leading, spacing: 6) {
                 Text("金額").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                HStack {
-                    Spacer()
-                    Text(currency(amount))
+                if prefersCustomKeypad {
+                    HStack {
+                        Spacer()
+                        Text(currency(amount))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.secondary.opacity(0.1))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.2))
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        memoFocused = false
+                        tagFieldFocused = false
+                        withAnimation(.easeInOut(duration: 0.2)) { if prefersCustomKeypad { showCustomKeypad = true } }
+                    }
+                    .accessibilityAddTraits(.isButton)
+                } else {
+                    TextField("0", text: $amountText)
+                        .keyboardType(.numberPad)
+                        .focused($amountFieldFocused)
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
+                        .multilineTextAlignment(.trailing)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.secondary.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.secondary.opacity(0.2))
+                        )
                 }
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.secondary.opacity(0.1))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.secondary.opacity(0.2))
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    memoFocused = false
-                    tagFieldFocused = false
-                    withAnimation(.easeInOut(duration: 0.2)) { showCustomKeypad = true }
-                }
-                .accessibilityAddTraits(.isButton)
             }
             
             // メモ
@@ -370,16 +465,56 @@ struct AddTransactionView: View {
             amount > 0
         else { return }
         
-        // tags を保存
-        let tx = Transaction(
-            date: date,
-            amount: amount,
-            type: type,
-            memo: memo.trimmingCharacters(in: .whitespacesAndNewlines),
-            categoryId: chosen.id,
-            tags: tags
-        )
-        store.addTransaction(tx)
+        let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // ▼ 1. 個人用家計簿のとき（今まで通り）
+        if ledgerContext.isPersonal {
+            let tx = Transaction(
+                date: date,
+                amount: amount,
+                type: type,
+                memo: trimmedMemo,
+                categoryId: chosen.id,
+                tags: tags
+            )
+            store.addTransaction(tx)
+            dismiss()
+            return
+        }
+        
+        // ▼ 2. 共有家計簿のとき（CloudKit に保存）
+        if ledgerContext.isShared,
+           let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+            
+            // 共有カテゴリが選ばれているか？
+            guard
+                let sharedCatId = selectedSharedCategoryId,
+                let cats = sharedLedgerStore.categoriesByLedger[ledger.id],
+                let sharedCat = cats.first(where: { $0.id == sharedCatId }),
+                amount > 0
+            else {
+                // カテゴリ未選択 or 見つからない場合は、とりあえず未分類扱いで保存するならここで分岐しても良い
+                return
+            }
+            
+            let sharedType: SharedTransactionType = (type == .income) ? .income : .expense
+            let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            Task {
+                await sharedLedgerStore.addTransaction(
+                    to: ledger,
+                    amount: amount,
+                    date: date,
+                    type: sharedType,
+                    memo: trimmedMemo.isEmpty ? nil : trimmedMemo,
+                    category: sharedCat   // ← ちゃんと渡す！！
+                )
+                dismiss()
+            }
+            return
+        }
+
+        // 念のため：どちらでもない場合は何もしないで閉じる
         dismiss()
     }
     

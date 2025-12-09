@@ -7,24 +7,43 @@
 
 import SwiftUI
 import UIKit
+import CloudKit
 
 struct EditTransactionView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var purchase: PurchaseManager
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
+    @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @State private var showPaywall = false
     
+    enum Mode {
+        case personal(Transaction)
+        case shared(ledger: SharedLedger, transaction: SharedTransaction)
+    }
+
+    let mode: Mode
+
     // 元データ
-    let transaction: Transaction
+    private var transaction: Transaction? {
+        if case let .personal(tx) = mode { return tx }
+        return nil
+    }
+    private var sharedContext: (ledger: SharedLedger, transaction: SharedTransaction)? {
+        if case let .shared(ledger, tx) = mode { return (ledger, tx) }
+        return nil
+    }
     
     // 編集ステート（Add と同構成）
     @State private var date: Date
     @State private var amount: Int
+    @State private var amountText: String
     @State private var type: TransactionType
     @State private var memo: String
     @State private var selectedCategoryId: UUID?
+    @State private var selectedSharedCategoryId: CKRecord.ID?
     
     // ★ タグ（Add と同等）
     @State private var tags: [String]
@@ -33,25 +52,45 @@ struct EditTransactionView: View {
     // キーボード制御（Add と揃える）
     @State private var isKeyboardVisible = false
     @FocusState private var memoFocused: Bool
+    @FocusState private var amountFieldFocused: Bool
     @FocusState private var tagFieldFocused: Bool
     @State private var showCustomKeypad = true          // 初期表示：自作キーパッド表示
     @State private var keypadHeight: CGFloat = 0        // 自作キーパッド高さ（閉じるボタン位置調整用）
     @StateObject private var kb = KeyboardHeightReader()
     @State private var showAddCategory = false
-    
+    @State private var showAddSharedCategory = false
+
     init(transaction: Transaction) {
-        self.transaction = transaction
+        self.mode = .personal(transaction)
         _date = State(initialValue: transaction.date)
         _amount = State(initialValue: transaction.amount)
+        _amountText = State(initialValue: String(transaction.amount))
         _type = State(initialValue: transaction.type)
         _memo = State(initialValue: transaction.memo)
         _selectedCategoryId = State(initialValue: transaction.categoryId)
+        _selectedSharedCategoryId = State(initialValue: nil)
         _tags = State(initialValue: transaction.tags.map { String($0.prefix(8)) }) // 8文字統一
+    }
+
+    init(sharedLedger: SharedLedger, transaction: SharedTransaction) {
+        self.mode = .shared(ledger: sharedLedger, transaction: transaction)
+        _date = State(initialValue: transaction.date)
+        _amount = State(initialValue: transaction.amount)
+        _amountText = State(initialValue: String(transaction.amount))
+        _type = State(initialValue: transaction.type == .income ? .income : .expense)
+        _memo = State(initialValue: transaction.memo ?? "")
+        _selectedCategoryId = State(initialValue: nil)
+        _selectedSharedCategoryId = State(initialValue: transaction.categoryId)
+        _tags = State(initialValue: [])
+    }
+
+    private var isSharedMode: Bool {
+        sharedContext != nil
     }
     
     // 実効的に必要な下パディング（overlay配置のキーパッドと重ならないため）
     private var contentBottomPadding: CGFloat {
-        guard showCustomKeypad else { return 0 }
+        guard prefersCustomKeypad && showCustomKeypad else { return 0 }
         // キーパッドの実高さ ー 見た目の持ち上げ量 + 余白 + セーフエリア
         return max(0, (keypadHeight - keypadLift)) + 16 + safeBottomInset
     }
@@ -74,8 +113,11 @@ struct EditTransactionView: View {
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
-    
+    private var prefersCustomKeypad: Bool { themeStore.theme.prefersCustomKeypad }
+    private var keypadColor: Color { themeStore.theme.keypadColor(isIncome: type == .income) }
+
     var body: some View {
+        let usesCustomKeypad = prefersCustomKeypad
         NavigationStack {
             contentScroll
                 .background(bgGradient.ignoresSafeArea())
@@ -84,19 +126,20 @@ struct EditTransactionView: View {
                 .toolbar { toolbarContent }
             // ▼ safeAreaInsetは使わず、overlayで下部配置（白抜け防止のため下地を敷く）
                 .overlay(alignment: .bottom) {
-                    if showCustomKeypad {
+                    if usesCustomKeypad && showCustomKeypad {
                         ZStack(alignment: .bottom) {
                             // 下地：透明領域でマテリアルが白発光するのを防ぐ
                             Rectangle()
                                 .fill(themeStore.theme.backgroundColor(for: scheme))
                                 .frame(height: safeBottomInset + 100)
                                 .ignoresSafeArea(edges: .bottom)
-                            
+
                             NumericKeypad(
                                 amount: $amount,
                                 maxDigits: 9,
                                 style: .attached,
                                 isIncome: type == .income,
+                                baseColorOverride: keypadColor,
                                 sizeScale: keypadScale,
                                 preferredHeightRatio: keypadHeightRatio,
                                 onHeightChange: { h in keypadHeight = h }
@@ -109,7 +152,7 @@ struct EditTransactionView: View {
                 }
             // 右下・独立した「閉じる」ボタン（キーパッドの表示テキストに被らないよう高め）
                 .overlay(alignment: .bottomTrailing) {
-                    if showCustomKeypad {
+                    if usesCustomKeypad && showCustomKeypad {
                         CloseKeyboardButton {
                             showCustomKeypad = false
                         }
@@ -144,6 +187,21 @@ struct EditTransactionView: View {
                         isKeyboardVisible = false
                     }
                 }
+                .onAppear {
+                    if !usesCustomKeypad { showCustomKeypad = false }
+                    amountText = amount == 0 ? "" : String(amount)
+                }
+                .onChange(of: usesCustomKeypad) { _, newValue in
+                    if !newValue { showCustomKeypad = false; amountFieldFocused = false }
+                }
+                .onChange(of: amount) { _, newValue in
+                    amountText = newValue == 0 ? "" : String(newValue)
+                }
+                .onChange(of: amountText) { _, newValue in
+                    let filtered = newValue.filter { $0.isNumber }
+                    if filtered != newValue { amountText = filtered }
+                    if let val = Int(filtered) { amount = val } else { amount = 0 }
+                }
         }
     }
     
@@ -154,88 +212,101 @@ struct EditTransactionView: View {
             VStack(spacing: 18) {
                 metaSection.luxCard()
                 
-                CategorySelector(
-                    selectedCategoryId: $selectedCategoryId,
-                    onTapAdd: { showAddCategory = true }
-                )
-                .environmentObject(store)
-                
-                // ===== タグ（Add と同等：8文字上限・最近5件・等間隔フロー） =====
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("タグ（任意）")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    if purchase.isPremiumActive {
-                        // 入力 + 追加
-                        HStack(spacing: 6) {
-                            TextField("例：家族 個人 (最大8文字)", text: $tagInput)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .submitLabel(.done)
-                                .focused($tagFieldFocused)
-                                .onSubmit { commitTagInput() }
-                                .onChange(of: tagInput) { _, newValue in
-                                    // 8文字超過は切り詰め
-                                    if newValue.count > 8 {
-                                        tagInput = String(newValue.prefix(8))
+                if isSharedMode {
+                    SharedCategorySelector(
+                        selectedCategoryId: $selectedSharedCategoryId,
+                        onTapAdd: { showAddSharedCategory = true }
+                    )
+                    .environmentObject(sharedLedgerStore)
+                    .environmentObject(ledgerContext)
+                    .environmentObject(themeStore)
+                    .environmentObject(purchase)
+                } else {
+                    CategorySelector(
+                        selectedCategoryId: $selectedCategoryId,
+                        onTapAdd: { showAddCategory = true }
+                    )
+                    .environmentObject(store)
+                }
+
+                if !isSharedMode {
+                    // ===== タグ（Add と同等：8文字上限・最近5件・等間隔フロー） =====
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("タグ（任意）")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        if purchase.isPremiumActive {
+                            // 入力 + 追加
+                            HStack(spacing: 6) {
+                                TextField("例：家族 個人 (最大8文字)", text: $tagInput)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .submitLabel(.done)
+                                    .focused($tagFieldFocused)
+                                    .onSubmit { commitTagInput() }
+                                    .onChange(of: tagInput) { _, newValue in
+                                        // 8文字超過は切り詰め
+                                        if newValue.count > 8 {
+                                            tagInput = String(newValue.prefix(8))
+                                        }
+                                        // 区切り文字で即確定
+                                        if tagInput.contains(where: { " ,、　#".contains($0) }) {
+                                            commitTagInput()
+                                        }
                                     }
-                                    // 区切り文字で即確定
-                                    if tagInput.contains(where: { " ,、　#".contains($0) }) {
+                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(themeStore.theme.backgroundColor(for: scheme))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(.secondary.opacity(0.2), lineWidth: 1)
+                                    )
+
+                                if !tagInput.isEmpty {
+                                    Button {
                                         commitTagInput()
+                                    } label: {
+                                        Text("追加")
+                                            .font(.subheadline.weight(.semibold))
                                     }
+                                    .buttonStyle(.borderedProminent)
                                 }
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(themeStore.theme.backgroundColor(for: scheme))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(.secondary.opacity(0.2), lineWidth: 1)
-                                )
-                            
-                            if !tagInput.isEmpty {
-                                Button {
-                                    commitTagInput()
-                                } label: {
-                                    Text("追加")
-                                        .font(.subheadline.weight(.semibold))
-                                }
-                                .buttonStyle(.borderedProminent)
                             }
-                        }
-                        
-                        // 付与済みタグ（削除）
-                        if !tags.isEmpty {
-                            TagListView(
-                                tags: tags,
-                                onRemove: { t in removeTag(t) }
-                            )
-                        }
-                        
-                        // 最近使ったタグ（直近5件・トグル）
-                        if !recentTags.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("最近使ったタグ")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(.secondary)
-                                
-                                SuggestedTagListView(
-                                    suggestions: recentTags,
-                                    isOn: { tags.contains($0) },
-                                    onToggle: { t in toggleTag(t) }
+
+                            // 付与済みタグ（削除）
+                            if !tags.isEmpty {
+                                TagListView(
+                                    tags: tags,
+                                    onRemove: { t in removeTag(t) }
                                 )
                             }
+
+                            // 最近使ったタグ（直近5件・トグル）
+                            if !recentTags.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("最近使ったタグ")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+
+                                    SuggestedTagListView(
+                                        suggestions: recentTags,
+                                        isOn: { tags.contains($0) },
+                                        onToggle: { t in toggleTag(t) }
+                                    )
+                                }
+                            }
+                        } else {
+                            LockedCustomSection(accent: themeStore.theme.accentColor(for: scheme)) {
+                                showPaywall = true
+                            }
                         }
-                    } else {
-                        LockedCustomSection(accent: themeStore.theme.accentColor(for: scheme)) {
-                            showPaywall = true
-                        }
-                    }
-                }.luxCard()
+                    }.luxCard()
+                }
                 
-                Spacer(minLength: showCustomKeypad ? (isSmallPhone ? 12 : 20) : 0)
+                Spacer(minLength: prefersCustomKeypad && showCustomKeypad ? (isSmallPhone ? 12 : 20) : 0)
             }
             .padding(.top, 12)
             .padding(.horizontal)
@@ -250,6 +321,29 @@ struct EditTransactionView: View {
                 }
                 .environmentObject(store)
                 .navigationTitle("カテゴリ追加")
+            }
+        }
+        .sheet(
+            isPresented: $showAddSharedCategory,
+            onDismiss: {
+                if let ledger = sharedContext?.ledger {
+                    Task {
+                        await sharedLedgerStore.reloadCategories(for: ledger)
+                    }
+                }
+            }
+        ) {
+            if let ledger = sharedContext?.ledger {
+                NavigationStack {
+                    SharedCategoryEditorView(ledger: ledger) { newCat in
+                        selectedSharedCategoryId = newCat.id
+                    }
+                    .environmentObject(sharedLedgerStore)
+                    .navigationTitle("カテゴリ追加")
+                }
+            } else {
+                Text("共有家計簿が選択されていません")
+                    .padding()
             }
         }
         .sheet(isPresented: $showPaywall) {
@@ -272,29 +366,48 @@ struct EditTransactionView: View {
             // 金額（疑似入力欄・タップで自作キーボード）
             VStack(alignment: .leading, spacing: 6) {
                 Text("金額").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                HStack {
-                    Spacer()
-                    Text(currency(amount))
+                if prefersCustomKeypad {
+                    HStack {
+                        Spacer()
+                        Text(currency(amount))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.secondary.opacity(0.1))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.2))
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        // メモ/タグのフォーカスを外してシステムKBを閉じる → 自作キーパッドを出す
+                        memoFocused = false
+                        tagFieldFocused = false
+                        withAnimation(.easeInOut(duration: 0.2)) { if prefersCustomKeypad { showCustomKeypad = true } }
+                    }
+                    .accessibilityAddTraits(.isButton)
+                } else {
+                    TextField("0", text: $amountText)
+                        .keyboardType(.numberPad)
+                        .focused($amountFieldFocused)
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
+                        .multilineTextAlignment(.trailing)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.secondary.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.secondary.opacity(0.2))
+                        )
                 }
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.secondary.opacity(0.1))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.secondary.opacity(0.2))
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    // メモ/タグのフォーカスを外してシステムKBを閉じる → 自作キーパッドを出す
-                    memoFocused = false
-                    tagFieldFocused = false
-                    withAnimation(.easeInOut(duration: 0.2)) { showCustomKeypad = true }
-                }
-                .accessibilityAddTraits(.isButton)
             }
             
             // メモ
@@ -334,7 +447,17 @@ struct EditTransactionView: View {
         f.groupingSeparator = ","
         return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
     }
-    
+
+    private var isSaveEnabled: Bool {
+        switch mode {
+        case .personal:
+            return !(store.categories.isEmpty || amount == 0 || selectedCategoryId == nil)
+        case let .shared(ledger, _):
+            let cats = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
+            return amount > 0 && !cats.isEmpty && selectedSharedCategoryId != nil
+        }
+    }
+
     // MARK: - Toolbar（Add と統一：削除と保存を独立して配置）
     
     @ToolbarContentBuilder
@@ -343,16 +466,16 @@ struct EditTransactionView: View {
             Button("閉じる") { dismiss() }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button(role: .destructive) {
-                performDelete()
-            } label: {
-                Label("削除", systemImage: "trash")
+            if !isSharedMode {
+                Button(role: .destructive) {
+                    performDelete()
+                } label: {
+                    Label("削除", systemImage: "trash")
+                }
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            let isEnabled = !(store.categories.isEmpty || amount == 0 || selectedCategoryId == nil)
-            
-            SaveButton(isEnabled: isEnabled, accent: themeStore.theme.accentColor(for: scheme)) {
+            SaveButton(isEnabled: isSaveEnabled, accent: themeStore.theme.accentColor(for: scheme)) {
                 save()
             }
         }
@@ -409,21 +532,46 @@ struct EditTransactionView: View {
     // MARK: - Actions
     
     private func save() {
-        guard let catId = selectedCategoryId else { return }
-        var edited = transaction
-        edited.date = date
-        edited.amount = amount
-        edited.type = type
-        edited.memo = memo
-        edited.categoryId = catId
-        edited.tags = tags
-        
-        store.upsertTransaction(edited)
-        dismiss()
+        let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch mode {
+        case let .personal(tx):
+            guard let catId = selectedCategoryId else { return }
+            var edited = tx
+            edited.date = date
+            edited.amount = amount
+            edited.type = type
+            edited.memo = trimmedMemo
+            edited.categoryId = catId
+            edited.tags = tags
+
+            store.upsertTransaction(edited)
+            dismiss()
+
+        case let .shared(ledger, sharedTx):
+            let category = sharedLedgerStore.categoriesByLedger[ledger.id]?.first { $0.id == selectedSharedCategoryId }
+            let sharedType: SharedTransactionType = (type == .income) ? .income : .expense
+
+            guard amount > 0 else { return }
+
+            Task {
+                await sharedLedgerStore.updateTransaction(
+                    sharedTx,
+                    in: ledger,
+                    amount: amount,
+                    date: date,
+                    type: sharedType,
+                    memo: trimmedMemo.isEmpty ? nil : trimmedMemo,
+                    category: category
+                )
+                dismiss()
+            }
+        }
     }
-    
+
     private func performDelete() {
-        store.deleteTransactions(with: [transaction.id])
+        guard let tx = transaction else { return }
+        store.deleteTransactions(with: [tx.id])
         dismiss()
     }
 }
