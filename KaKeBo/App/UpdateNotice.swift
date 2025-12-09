@@ -58,19 +58,21 @@ private struct UpdateNoticeCard: View {
     
     // 文言はここだけ編集すればOK
     private var title: String { "KaKeBo \(AppVersion.current) アップデート" }
+    private let hero: (title: String, message: String) = (
+        title: "共有家計簿 で みんなと使える",
+        message: "ホーム・カレンダー・レポート・履歴すべてで個人用と共有をワンタップ切替"
+    )
     private let newFeatures: [String] = [
-        "アプリ全体の履歴表示タブ追加",
-        "履歴タブにてメモ・カテゴリ・タグ検索で絞り込みが可能",
-        "履歴タブにてフィルター機能追加（カテゴリ・タグ・期間・金額範囲）",
-        "各支出入に「タグ追加・編集」機能を追加（プレミアムプランでサブカテゴリーのように無制限にタグを付与できます。）"
+        "月の開始日を1〜31日から自由に設定でき、給料日や締め日に合わせやすくなりました",
+        "カスタムキーボード（電卓）の ON / OFF を無料ユーザーでも切り替え可能に",
+        "プレミアムではキーボードの色もお好みにカスタマイズできるように"
     ]
-    private let others: [String] = [
-        "カテゴリー推移の年表示にカンマがついていたものを除去",
-        "タグ機能追加に伴い、一部レイアウトを修正"
+    private let improvements: [String] = [
+        "レシート撮影（OCR）の精度を改善し、読み取り結果がより正確に",
+        "固定費として設定できるカテゴリーの選択可能な範囲を拡張",
+        "取引の追加・編集後、レポートのグラフが即座に更新されるように改善"
     ]
-    
-    @State private var showDetail = false
-    
+
     var body: some View {
         VStack(spacing: 14) {
             CardHeader(title: title, accent: accent) {
@@ -80,23 +82,24 @@ private struct UpdateNoticeCard: View {
             // スクロール部分はセクションに分割
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    HeroHighlight(hero: hero, accent: accent)
+
                     FeatureSection(title: "新機能",
                                    items: newFeatures,
-                                   symbol: "checkmark.seal.fill",
+                                   symbol: "sparkles",
                                    tint: accent)
-                    
-                    FeatureSection(title: "その他",
-                                   items: others,
-                                   symbol: "wrench.adjustable",
+
+                    FeatureSection(title: "改善",
+                                   items: improvements,
+                                   symbol: "arrow.triangle.2.circlepath",
                                    tint: .secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 2)
             }
-            .frame(maxHeight: 260)
-            
+            .frame(maxHeight: 320)
+
             CardButtons(
-                onDetail: { showDetail = true },
                 onOK: { isPresented = false },
                 accent: accent
             )
@@ -112,6 +115,77 @@ private struct UpdateNoticeCard: View {
             RoundedRectangle(cornerRadius: 16).stroke(accent.opacity(0.15), lineWidth: 1)
         )
         .shadow(color: .black.opacity(scheme == .dark ? 0.5 : 0.12), radius: 20, y: 12)
+    }
+}
+
+// MARK: - パーツ：ヒーロー
+private struct HeroHighlight: View {
+    let hero: (title: String, message: String)
+    let accent: Color
+    @Environment(\.colorScheme) private var scheme
+
+    private var gradient: LinearGradient {
+        LinearGradient(colors: [accent.opacity(0.28), accent.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "person.2.wave.2.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(10)
+                    .background(Circle().fill(accent))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(hero.title)
+                        .font(.headline.weight(.semibold))
+                    Text(hero.message)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            TagRow()
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(gradient)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(accent.opacity(scheme == .dark ? 0.55 : 0.3), lineWidth: 1)
+                )
+        )
+    }
+}
+
+// MARK: - パーツ：タグ行
+private struct TagRow: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            TagView(text: "共有家計簿", systemName: "person.3.fill", tint: .white.opacity(0.9), background: Color.white.opacity(0.18))
+            TagView(text: "ホーム/カレンダー/レポート/履歴", systemName: "rectangle.split.3x1.fill", tint: .white.opacity(0.92), background: Color.white.opacity(0.14))
+        }
+    }
+}
+
+private struct TagView: View {
+    let text: String
+    let systemName: String
+    let tint: Color
+    let background: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemName)
+            Text(text).font(.caption.weight(.medium))
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .foregroundStyle(tint)
+        .background(
+            Capsule().fill(background)
+        )
     }
 }
 
@@ -165,7 +239,6 @@ private struct FeatureSection: View {
 
 // MARK: - パーツ：ボタン行
 private struct CardButtons: View {
-    let onDetail: () -> Void
     let onOK: () -> Void
     let accent: Color
     
