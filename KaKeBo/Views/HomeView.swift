@@ -141,7 +141,7 @@ struct HomeView: View {
                     currentTotal: sheet.currentTotal,
                     previousTotal: sheet.previousTotal
                 )
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
             }
         }
         .onAppear {
@@ -185,11 +185,10 @@ struct HomeView: View {
         if let ledger {
             let allTxs = sharedLedgerStore.transactionsByLedger[ledger.id] ?? []
 //            let monthTxs = sharedThisMonthTx(allTxs: allTxs)
-            
+            let cats   = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
             let expenseSlices = sharedExpenseBreakdown(allTxs: allTxs, categories: cats)
             let incomeSlices  = sharedIncomeBreakdown(allTxs: allTxs, categories: cats)
             let dailyPoints   = sharedDailySeries(allTxs: allTxs)
-            let cats   = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
             
             ScrollView {
                 VStack(spacing: 16) {
@@ -556,24 +555,6 @@ extension HomeView {
             isInCurrentMonth($0.date)
         }
     }
-    
-    // MARK: - HEXカラー → Color 変換（#RRGGBB 前提の簡易版）
-//    private func colorFromHex(_ hex: String) -> Color {
-//        let cleaned = hex
-//            .trimmingCharacters(in: .whitespacesAndNewlines)
-//            .replacingOccurrences(of: "#", with: "")
-//        
-//        guard cleaned.count == 6,
-//              let intVal = Int(cleaned, radix: 16) else {
-//            return .gray  // 変換できなかった場合のフォールバック
-//        }
-//        
-//        let r = Double((intVal >> 16) & 0xFF) / 255.0
-//        let g = Double((intVal >> 8) & 0xFF) / 255.0
-//        let b = Double(intVal & 0xFF) / 255.0
-//        
-//        return Color(red: r, green: g, blue: b)
-//    }
 
     // 表示用
     private func monthTitle(_ date: Date) -> String {

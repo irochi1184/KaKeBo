@@ -8,7 +8,7 @@
 import SwiftUI
 import Charts
 
-struct CategorySlice: Identifiable {
+struct CategorySlice: Identifiable, Hashable {
     let id: UUID
     let name: String
     let color: Color

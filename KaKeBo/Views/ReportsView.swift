@@ -561,7 +561,7 @@ private struct KPIYoY: View {
 }
 
 // MARK: - Style helper
-private extension View {
+extension View {
     func cardBackground(_ scheme: ColorScheme) -> some View {
         self
             .padding(12)

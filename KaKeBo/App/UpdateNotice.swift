@@ -95,12 +95,15 @@ private struct UpdateNoticeContent: View {
             primaryButton
         }
         .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(scheme == .dark
-                      ? Color.white.opacity(0.08)
-                      : .ultraThinMaterial)
-        )
+        .background {
+            if scheme == .dark {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+            } else {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 22)
                 .stroke(accent.opacity(0.2), lineWidth: 1)
@@ -141,7 +144,7 @@ private struct UpdateNoticeContent: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("最新バージョンでできること")
+            Text("最新バージョン 2.0.1")
                 .font(.title3.weight(.bold))
             Text("大切なお金の管理がもっと楽しく、もっと簡単になるアップデートをお届けします。")
                 .font(.subheadline)
