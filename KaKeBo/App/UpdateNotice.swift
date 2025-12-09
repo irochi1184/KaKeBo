@@ -197,7 +197,7 @@ private struct UpdateNoticeContent: View {
 }
 
 // MARK: - ユーティリティ
-private enum AppVersion {
+enum AppVersion {
     static var current: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? ""
     }

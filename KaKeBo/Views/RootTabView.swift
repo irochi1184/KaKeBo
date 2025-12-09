@@ -26,6 +26,7 @@ struct RootTabView: View {
             SettingsView()
                 .tabItem { Label("設定", systemImage: "gearshape.fill") }
         }
+        .overlay(TutorialGate())
         .overlay(UpdateNoticeGate())
         .tint(themeStore.theme.accentColor(for: scheme))
     }
