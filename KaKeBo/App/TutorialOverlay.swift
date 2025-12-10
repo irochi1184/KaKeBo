@@ -38,7 +38,7 @@ private struct TutorialOverlay: View {
     @Environment(\.colorScheme) private var scheme
     @AppStorage("monthStart.onboardingDone") private var monthStartOnboardingDone = false
 
-    @State private var step: TutorialStep = .monthStart
+    @State private var step: TutorialStep = .welcome
     @State private var usage: TutorialUsage = .personal
     @State private var showCategoryManager = false
     @State private var sharedName: String = "みんなの家計簿"
@@ -113,16 +113,18 @@ private struct TutorialOverlay: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button {
-                    finish()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(10)
-                        .background(Circle().fill(.secondary.opacity(0.1)))
+                if step != .summary {
+                    Button {
+                        finish()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(10)
+                            .background(Circle().fill(.secondary.opacity(0.1)))
+                    }
+                    .accessibilityLabel("閉じる")
                 }
-                .accessibilityLabel("閉じる")
             }
 
             ProgressView(value: step.progress)
@@ -133,6 +135,8 @@ private struct TutorialOverlay: View {
     @ViewBuilder
     private var content: some View {
         switch step {
+        case .welcome:
+            welcomeStep
         case .monthStart:
             MonthStartStep(settings: $monthStartStore.settings)
         case .usageChoice:
@@ -148,7 +152,7 @@ private struct TutorialOverlay: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
-            if step.canGoBack {
+            if step.canGoBack && step != .summary {
                 Button("戻る") {
                     goBack()
                 }
@@ -179,6 +183,29 @@ private struct TutorialOverlay: View {
             .buttonStyle(.borderedProminent)
             .tint(accent)
             .disabled(step == .sharedSetup && isCreatingSharedLedger)
+        }
+    }
+
+    private var welcomeStep: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("KaKeBoへようこそ！")
+                .font(.title3.weight(.bold))
+            Text("ダウンロードありがとうございます。これから最初の設定を一緒に進めましょう。下のボタンから開始してください。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Label("月の開始日やカテゴリを決めて、自分に合った家計簿に整えられます。", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(accent)
+                Label("共有設定もここからスタートできます。", systemImage: "person.2.fill")
+                    .foregroundStyle(accent)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(accent.opacity(0.12))
+            )
         }
     }
 
@@ -364,6 +391,8 @@ private struct TutorialOverlay: View {
         creationError = nil
 
         switch step {
+        case .welcome:
+            step = .monthStart
         case .monthStart:
             monthStartOnboardingDone = true
             step = .usageChoice
@@ -385,6 +414,8 @@ private struct TutorialOverlay: View {
 
     private func goBack() {
         switch step {
+        case .monthStart:
+            step = .welcome
         case .usageChoice:
             step = .monthStart
         case .sharedSetup:
@@ -393,7 +424,7 @@ private struct TutorialOverlay: View {
             step = usage == .personal ? .usageChoice : .sharedSetup
         case .summary:
             step = .categorySetup
-        case .monthStart:
+        case .welcome:
             break
         }
     }
@@ -434,6 +465,7 @@ private struct TutorialOverlay: View {
 // MARK: - Step / Usage enums
 
 private enum TutorialStep: Int, CaseIterable {
+    case welcome
     case monthStart
     case usageChoice
     case sharedSetup
@@ -444,12 +476,12 @@ private enum TutorialStep: Int, CaseIterable {
         Double(rawValue + 1) / Double(TutorialStep.allCases.count)
     }
 
-    var canGoBack: Bool {
-        self != .monthStart
-    }
+    var canGoBack: Bool { self != .welcome }
 
     func primaryActionTitle(for usage: TutorialUsage) -> String {
         switch self {
+        case .welcome:
+            return "設定を始める"
         case .monthStart:
             return "次へ"
         case .usageChoice:
