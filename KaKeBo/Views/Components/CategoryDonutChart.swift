@@ -8,11 +8,22 @@
 import SwiftUI
 import Charts
 
-struct CategorySlice: Identifiable {
+struct CategorySlice: Identifiable, Hashable {
     let id: UUID
     let name: String
     let color: Color
     let value: Int
+    let filterKey: String
+    let symbolName: String?
+
+    init(id: UUID, name: String, color: Color, value: Int, filterKey: String? = nil, symbolName: String? = nil) {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.value = value
+        self.filterKey = filterKey ?? id.uuidString
+        self.symbolName = symbolName
+    }
 }
 
 struct CategoryDonutChart: View {
