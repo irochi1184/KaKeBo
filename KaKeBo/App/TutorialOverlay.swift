@@ -69,10 +69,15 @@ private struct TutorialOverlay: View {
                 }
                 .padding(18)
                 .frame(maxWidth: 640)
-                .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(scheme == .dark ? Color.white.opacity(0.08) : .ultraThinMaterial)
-                )
+                .background {
+                    if scheme == .dark {
+                         RoundedRectangle(cornerRadius: 22, style: .continuous)
+                             .fill(Color.white.opacity(0.08))
+                    } else {
+                         RoundedRectangle(cornerRadius: 22, style: .continuous)
+                             .fill(.ultraThinMaterial)
+                    }
+                }
                 .overlay(
                     RoundedRectangle(cornerRadius: 22)
                         .stroke(accent.opacity(0.2), lineWidth: 1)
