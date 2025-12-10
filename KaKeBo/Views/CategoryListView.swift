@@ -18,9 +18,11 @@ struct CategoryListView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var purchase: PurchaseManager
-    
+
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @EnvironmentObject var ledgerContext: LedgerContext
+
+    @Environment(\.dismiss) private var dismiss
     
     @Environment(\.colorScheme) private var scheme
     
@@ -95,6 +97,9 @@ struct CategoryListView: View {
             }
             .navigationTitle("カテゴリ")
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる") { dismiss() }
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     EditButton()
                         .disabled(!isPersonalScope && currentSharedLedger == nil)
@@ -310,15 +315,15 @@ private extension CategoryListView {
                         if isCreatingSharedCategory { return }
                         
                         isCreatingSharedCategory = true
-                        
+
                         Task {
-                            // 戻り値を明示的に捨てて警告を消す
                             _ = await sharedLedgerStore.createCategory(
                                 for: ledger,
                                 name: p.name,
                                 colorHex: p.color.toHexString(),
                                 icon: p.symbol
                             )
+                            await sharedLedgerStore.reloadCategories(for: ledger)
                             await MainActor.run {
                                 isCreatingSharedCategory = false
                             }
