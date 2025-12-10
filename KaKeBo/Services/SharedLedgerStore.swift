@@ -19,10 +19,11 @@ final class SharedLedgerStore: ObservableObject {
     @Published var lastError: Error?
     
     @Published var activeCopy: CopyState? = nil
-    
+
     private let container: CKContainer
     private let db: CKDatabase          // 自分の private DB
     private let sharedDB: CKDatabase    // 共有で見える DB
+    private let ensureSharedZoneTask: Task<Void, Error>
     
     private enum LedgerSource {
         case `private`
@@ -44,10 +45,7 @@ final class SharedLedgerStore: ObservableObject {
         self.container = container
         self.db = container.privateCloudDatabase
         self.sharedDB = container.sharedCloudDatabase
-
-        Task {
-            try? await self.ensureSharedZone()
-        }
+        self.ensureSharedZoneTask = Task { try await SharedLedgerStore.ensureSharedZone(in: container.privateCloudDatabase) }
     }
 
     private let lastOpenedLedgerKey = "LastOpenedSharedLedgerRecordName"
@@ -72,9 +70,13 @@ final class SharedLedgerStore: ObservableObject {
         return user.recordName
     }
 
-    private func ensureSharedZone() async throws {
+    private static func ensureSharedZone(in db: CKDatabase) async throws {
         let zone = CKRecordZone(zoneID: SharedLedger.zoneID)
         _ = try await db.modifyRecordZones(saving: [zone], deleting: [])
+    }
+
+    private func awaitSharedZoneReady() async throws {
+        _ = try await ensureSharedZoneTask.value
     }
 
     private func queryRecords(
@@ -155,8 +157,9 @@ final class SharedLedgerStore: ObservableObject {
     func reloadLedgers() async {
         isLoading = true
         defer { isLoading = false }
-        
+
         do {
+            try await awaitSharedZoneReady()
             let userId = try await currentUserId()
             
             // ① 自分が owner の Ledger（privateDB）
@@ -231,8 +234,9 @@ final class SharedLedgerStore: ObservableObject {
     func createLedger(name: String, icon: String, colorHex: String) async -> SharedLedger? {
         isLoading = true
         defer { isLoading = false }
-        
+
         do {
+            try await awaitSharedZoneReady()
             let userId = try await currentUserId()
             let ledger = SharedLedger.new(
                 name: name,
@@ -666,6 +670,7 @@ extension SharedLedgerStore {
     /// 指定した共有家計簿用の CKShare を用意して返す
     /// 既に share がある場合はそれを再利用、無ければ新規作成する
     func prepareShare(for ledger: SharedLedger) async throws -> SharePayload {
+        try await awaitSharedZoneReady()
         // ① 常にサーバー側の最新 rootRecord を取得
         let rootRecord = try await db.record(for: ledger.id)
         
