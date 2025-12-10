@@ -84,7 +84,7 @@ extension SharedCategory {
         return SharedCategory(
             id: CKRecord.ID(
                 recordName: UUID().uuidString,
-                zoneID: SharedLedger.zoneID
+                zoneID: ledgerId.zoneID
             ),
             ledgerId: ledgerId,
             name: name,

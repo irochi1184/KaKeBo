@@ -34,7 +34,8 @@ struct HomeView: View {
     @State private var editingSharedTx: SharedTransaction? = nil
 
     @State private var showMonthStartIntro = false
-    
+    @State private var breakdownSheet: CategoryBreakdownSheetData?
+
     // ▼ 追加：カード順序の状態とドラッグ中のカード
     @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .donut, .daily, .transactions])
     @State private var dragging: DashboardCard?
@@ -42,6 +43,14 @@ struct HomeView: View {
     private let dropUTIs: [UTType] = [.plainText] // onDrag のペイロード種別
 
     private var monthResolver: MonthStartResolver { monthStartStore.resolver() }
+
+    struct CategoryBreakdownSheetData: Identifiable {
+        let id = UUID()
+        let title: String
+        let breakdown: [CategorySlice]
+        let currentTotal: Int
+        let previousTotal: Int
+    }
     
     var body: some View {
         NavigationStack {
@@ -125,6 +134,15 @@ struct HomeView: View {
             .onChange(of: selectedMonth) { _, _ in
                 selectedMonth = monthStart(selectedMonth)
             }
+            .sheet(item: $breakdownSheet) { sheet in
+                CategoryBreakdownSheet(
+                    title: sheet.title,
+                    breakdown: sheet.breakdown,
+                    currentTotal: sheet.currentTotal,
+                    previousTotal: sheet.previousTotal
+                )
+                .presentationDetents([.large])
+            }
         }
         .onAppear {
             store.applyFixedExpensesForCurrentMonth()
@@ -167,11 +185,10 @@ struct HomeView: View {
         if let ledger {
             let allTxs = sharedLedgerStore.transactionsByLedger[ledger.id] ?? []
 //            let monthTxs = sharedThisMonthTx(allTxs: allTxs)
-            
-            let expenseSlices = sharedExpenseBreakdown(allTxs: allTxs)
-            let incomeSlices  = sharedIncomeBreakdown(allTxs: allTxs)
-            let dailyPoints   = sharedDailySeries(allTxs: allTxs)
             let cats   = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
+            let expenseSlices = sharedExpenseBreakdown(allTxs: allTxs, categories: cats)
+            let incomeSlices  = sharedIncomeBreakdown(allTxs: allTxs, categories: cats)
+            let dailyPoints   = sharedDailySeries(allTxs: allTxs)
             
             ScrollView {
                 VStack(spacing: 16) {
@@ -196,6 +213,14 @@ struct HomeView: View {
                         )
                         .luxCard()
                         .padding(.horizontal)
+                        .onTapGesture {
+                            breakdownSheet = CategoryBreakdownSheetData(
+                                title: monthTitle(selectedMonth),
+                                breakdown: expenseSlices,
+                                currentTotal: sharedMonthExpense(txs: allTxs),
+                                previousTotal: sharedPrevMonthExpense(allTxs: allTxs)
+                            )
+                        }
                     }
                     
                     // ③ 日別棒グラフ
@@ -275,7 +300,15 @@ struct HomeView: View {
                 incomePreviousTotal: prevMonthIncome
             )
             .luxCard()
-            
+            .onTapGesture {
+                breakdownSheet = CategoryBreakdownSheetData(
+                    title: monthTitle(selectedMonth),
+                    breakdown: expenseBreakdown,
+                    currentTotal: monthExpense,
+                    previousTotal: prevMonthExpense
+                )
+            }
+
         case .daily:
             DailyBarChart(series: dailySeries)
                 .luxCard()
@@ -352,7 +385,14 @@ extension HomeView {
         for tx in expenseTx { dict[tx.categoryId, default: 0] += tx.amount }
         return dict.compactMap { (catId, sum) in
             guard let cat = store.categories.first(where: { $0.id == catId }) else { return nil }
-            return CategorySlice(id: catId, name: cat.name, color: cat.color, value: sum)
+            return CategorySlice(
+                id: catId,
+                name: cat.name,
+                color: cat.color,
+                value: sum,
+                filterKey: catId.uuidString,
+                symbolName: cat.symbolName
+            )
         }
         .sorted { $0.value > $1.value }
     }
@@ -363,7 +403,14 @@ extension HomeView {
         tx.forEach { dict[$0.categoryId, default: 0] += $0.amount }
         return dict.compactMap { (id, sum) in
             guard let cat = store.categories.first(where: { $0.id == id }) else { return nil }
-            return CategorySlice(id: id, name: cat.name, color: cat.color, value: sum)
+            return CategorySlice(
+                id: id,
+                name: cat.name,
+                color: cat.color,
+                value: sum,
+                filterKey: id.uuidString,
+                symbolName: cat.symbolName
+            )
         }.sorted { $0.value > $1.value }
     }
 
@@ -422,50 +469,64 @@ extension HomeView {
     }
 
     // MARK: - 共有家計簿：カテゴリ別円グラフ
-    private func sharedExpenseBreakdown(allTxs: [SharedTransaction]) -> [CategorySlice] {
+    private func sharedExpenseBreakdown(allTxs: [SharedTransaction], categories: [SharedCategory]) -> [CategorySlice] {
         let expenseTx = allTxs.filter {
             $0.type == .expense && isInCurrentMonth($0.date)
         }
-        
+
         // カテゴリ名ごとに合計
-        var dict: [String: (total: Int, color: Color)] = [:]
+        var dict: [String: (name: String, total: Int, color: Color, symbol: String?)] = [:]
         for tx in expenseTx {
-            let name = tx.categoryName
-            var entry = dict[name] ?? (0, Color.fromHex(tx.categoryColorHex) ?? .gray)
+            let key = tx.categoryId?.recordName ?? tx.categoryName
+            let sharedCategory = categories.first { $0.id == tx.categoryId }
+            let color = Color.fromHex(sharedCategory?.colorHex ?? tx.categoryColorHex) ?? .gray
+            var entry = dict[key] ?? (tx.categoryName, 0, color, sharedCategory?.icon)
             entry.total += tx.amount
-            dict[name] = entry
+            entry.symbol = entry.symbol ?? sharedCategory?.icon
+            entry.color = color
+            entry.name = sharedCategory?.name ?? entry.name
+            dict[key] = entry
         }
-        
-        return dict.map { (name, entry) in
+
+        return dict.map { (key, entry) in
             CategorySlice(
                 id: UUID(),
-                name: name,
+                name: entry.name,
                 color: entry.color,
-                value: entry.total
+                value: entry.total,
+                filterKey: key,
+                symbolName: entry.symbol
             )
         }
         .sorted { $0.value > $1.value }
     }
-    
-    private func sharedIncomeBreakdown(allTxs: [SharedTransaction]) -> [CategorySlice] {
+
+    private func sharedIncomeBreakdown(allTxs: [SharedTransaction], categories: [SharedCategory]) -> [CategorySlice] {
         let incomeTx = allTxs.filter {
             $0.type == .income && isInCurrentMonth($0.date)
         }
-        
-        var dict: [String: (total: Int, color: Color)] = [:]
+
+        var dict: [String: (name: String, total: Int, color: Color, symbol: String?)] = [:]
         for tx in incomeTx {
-            let name = tx.categoryName
-            var entry = dict[name] ?? (0, Color.fromHex(tx.categoryColorHex) ?? .gray)
+            let key = tx.categoryId?.recordName ?? tx.categoryName
+            let sharedCategory = categories.first { $0.id == tx.categoryId }
+            let color = Color.fromHex(sharedCategory?.colorHex ?? tx.categoryColorHex) ?? .gray
+            var entry = dict[key] ?? (tx.categoryName, 0, color, sharedCategory?.icon)
             entry.total += tx.amount
-            dict[name] = entry
+            entry.symbol = entry.symbol ?? sharedCategory?.icon
+            entry.color = color
+            entry.name = sharedCategory?.name ?? entry.name
+            dict[key] = entry
         }
-        
-        return dict.map { (name, entry) in
+
+        return dict.map { (key, entry) in
             CategorySlice(
                 id: UUID(),
-                name: name,
+                name: entry.name,
                 color: entry.color,
-                value: entry.total
+                value: entry.total,
+                filterKey: key,
+                symbolName: entry.symbol
             )
         }
         .sorted { $0.value > $1.value }
@@ -494,24 +555,6 @@ extension HomeView {
             isInCurrentMonth($0.date)
         }
     }
-    
-    // MARK: - HEXカラー → Color 変換（#RRGGBB 前提の簡易版）
-//    private func colorFromHex(_ hex: String) -> Color {
-//        let cleaned = hex
-//            .trimmingCharacters(in: .whitespacesAndNewlines)
-//            .replacingOccurrences(of: "#", with: "")
-//        
-//        guard cleaned.count == 6,
-//              let intVal = Int(cleaned, radix: 16) else {
-//            return .gray  // 変換できなかった場合のフォールバック
-//        }
-//        
-//        let r = Double((intVal >> 16) & 0xFF) / 255.0
-//        let g = Double((intVal >> 8) & 0xFF) / 255.0
-//        let b = Double(intVal & 0xFF) / 255.0
-//        
-//        return Color(red: r, green: g, blue: b)
-//    }
 
     // 表示用
     private func monthTitle(_ date: Date) -> String {
