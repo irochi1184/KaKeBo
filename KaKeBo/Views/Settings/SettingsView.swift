@@ -522,7 +522,8 @@ struct SettingsView: View {
 
     private var monthStartSummary: String {
         let s = monthStartStore.settings
-        let prefix = s.isCustomStartEnabled ? "毎月\(s.startDay)日" : "毎月1日"
+        let boundary = s.boundaryType == .startDay ? "開始日" : "締め日"
+        let prefix = s.isCustomStartEnabled ? "毎月\(s.startDay)日を\(boundary)に" : "毎月1日"
         let suffix: String
         switch s.holidayAdjustment {
         case .none: suffix = "休日はそのまま"

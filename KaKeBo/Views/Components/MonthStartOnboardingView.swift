@@ -17,8 +17,13 @@ struct MonthStartOnboardingView: View {
     }
 
     private var previewText: String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "ja_JP"); f.dateFormat = "M月d日（E）から"
-        return f.string(from: resolver.startDate(for: Date()))
+        let f = DateFormatter(); f.locale = Locale(identifier: "ja_JP"); f.dateFormat = "M月d日（E）"
+        let range = resolver.monthRange(for: Date())
+        return "\(f.string(from: range.lowerBound)) 〜 \(f.string(from: range.upperBound))"
+    }
+
+    private var boundaryLabel: String {
+        settings.boundaryType == .startDay ? "開始日" : "締め日"
     }
 
     var body: some View {
@@ -26,7 +31,7 @@ struct MonthStartOnboardingView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("家計管理を自分のサイクルに合わせましょう")
                     .font(.headline)
-                Text("月の開始日を決めると、ホームの集計やグラフがその日を基準に表示されます。")
+                Text("月の開始日・締め日を決めると、ホームの集計やグラフがその日を基準に表示されます。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -39,7 +44,17 @@ struct MonthStartOnboardingView: View {
                 ))
 
                 if settings.isCustomStartEnabled {
-                    Picker("開始日", selection: Binding(
+                    Picker("集計の基準", selection: Binding(
+                        get: { settings.boundaryType },
+                        set: { settings.boundaryType = $0 }
+                    )) {
+                        ForEach(MonthBoundaryType.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Picker(boundaryLabel, selection: Binding(
                         get: { settings.startDay },
                         set: { settings.startDay = $0 }
                     )) {
@@ -63,7 +78,7 @@ struct MonthStartOnboardingView: View {
                 HStack {
                     Image(systemName: "calendar")
                         .foregroundStyle(.secondary)
-                    Text("今月は \(previewText)")
+                    Text("今月は \(previewText) の期間で集計されます。")
                     Spacer()
                 }
                 .padding(12)
