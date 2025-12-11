@@ -10,18 +10,25 @@ import SwiftUI
 // MARK: - 公開：一度だけ出すゲート（ルートに .overlay で載せる）
 struct UpdateNoticeGate: View {
     @AppStorage("lastShownVersion") private var lastShownVersion = ""
+    @AppStorage("app.installedVersion") private var installedVersion = ""
     @State private var isPresented = false
 
     var body: some View {
         UpdateNoticeOverlay(isPresented: $isPresented)
             .onAppear {
-                if lastShownVersion != AppVersion.current {
+                if installedVersion.isEmpty {
+                    installedVersion = AppVersion.current
+                    return
+                }
+
+                if installedVersion != AppVersion.current && lastShownVersion != AppVersion.current {
                     isPresented = true
                 }
             }
             .onChange(of: isPresented) { _, newVal in
                 if newVal == false {
                     lastShownVersion = AppVersion.current
+                    installedVersion = AppVersion.current
                 }
             }
     }
