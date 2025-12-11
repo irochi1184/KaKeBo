@@ -17,9 +17,15 @@ struct MonthStartSettingsView: View {
     }
 
     private var previewText: String {
-        let start = resolver.startDate(for: Date())
-        let f = DateFormatter(); f.locale = Locale(identifier: "ja_JP"); f.dateFormat = "M月d日（E）から"
-        return f.string(from: start)
+        let range = resolver.monthRange(for: Date())
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "M月d日（E）"
+        return "\(formatter.string(from: range.lowerBound)) 〜 \(formatter.string(from: range.upperBound)) の期間で集計されます。"
+    }
+
+    private var boundaryLabel: String {
+        monthStartStore.settings.boundaryType == .startDay ? "開始日" : "締め日"
     }
 
     var body: some View {
@@ -31,10 +37,20 @@ struct MonthStartSettingsView: View {
                 ))
 
                 if monthStartStore.settings.isCustomStartEnabled {
-                    
+
+                    Picker("集計の基準", selection: Binding(
+                        get: { monthStartStore.settings.boundaryType },
+                        set: { monthStartStore.settings.boundaryType = $0 }
+                    )) {
+                        ForEach(MonthBoundaryType.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
                     // MARK: - 開始日の選択（チップスタイル）
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("開始日")
+                        Text(boundaryLabel)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
                         

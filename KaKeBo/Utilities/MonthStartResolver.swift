@@ -144,24 +144,9 @@ struct MonthStartResolver {
         let baseMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: anchorMonth)) ?? anchorMonth
         guard settings.isCustomStartEnabled else { return calendar.startOfDay(for: baseMonth) }
 
-        let days = calendar.range(of: .day, in: .month, for: baseMonth)?.count ?? 30
-        let clampedDay = min(max(settings.startDay, 1), days)
-        guard let base = calendar.date(from: DateComponents(year: calendar.component(.year, from: baseMonth),
-                                                            month: calendar.component(.month, from: baseMonth),
-                                                            day: clampedDay)) else {
-            return calendar.startOfDay(for: baseMonth)
-        }
-        let startOfBase = calendar.startOfDay(for: base)
-        guard isNonBusinessDay(startOfBase) else { return startOfBase }
-
-        switch settings.holidayAdjustment {
-        case .none:
-            return startOfBase
-        case .previousWeekday:
-            return move(from: startOfBase, direction: -1)
-        case .nextWeekday:
-            return move(from: startOfBase, direction: 1)
-        }
+        let offset = settings.boundaryType == .startDay ? 0 : -1
+        let targetMonth = calendar.date(byAdding: .month, value: offset, to: baseMonth) ?? baseMonth
+        return boundaryDate(for: targetMonth)
     }
 
     func monthRange(for anchorMonth: Date) -> Range<Date> {
@@ -178,6 +163,31 @@ struct MonthStartResolver {
 
     private func isNonBusinessDay(_ date: Date) -> Bool {
         calendar.isDateInWeekend(date) || holidayProvider.isHoliday(date)
+    }
+
+    private func boundaryDate(for month: Date) -> Date {
+        let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: month)) ?? month
+
+        let days = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 30
+        let clampedDay = min(max(settings.startDay, 1), days)
+
+        guard let base = calendar.date(from: DateComponents(year: calendar.component(.year, from: monthStart),
+                                                            month: calendar.component(.month, from: monthStart),
+                                                            day: clampedDay)) else {
+            return calendar.startOfDay(for: monthStart)
+        }
+
+        let startOfBase = calendar.startOfDay(for: base)
+        guard isNonBusinessDay(startOfBase) else { return startOfBase }
+
+        switch settings.holidayAdjustment {
+        case .none:
+            return startOfBase
+        case .previousWeekday:
+            return move(from: startOfBase, direction: -1)
+        case .nextWeekday:
+            return move(from: startOfBase, direction: 1)
+        }
     }
 
     private func move(from date: Date, direction: Int) -> Date {

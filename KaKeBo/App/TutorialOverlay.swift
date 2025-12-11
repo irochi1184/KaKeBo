@@ -538,15 +538,16 @@ private struct MonthStartStep: View {
     private var previewText: String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "M月d日（E）から"
-        return formatter.string(from: resolver.startDate(for: Date()))
+        formatter.dateFormat = "M月d日（E）"
+        let range = resolver.monthRange(for: Date())
+        return "\(formatter.string(from: range.lowerBound)) 〜 \(formatter.string(from: range.upperBound))"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("月の開始日を決める")
                 .font(.title3.weight(.bold))
-            Text("給料日や締め日に合わせて、ホーム画面で集計する開始日を指定できます。")
+            Text("給料日や締め日に合わせて、ホーム画面で集計する基準日を指定できます。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -557,6 +558,16 @@ private struct MonthStartStep: View {
                 ))
 
                 if settings.isCustomStartEnabled {
+                    Picker("集計の基準", selection: Binding(
+                        get: { settings.boundaryType },
+                        set: { settings.boundaryType = $0 }
+                    )) {
+                        ForEach(MonthBoundaryType.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
                     Picker("開始日", selection: Binding(
                         get: { settings.startDay },
                         set: { settings.startDay = $0 }
@@ -581,7 +592,7 @@ private struct MonthStartStep: View {
                 HStack {
                     Image(systemName: "calendar")
                         .foregroundStyle(.secondary)
-                    Text("今月は \(previewText)")
+                    Text("今月は \(previewText) の期間で集計されます。")
                     Spacer()
                 }
                 .padding(12)
