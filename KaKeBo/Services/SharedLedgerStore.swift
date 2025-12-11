@@ -690,12 +690,22 @@ extension SharedLedgerStore {
         // ③ 新しい share を作成（必ず rootRecord を渡す）
         let share = CKShare(rootRecord: rootRecord)
         share[CKShare.SystemFieldKey.title] = ledger.name as CKRecordValue
-        
+
         // ④ root + share を同じ modifyRecords で保存
-        let (saveResults, _) = try await db.modifyRecords(
-            saving: [rootRecord, share],
-            deleting: []
-        )
+        let saveResults: [CKRecord.ID: Result<CKRecord, any Error>]
+        do {
+            (saveResults, _) = try await db.modifyRecords(
+                saving: [rootRecord, share],
+                deleting: []
+            )
+        } catch {
+            // atomic failure などでまとめて失敗した場合でも、
+            // すでにサーバー側で share が作成済みの可能性があるため再取得を試みる
+            if let payload = try await fetchExistingSharePayload(for: ledger) {
+                return payload
+            }
+            throw error
+        }
         
         // ⑤ rootRecord の結果を確認
         let rootResult = saveResults[rootRecord.recordID]
@@ -738,6 +748,17 @@ extension SharedLedgerStore {
         
         // ⑦ 成功したものだけ返す（未保存 share は絶対に返さない）
         return SharePayload(share: savedShare, rootRecord: savedRoot)
+    }
+
+    /// 共有情報が既に存在する場合に再利用する
+    private func fetchExistingSharePayload(for ledger: SharedLedger) async throws -> SharePayload? {
+        let latestRoot = try await db.record(for: ledger.id)
+        guard let shareRef = latestRoot.share else { return nil }
+
+        let shareRecord = try await db.record(for: shareRef.recordID)
+        guard let share = shareRecord as? CKShare else { return nil }
+
+        return SharePayload(share: share, rootRecord: latestRoot)
     }
         
     /// 個人用家計簿の全カテゴリを共有家計簿にコピー
