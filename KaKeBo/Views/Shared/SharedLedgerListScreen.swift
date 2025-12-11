@@ -232,10 +232,12 @@ struct SharedLedgerListScreen: View {
                 Label("編集", systemImage: "pencil")
             }
             
-            Button {
-                presentShare(for: ledger)
-            } label: {
-                Label("招待・メンバー管理", systemImage: "person.2.badge.plus")
+            if store.isOwned(ledger) {
+                Button {
+                    presentShare(for: ledger)
+                } label: {
+                    Label("招待・メンバー管理", systemImage: "person.2.badge.plus")
+                }
             }
             
             Button(role: .destructive) {
@@ -294,6 +296,12 @@ struct SharedLedgerListScreen: View {
     }
     
     private func presentShare(for ledger: SharedLedger) {
+        guard store.isOwned(ledger) else {
+            shareErrorMessage = "この家計簿のオーナーだけが招待できます。"
+            showShareError = true
+            return
+        }
+
         shareTargetLedger = ledger
         sharePayload = nil
         shareLoading = true

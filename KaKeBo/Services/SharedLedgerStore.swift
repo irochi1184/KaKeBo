@@ -23,6 +23,7 @@ final class SharedLedgerStore: ObservableObject {
     private let container: CKContainer
     private let db: CKDatabase          // 自分の private DB
     private let sharedDB: CKDatabase    // 共有で見える DB
+    private var currentUserRecordName: String?
     
     private enum LedgerSource {
         case `private`
@@ -69,6 +70,7 @@ final class SharedLedgerStore: ObservableObject {
 
     private func currentUserId() async throws -> String {
         let user = try await container.userRecordID()
+        currentUserRecordName = user.recordName
         return user.recordName
     }
 
@@ -536,7 +538,10 @@ final class SharedLedgerStore: ObservableObject {
     }
     
     func isOwned(_ ledger: SharedLedger) -> Bool {
-        ledgerSourceMap[ledger.id] != .shared
+        if let userId = currentUserRecordName, ledger.ownerUserId == userId {
+            return true
+        }
+        return ledgerSourceMap[ledger.id] != .shared
     }
 }
 
