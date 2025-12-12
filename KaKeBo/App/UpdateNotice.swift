@@ -151,7 +151,7 @@ private struct UpdateNoticeContent: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("最新バージョン 2.0.1")
+            Text("最新バージョン")
                 .font(.title3.weight(.bold))
             Text("大切なお金の管理がもっと楽しく、もっと簡単になるアップデートをお届けします。")
                 .font(.subheadline)
