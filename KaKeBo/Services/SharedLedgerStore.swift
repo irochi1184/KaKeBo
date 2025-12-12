@@ -707,7 +707,7 @@ extension SharedLedgerStore {
 
             // プロダクション環境で atomic failure が発生するケースがあったため、
             // 非アトミック & 変更差分のみの保存で再試行する
-            if let ckError = error as? CKError, ckError.code == .atomicFailure {
+            if let ckError = error as? CKError, ckError.code == .partialFailure {
                 do {
                     (saveResults, _) = try await db.modifyRecords(
                         saving: [rootRecord, share],
