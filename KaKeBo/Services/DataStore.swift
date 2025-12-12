@@ -30,8 +30,7 @@ final class DataStore: ObservableObject {
         categoriesURL   = base.appendingPathComponent("categories.json")
         transactionsURL = base.appendingPathComponent("transactions.json")
         budgetsURL      = base.appendingPathComponent("budgets.json")
-
-        migrateFromLegacyAppGroupIfNeeded()
+        
         // 旧ドキュメントからの一度きりの移行（既存ユーザー救済）
         migrateFromDocumentsIfNeeded(to: base)
         
@@ -56,33 +55,6 @@ final class DataStore: ObservableObject {
                     print("Migrated \(name) to AppGroup container.")
 #endif
                 } catch { print("Migration error(\(name)):", error) }
-            }
-        }
-    }
-
-    private func migrateFromLegacyAppGroupIfNeeded() {
-        let fm = FileManager.default
-        let targets = [
-            ("categories.json", categoriesURL),
-            ("transactions.json", transactionsURL),
-            ("budgets.json", budgetsURL)
-        ]
-
-        for legacyId in AppGroup.legacyIds {
-            guard let oldBase = fm.containerURL(forSecurityApplicationGroupIdentifier: legacyId) else { continue }
-            for (name, dest) in targets {
-                let src = oldBase.appendingPathComponent(name)
-                if fm.fileExists(atPath: src.path),
-                   !fm.fileExists(atPath: dest.path) {
-                    do {
-                        try fm.copyItem(at: src, to: dest)
-#if DEBUG
-                        print("Migrated \(name) from legacy group (\(legacyId)).")
-#endif
-                    } catch {
-                        print("Migration error from legacy group (\(legacyId)) for \(name):", error)
-                    }
-                }
             }
         }
     }
