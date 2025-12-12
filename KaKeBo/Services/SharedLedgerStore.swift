@@ -692,7 +692,7 @@ extension SharedLedgerStore {
         share[CKShare.SystemFieldKey.title] = ledger.name as CKRecordValue
 
         // ④ root + share を同じ modifyRecords で保存
-        let saveResults: [CKRecord.ID: Result<CKRecord, any Error>]
+        var saveResults: [CKRecord.ID: Result<CKRecord, any Error>]
         do {
             (saveResults, _) = try await db.modifyRecords(
                 saving: [rootRecord, share],
@@ -704,7 +704,23 @@ extension SharedLedgerStore {
             if let payload = try await fetchExistingSharePayload(for: ledger) {
                 return payload
             }
-            throw error
+
+            // プロダクション環境で atomic failure が発生するケースがあったため、
+            // 非アトミック & 変更差分のみの保存で再試行する
+            if let ckError = error as? CKError, ckError.code == .atomicFailure {
+                do {
+                    (saveResults, _) = try await db.modifyRecords(
+                        saving: [rootRecord, share],
+                        deleting: [],
+                        savePolicy: .changedKeys,
+                        atomically: false
+                    )
+                } catch {
+                    throw error
+                }
+            } else {
+                throw error
+            }
         }
         
         // ⑤ rootRecord の結果を確認
