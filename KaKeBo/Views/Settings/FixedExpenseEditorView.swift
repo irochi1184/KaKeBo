@@ -14,6 +14,7 @@ struct FixedExpenseEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var purchase: PurchaseManager
     
     @State private var title: String = ""
     @State private var amount: Int = 0
@@ -21,6 +22,10 @@ struct FixedExpenseEditorView: View {
     @State private var categoryId: UUID? = nil
     @State private var memo: String = ""
     @State private var isActive: Bool = true
+    @State private var tags: [String] = []
+    @State private var tagInput: String = ""
+    @FocusState private var tagFieldFocused: Bool
+    @State private var showPaywall = false
     
     // UI用：金額テキスト（フォーマット & 入力受け）
     @State private var amountText: String = ""
@@ -41,6 +46,7 @@ struct FixedExpenseEditorView: View {
             _categoryId  = State(initialValue: t.categoryId)
             _memo        = State(initialValue: t.memo ?? "")
             _isActive    = State(initialValue: t.isActive)
+            _tags        = State(initialValue: t.tags.map { String($0.prefix(8)) })
             _amountText  = State(initialValue: Self.currency(t.amount))
         } else {
             _categoryId  = State(initialValue: categories.first?.id)
@@ -120,6 +126,56 @@ struct FixedExpenseEditorView: View {
                         }
                         .padding(.vertical, 4)
                     }
+
+                    card {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("タグ（任意）")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            if purchase.isPremiumActive {
+                                HStack(spacing: 6) {
+                                    TextField("例：家族 固定費 (最大8文字)", text: $tagInput)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .submitLabel(.done)
+                                        .focused($tagFieldFocused)
+                                        .onSubmit { commitTagInput() }
+                                        .onChange(of: tagInput) { _, newValue in
+                                            if newValue.count > 8 {
+                                                tagInput = String(newValue.prefix(8))
+                                            }
+                                            if tagInput.contains(where: { " ,、　#".contains($0) }) {
+                                                commitTagInput()
+                                            }
+                                        }
+                                        .padding(.vertical, 10)
+                                        .padding(.horizontal, 12)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                .fill(themeStore.theme.backgroundColor(for: scheme))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                .stroke(.secondary.opacity(0.2), lineWidth: 1)
+                                        )
+
+                                    if !tagInput.isEmpty {
+                                        Button("追加") { commitTagInput() }
+                                            .buttonStyle(.borderedProminent)
+                                    }
+                                }
+
+                                if !tags.isEmpty {
+                                    TagListView(tags: tags) { t in removeTag(t) }
+                                }
+                            } else {
+                                LockedCustomSection(accent: themeStore.theme.accentColor(for: scheme)) {
+                                    showPaywall = true
+                                }
+                            }
+                        }
+                    }
                     
                     Spacer(minLength: 8)
                 }
@@ -148,6 +204,11 @@ struct FixedExpenseEditorView: View {
             }
             .sheet(isPresented: $showCategorySheet) { categoryPickerSheet }
             .sheet(isPresented: $showDaySheet) { dayPickerSheet }
+            .sheet(isPresented: $showPaywall) {
+                PremiumPaywallView(accent: themeStore.theme.accentColor(for: scheme))
+                    .presentationDetents([.large, .medium])
+                    .presentationDragIndicator(.visible)
+            }
             .onAppear {
                 // 初回にフォーマット整える
                 if amount > 0 && amountText.isEmpty {
@@ -293,7 +354,8 @@ struct FixedExpenseEditorView: View {
             dayOfMonth: dayOfMonth,
             categoryId: cat,
             memo: memo.isEmpty ? nil : memo,
-            isActive: isActive
+            isActive: isActive,
+            tags: tags
         )
     }
     
@@ -310,5 +372,37 @@ struct FixedExpenseEditorView: View {
         f.numberStyle = .decimal
         f.groupingSeparator = ","
         return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
+    }
+
+    private func normalized(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "　", with: " ")
+    }
+
+    private func commitTagInput() {
+        let seps = CharacterSet(charactersIn: " ,、　#")
+        let parts = normalized(tagInput)
+            .components(separatedBy: seps)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !parts.isEmpty else {
+            tagInput = ""
+            return
+        }
+        for p in parts { addTag(p) }
+        tagInput = ""
+    }
+
+    private func addTag(_ t: String) {
+        let v = normalized(t)
+        guard !v.isEmpty else { return }
+        let limited = String(v.prefix(8))
+        if !tags.contains(limited) {
+            tags.append(limited)
+        }
+    }
+
+    private func removeTag(_ t: String) {
+        tags.removeAll { $0 == t }
     }
 }
