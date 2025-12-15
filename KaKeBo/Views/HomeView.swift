@@ -117,20 +117,6 @@ struct HomeView: View {
                         .presentationDetents([.large])
                 }
             }
-            .sheet(isPresented: $showMonthStartIntro) {
-                NavigationStack {
-                    MonthStartOnboardingView(
-                        settings: $monthStartStore.settings,
-                        onFinish: {
-                            monthStartOnboardingDone = true
-                            showMonthStartIntro = false
-                        }
-                    )
-                    .navigationTitle("月の開始日")
-                    .navigationBarTitleDisplayMode(.inline)
-                }
-                .onDisappear { monthStartOnboardingDone = true }
-            }
             .onChange(of: selectedMonth) { _, _ in
                 selectedMonth = monthStart(selectedMonth)
             }
