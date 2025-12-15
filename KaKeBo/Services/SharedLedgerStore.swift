@@ -395,6 +395,20 @@ final class SharedLedgerStore: ObservableObject {
             self.lastError = error
         }
     }
+
+    func deleteTransaction(_ tx: SharedTransaction, from ledger: SharedLedger) async {
+        do {
+            let targetDB = database(for: ledger)
+            try await targetDB.deleteRecord(withID: tx.id)
+
+            if var list = transactionsByLedger[ledger.id] {
+                list.removeAll { $0.id == tx.id }
+                transactionsByLedger[ledger.id] = list
+            }
+        } catch {
+            self.lastError = error
+        }
+    }
     
     // MARK: - カテゴリー
     func reloadCategories(for ledger: SharedLedger) async {
