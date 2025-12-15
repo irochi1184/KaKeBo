@@ -292,9 +292,15 @@ struct SettingsView: View {
             Task(priority: .userInitiated) {
                 do {
                     let report = try await MainActor.run { () -> DataStore.ImportReport in
-                        try store.importBackup(data: data) { restoredTheme in
-                            themeStore.theme = restoredTheme
-                        }
+                        try store.importBackup(
+                            data: data,
+                            applyTheme: { restoredTheme in
+                                themeStore.theme = restoredTheme
+                            },
+                            applyMonthStartSettings: { restoredSettings in
+                                monthStartStore.settings = restoredSettings
+                            }
+                        )
                     }
                     await MainActor.run {
                         importReportText = "復元完了：取込 \(report.inserted) 件 / 新規カテゴリ \(report.createdCategories) 件 / スキップ \(report.skipped) 件"

@@ -127,13 +127,27 @@ func makeSample2025BackupJSON() -> Data {
     let recurring: [BackupRecurringTodo] = [
         .init(id: UUID(), title: "家賃の支払い", dayOfMonth: 1, isActive: true)
     ]
-    
+
+    let dayNotes: [BackupDayNote] = [
+        .init(dateKey: "2025-01-01", text: "お正月の帰省"),
+        .init(dateKey: "2025-01-15", text: "クレジット締め日")
+    ]
+
+    let monthStart = BackupMonthStartSettings(
+        isCustomStartEnabled: true,
+        boundaryTypeRaw: "endDay",
+        startDay: 25,
+        holidayAdjustmentRaw: "previousWeekday"
+    )
+
     // ===== 完全バックアップを構築 =====
     let backup = KaKeBoBackupV1(
         exportedAt: Date(),
         categories: categories,
         transactions: txs,
         recurringTodos: recurring,
+        dayNotes: dayNotes,
+        monthStartSettings: monthStart,
         theme: theme
     )
     
