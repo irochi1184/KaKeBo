@@ -466,12 +466,10 @@ struct EditTransactionView: View {
             Button("閉じる") { dismiss() }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            if !isSharedMode {
-                Button(role: .destructive) {
-                    performDelete()
-                } label: {
-                    Label("削除", systemImage: "trash")
-                }
+            Button(role: .destructive) {
+                performDelete()
+            } label: {
+                Label("削除", systemImage: "trash")
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
@@ -570,9 +568,16 @@ struct EditTransactionView: View {
     }
 
     private func performDelete() {
-        guard let tx = transaction else { return }
-        store.deleteTransactions(with: [tx.id])
-        dismiss()
+        switch mode {
+        case let .personal(tx):
+            store.deleteTransactions(with: [tx.id])
+            dismiss()
+        case let .shared(ledger, sharedTx):
+            Task {
+                await sharedLedgerStore.deleteTransaction(sharedTx, from: ledger)
+                dismiss()
+            }
+        }
     }
 }
 
