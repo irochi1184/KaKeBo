@@ -406,3 +406,21 @@ struct FixedExpenseEditorView: View {
         tags.removeAll { $0 == t }
     }
 }
+
+private struct LockedCustomSection: View {
+    let accent: Color
+    let onTapUpgrade: () -> Void
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill").foregroundStyle(accent)
+                Text("プレミアムプランに加入で、タグの追加・編集が無制限に利用できます。")
+                Spacer()
+            }
+            Button("プレミアムを確認") { onTapUpgrade() }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+        }
+        .padding(8)
+    }
+}
