@@ -270,7 +270,7 @@ extension DataStore {
                     type: .expense,
                     memo: t.memo ?? t.title,
                     categoryId: t.categoryId,
-                    tags: []
+                    tags: t.tags
                 )
                 transactions.insert(tx, at: 0)
                 posted.insert(t.id)
@@ -300,7 +300,7 @@ extension DataStore {
             type: .expense,
             memo: t.memo ?? t.title,
             categoryId: t.categoryId,
-            tags: []
+            tags: t.tags
         )
         transactions.insert(tx, at: 0)
         saveTransactions()
