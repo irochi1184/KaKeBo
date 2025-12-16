@@ -41,6 +41,11 @@ struct AddTransactionView: View {
     @State private var showAddCategory = false
     @State private var showAddSharedCategory = false
     @State private var showPaywall = false
+
+    @State private var showTemplateSaved = false
+    @State private var templateSavedMessage = ""
+    @State private var showTemplateError = false
+    @State private var templateErrorMessage = ""
     
     // ★ レシートスキャン表示フラグ
     @State private var showReceiptScanner = false
@@ -190,6 +195,16 @@ struct AddTransactionView: View {
                     if filtered != newValue { amountText = filtered }
                     if let val = Int(filtered) { amount = val } else { amount = 0 }
                 }
+                .alert("保存しました", isPresented: $showTemplateSaved) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    Text(templateSavedMessage)
+                }
+                .alert("適用できません", isPresented: $showTemplateError) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    Text(templateErrorMessage)
+                }
         }
     }
     
@@ -206,6 +221,8 @@ struct AddTransactionView: View {
                             showAddCategory = true
                         }
                     )
+                    frequentTemplateSection
+                        .luxCard()
                 } else {
                     SharedCategorySelector(
                         selectedCategoryId: $selectedSharedCategoryId,
@@ -415,6 +432,52 @@ struct AddTransactionView: View {
             }
         }
     }
+
+    private var frequentTemplateSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("よく使う取引", systemImage: "star.fill")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+            }
+
+            if store.frequentTemplates.isEmpty {
+                Text("金額やカテゴリを保存しておくと、次回からワンタップで呼び出せます。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(store.frequentTemplates) { tpl in
+                            FrequentTemplateChip(
+                                template: tpl,
+                                category: categoryForTemplate(tpl),
+                                currencyFormatter: currency
+                            )
+                            .onTapGesture { applyFrequentTemplate(tpl) }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    store.deleteFrequentTemplate(id: tpl.id)
+                                } label: {
+                                    Label("ショートカットを削除", systemImage: "trash")
+                                }
+                            }
+                            .opacity(isTemplateUsable(tpl) ? 1 : 0.4)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            Button {
+                saveCurrentAsFrequentTemplate()
+            } label: {
+                Label("現在の内容をよく使う取引に登録", systemImage: "plus")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
     
     // MARK: - ヘルパ
     private func currency(_ n: Int) -> String {
@@ -422,6 +485,58 @@ struct AddTransactionView: View {
         f.numberStyle = .decimal
         f.groupingSeparator = ","
         return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
+    }
+
+    private func saveCurrentAsFrequentTemplate() {
+        guard ledgerContext.isPersonal else { return }
+        guard
+            let selId = selectedCategoryId,
+            let chosen = store.categories.first(where: { $0.id == selId }),
+            amount > 0
+        else {
+            templateErrorMessage = "金額とカテゴリを入力してから保存してください。"
+            showTemplateError = true
+            return
+        }
+
+        let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayTitle = trimmedMemo.isEmpty ? chosen.name : trimmedMemo
+
+        let tpl = FrequentTransactionTemplate(
+            title: displayTitle,
+            amount: amount,
+            type: type,
+            memo: trimmedMemo,
+            categoryId: chosen.id,
+            tags: tags
+        )
+
+        store.addFrequentTemplate(tpl)
+        templateSavedMessage = "\(displayTitle) を保存しました。長押しで削除できます。"
+        showTemplateSaved = true
+    }
+
+    private func applyFrequentTemplate(_ tpl: FrequentTransactionTemplate) {
+        guard let _ = categoryForTemplate(tpl) else {
+            templateErrorMessage = "対応するカテゴリが見つからないため適用できません。"
+            showTemplateError = true
+            return
+        }
+        selectedCategoryId = tpl.categoryId
+        amount = tpl.amount
+        type = tpl.type
+        memo = tpl.memo
+        tags = tpl.tags
+
+        if prefersCustomKeypad { showCustomKeypad = true }
+    }
+
+    private func categoryForTemplate(_ tpl: FrequentTransactionTemplate) -> Category? {
+        store.categories.first(where: { $0.id == tpl.categoryId })
+    }
+
+    private func isTemplateUsable(_ tpl: FrequentTransactionTemplate) -> Bool {
+        categoryForTemplate(tpl) != nil
     }
     
     private var bgGradient: LinearGradient {
@@ -729,6 +844,55 @@ struct FlowTagLayout: Layout {
             lineHeight = max(lineHeight, size.height)
             x += size.width + spacing
         }
+    }
+}
+
+// ===== よく使う取引用のチップ =====
+private struct FrequentTemplateChip: View {
+    let template: FrequentTransactionTemplate
+    let category: Category?
+    let currencyFormatter: (Int) -> String
+
+    private var accent: Color {
+        category?.color ?? .secondary
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(accent.opacity(0.15))
+                    .frame(width: 22, height: 22)
+                    .overlay(
+                        Image(systemName: category?.symbolName ?? "tag")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(accent)
+                    )
+                Text(template.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: 8) {
+                Text(currencyFormatter(template.amount))
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.primary)
+                Text(template.type == .income ? "収入" : "支出")
+                    .font(.caption2.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(accent.opacity(0.16)))
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(accent.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(accent.opacity(0.12))
+        )
     }
 }
 

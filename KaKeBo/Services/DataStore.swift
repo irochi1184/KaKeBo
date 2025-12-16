@@ -7,6 +7,7 @@ final class DataStore: ObservableObject {
     @Published private(set) var categories: [Category] = []
     @Published private(set) var transactions: [Transaction] = []
     @Published private(set) var budgets: [Budget] = []
+    @Published private(set) var frequentTemplates: [FrequentTransactionTemplate] = []
 
     private let categoriesURL: URL
     private let transactionsURL: URL
@@ -24,6 +25,7 @@ final class DataStore: ObservableObject {
             budgetsURL      = doc.appendingPathComponent("budgets.json")
             load()
             if categories.isEmpty { seed() }
+            loadFrequentTemplates()
             return
         }
         
@@ -33,9 +35,10 @@ final class DataStore: ObservableObject {
         
         // 旧ドキュメントからの一度きりの移行（既存ユーザー救済）
         migrateFromDocumentsIfNeeded(to: base)
-        
+
         load()
         if categories.isEmpty { seed() }
+        loadFrequentTemplates()
     }
 
     private func migrateFromDocumentsIfNeeded(to appGroupBase: URL) {
@@ -106,6 +109,7 @@ final class DataStore: ObservableObject {
     func deleteCategory(_ cat: Category) {
         categories.removeAll(where: { $0.id == cat.id })
         transactions.removeAll(where: { $0.categoryId == cat.id })
+        frequentTemplates.removeAll { $0.categoryId == cat.id }
         save()
         WidgetCenter.shared.reloadAllTimelines()
     }
@@ -124,6 +128,15 @@ final class DataStore: ObservableObject {
             transactions = []
         }
         budgets = loadJSON([Budget].self, from: budgetsURL) ?? []
+    }
+
+    private func loadFrequentTemplates() {
+        let data = UserDefaults.standard.data(forKey: Self.frequentTemplatesKey) ?? Data()
+        let decoded = (try? JSONDecoder().decode([FrequentTransactionTemplate].self, from: data)) ?? []
+
+        // 削除されたカテゴリを除外してから反映
+        let validCategoryIds = Set(categories.map { $0.id })
+        frequentTemplates = decoded.filter { validCategoryIds.contains($0.categoryId) }
     }
 
     public func save() {
@@ -223,12 +236,37 @@ extension DataStore {
         guard !ids.isEmpty else { return }
         categories.removeAll { ids.contains($0.id) }
         transactions.removeAll { ids.contains($0.categoryId) }
+        frequentTemplates.removeAll { ids.contains($0.categoryId) }
         save()
     }
     
     /// 固定費テンプレートの保存領域（SettingsView でも使う）
     static let fixedTemplatesKey = "kakebo.fixed.templates"
     static let fixedPostedKeyPrefix = "kakebo.fixed.posted." // + "yyyy-MM" に対して Set<UUID> を保持
+    static let frequentTemplatesKey = "kakebo.frequent.transactions"
+
+    // MARK: - よく使う取引テンプレート
+    func addFrequentTemplate(_ tpl: FrequentTransactionTemplate) {
+        // 同じカテゴリ・金額・メモ・種別のものは置き換え
+        if let idx = frequentTemplates.firstIndex(where: { $0.isEquivalent(to: tpl) }) {
+            frequentTemplates[idx] = tpl
+        } else {
+            frequentTemplates.insert(tpl, at: 0)
+        }
+        saveFrequentTemplates()
+    }
+
+    func deleteFrequentTemplate(id: UUID) {
+        frequentTemplates.removeAll { $0.id == id }
+        saveFrequentTemplates()
+    }
+
+    private func saveFrequentTemplates() {
+        UserDefaults.standard.set(
+            try? JSONEncoder().encode(frequentTemplates),
+            forKey: Self.frequentTemplatesKey
+        )
+    }
     
     /// 今月&今日までに“自動計上すべき”固定費を transactions に反映する
     /// - すでに当月分を計上済みのテンプレートはスキップ（Settings の手動計上からも共通利用可）
