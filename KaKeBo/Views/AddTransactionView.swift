@@ -88,124 +88,130 @@ struct AddTransactionView: View {
     var body: some View {
         let usesCustomKeypad = prefersCustomKeypad
         NavigationStack {
-            contentScroll
-                .background(bgGradient.ignoresSafeArea())
-                .navigationTitle("新規追加")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { toolbarContent }
+            mainContent(usingCustomKeypad: usesCustomKeypad)
+        }
+    }
 
-            // カスタム電卓
-                .safeAreaInset(edge: .bottom) {
-                    if usesCustomKeypad && showCustomKeypad {
-                        ZStack {
-                            NumericKeypad(
-                                amount: $amount,
-                                maxDigits: 9,
-                                style: .attached,
-                                isIncome: type == .income,
-                                baseColorOverride: keypadColor,
-                                sizeScale: keypadScale,
-                                preferredHeightRatio: keypadHeightRatio,
-                                onHeightChange: { h in keypadHeight = h }
-                            )
-                            .padding(.bottom, safeBottomInset)
-                        }
-                        .offset(y: -keypadLift)
-                    }
-                }
+    @ViewBuilder
+    private func mainContent(usingCustomKeypad usesCustomKeypad: Bool) -> some View {
+        contentScroll
+            .background(bgGradient.ignoresSafeArea())
+            .navigationTitle("新規追加")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbarContent }
 
-            // 自作キーパッドの閉じる
-                .overlay(alignment: .bottomTrailing) {
-                    if usesCustomKeypad && showCustomKeypad {
-                        CloseKeyboardButton { showCustomKeypad = false }
-                            .padding(.trailing, 12)
-                            .padding(.bottom,
-                                     max(8, (keypadHeight - keypadLift) + extraButtonLift + safeBottomInset)
-                            )
+        // カスタム電卓
+            .safeAreaInset(edge: .bottom) {
+                if usesCustomKeypad && showCustomKeypad {
+                    ZStack {
+                        NumericKeypad(
+                            amount: $amount,
+                            maxDigits: 9,
+                            style: .attached,
+                            isIncome: type == .income,
+                            baseColorOverride: keypadColor,
+                            sizeScale: keypadScale,
+                            preferredHeightRatio: keypadHeightRatio,
+                            onHeightChange: { h in keypadHeight = h }
+                        )
+                        .padding(.bottom, safeBottomInset)
                     }
+                    .offset(y: -keypadLift)
                 }
-            
-            // システムキーボード時の閉じる
-                .overlay(alignment: .bottomTrailing) {
-                    if memoFocused && kb.height > 0 {
-                        CloseKeyboardButton {
-                            memoFocused = false
-                            showCustomKeypad = false
-                        }
+            }
+
+        // 自作キーパッドの閉じる
+            .overlay(alignment: .bottomTrailing) {
+                if usesCustomKeypad && showCustomKeypad {
+                    CloseKeyboardButton { showCustomKeypad = false }
                         .padding(.trailing, 12)
-                        .padding(.bottom, 8 + safeBottomInset)
-                        .animation(.easeInOut(duration: 0.2), value: kb.height)
-                    }
+                        .padding(
+                            .bottom,
+                            max(8, (keypadHeight - keypadLift) + extraButtonLift + safeBottomInset)
+                        )
                 }
-            
-                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isKeyboardVisible = true
+            }
+
+        // システムキーボード時の閉じる
+            .overlay(alignment: .bottomTrailing) {
+                if memoFocused && kb.height > 0 {
+                    CloseKeyboardButton {
+                        memoFocused = false
                         showCustomKeypad = false
                     }
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 8 + safeBottomInset)
+                    .animation(.easeInOut(duration: 0.2), value: kb.height)
                 }
-                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isKeyboardVisible = false
-                    }
+            }
+
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isKeyboardVisible = true
+                    showCustomKeypad = false
                 }
-            
-            // ★ レシートスキャンのシート
-                .sheet(isPresented: $showReceiptScanner) {
-                    NavigationStack {
-                        ReceiptScanView { recognized in
-                            // 解析してフィールドへ反映（ReceiptParser.swift を利用）
-                            let r = ReceiptParser.parse(recognized)
-                            if let v = r.total { amount = v }
-                            if let d = r.date  { date   = d }
-                            if let m = r.merchant, m.isEmpty == false {
-                                // 既にメモがあれば追記、なければ置換
-                                memo = memo.isEmpty ? m : "\(memo) \(m)"
-                            }
-                            if let hint = r.categoryHint {
-                                if ledgerContext.isPersonal {
-                                    if let cat = store.categories.first(where: { $0.name.contains(hint) }) {
-                                        selectedCategoryId = cat.id
-                                    }
-                                } else if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore),
-                                          let cats = sharedLedgerStore.categoriesByLedger[ledger.id] {
-                                    if let cat = cats.first(where: { $0.name.contains(hint) }) {
-                                        selectedSharedCategoryId = cat.id
-                                    }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isKeyboardVisible = false
+                }
+            }
+
+        // ★ レシートスキャンのシート
+            .sheet(isPresented: $showReceiptScanner) {
+                NavigationStack {
+                    ReceiptScanView { recognized in
+                        // 解析してフィールドへ反映（ReceiptParser.swift を利用）
+                        let r = ReceiptParser.parse(recognized)
+                        if let v = r.total { amount = v }
+                        if let d = r.date  { date   = d }
+                        if let m = r.merchant, m.isEmpty == false {
+                            // 既にメモがあれば追記、なければ置換
+                            memo = memo.isEmpty ? m : "\(memo) \(m)"
+                        }
+                        if let hint = r.categoryHint {
+                            if ledgerContext.isPersonal {
+                                if let cat = store.categories.first(where: { $0.name.contains(hint) }) {
+                                    selectedCategoryId = cat.id
+                                }
+                            } else if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore),
+                                      let cats = sharedLedgerStore.categoriesByLedger[ledger.id] {
+                                if let cat = cats.first(where: { $0.name.contains(hint) }) {
+                                    selectedSharedCategoryId = cat.id
                                 }
                             }
-                            // 金額編集しやすいよう自作キーパッドを出しておく
-                            if usesCustomKeypad { showCustomKeypad = true }
                         }
-                        .navigationTitle("レシート読み取り")
+                        // 金額編集しやすいよう自作キーパッドを出しておく
+                        if usesCustomKeypad { showCustomKeypad = true }
                     }
+                    .navigationTitle("レシート読み取り")
                 }
-                .onAppear {
-                    if !usesCustomKeypad { showCustomKeypad = false }
-                    amountText = amount == 0 ? "" : String(amount)
-                }
-                .onChange(of: usesCustomKeypad) { _, newValue in
-                    if !newValue { showCustomKeypad = false; amountFieldFocused = false }
-                }
-                .onChange(of: amount) { _, newValue in
-                    amountText = newValue == 0 ? "" : String(newValue)
-                }
-                .onChange(of: amountText) { _, newValue in
-                    let filtered = newValue.filter { $0.isNumber }
-                    if filtered != newValue { amountText = filtered }
-                    if let val = Int(filtered) { amount = val } else { amount = 0 }
-                }
-                .alert("保存しました", isPresented: $showTemplateSaved) {
-                    Button("OK", role: .cancel) { }
-                } message: {
-                    Text(templateSavedMessage)
-                }
-                .alert("適用できません", isPresented: $showTemplateError) {
-                    Button("OK", role: .cancel) { }
-                } message: {
-                    Text(templateErrorMessage)
-                }
-        }
+            }
+            .onAppear {
+                if !usesCustomKeypad { showCustomKeypad = false }
+                amountText = amount == 0 ? "" : String(amount)
+            }
+            .onChange(of: usesCustomKeypad) { _, newValue in
+                if !newValue { showCustomKeypad = false; amountFieldFocused = false }
+            }
+            .onChange(of: amount) { _, newValue in
+                amountText = newValue == 0 ? "" : String(newValue)
+            }
+            .onChange(of: amountText) { _, newValue in
+                let filtered = newValue.filter { $0.isNumber }
+                if filtered != newValue { amountText = filtered }
+                if let val = Int(filtered) { amount = val } else { amount = 0 }
+            }
+            .alert("保存しました", isPresented: $showTemplateSaved) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(templateSavedMessage)
+            }
+            .alert("適用できません", isPresented: $showTemplateError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(templateErrorMessage)
+            }
     }
     
     // MARK: - 分割ビュー
