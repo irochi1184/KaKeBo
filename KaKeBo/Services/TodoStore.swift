@@ -41,7 +41,9 @@ final class TodoStore: ObservableObject {
         } else {
             self.todos = []
         }
-        ensureRecurringTodos(for: month)
+        if shouldApplyRecurringTodos(for: month) {
+            ensureRecurringTodos(for: month)
+        }
         save(for: month) // normalize
     }
 
@@ -102,6 +104,12 @@ final class TodoStore: ObservableObject {
     }
     
     // MARK: - Recurring templates
+    private func shouldApplyRecurringTodos(for month: Date) -> Bool {
+        let target = cal.date(from: cal.dateComponents([.year, .month], from: month))!
+        let current = cal.date(from: cal.dateComponents([.year, .month], from: .now))!
+        return target >= current
+    }
+
     private func ensureRecurringTodos(for month: Date) {
         let active = templates.filter { $0.isActive }
         for t in active {
