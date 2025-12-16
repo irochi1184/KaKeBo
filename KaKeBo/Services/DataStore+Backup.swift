@@ -23,7 +23,8 @@ extension DataStore {
         }
         // 毎月ToDo（あるなら）
         let recTodos: [BackupRecurringTodo]? = {
-            guard let data = UserDefaults.standard.data(forKey: "kakebo.recurring.templates"),
+            let defaults = UserDefaults.appGroup
+            guard let data = defaults.migratedData(forKey: "kakebo.recurring.templates"),
                   let arr  = try? JSONDecoder().decode([RecurringTodoTemplate].self, from: data)
             else { return nil }
             return arr.map {
@@ -32,7 +33,9 @@ extension DataStore {
         }()
         // 固定費
         let fixed: [BackupFixedExpense]? = {
-            let data = UserDefaults.standard.data(forKey: DataStore.fixedTemplatesKey) ?? Data()
+            let defaults = UserDefaults.appGroup
+            defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
+            let data = defaults.migratedData(forKey: DataStore.fixedTemplatesKey) ?? Data()
             guard let arr = try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data) else { return nil }
             return arr.map {
                 .init(id: $0.id, title: $0.title, amount: $0.amount,
@@ -47,7 +50,8 @@ extension DataStore {
 //            return arr.map { .init(id: $0.id, enabled: $0.enabled, hour: $0.hour, minute: $0.minute) }
 //        }()
         let dayNotes: [BackupDayNote]? = {
-            guard let data = UserDefaults.standard.data(forKey: "kakebo.daynotes.v1"),
+            let defaults = UserDefaults.appGroup
+            guard let data = defaults.migratedData(forKey: "kakebo.daynotes.v1"),
                   let dict = try? JSONDecoder().decode([String: String].self, from: data) else { return nil }
             return dict.map { BackupDayNote(dateKey: $0.key, text: $0.value) }
         }()
@@ -147,7 +151,9 @@ extension DataStore {
         // 任意テーブル：復元できるものはする（無ければ無視）
         if let arr = backup.recurringTodos {
             let data = try JSONEncoder().encode(arr)
-            UserDefaults.standard.set(data, forKey: "kakebo.recurring.templates")
+            let defaults = UserDefaults.appGroup
+            defaults.migrateIfNeeded(keys: ["kakebo.recurring.templates"])
+            defaults.set(data, forKey: "kakebo.recurring.templates")
         }
         if let arr = backup.fixedExpenses {
             let templates: [FixedExpenseTemplate] = arr.compactMap { tpl in
@@ -163,7 +169,9 @@ extension DataStore {
                 )
             }
             let data = try JSONEncoder().encode(templates)
-            UserDefaults.standard.set(data, forKey: DataStore.fixedTemplatesKey)
+            let defaults = UserDefaults.appGroup
+            defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
+            defaults.set(data, forKey: DataStore.fixedTemplatesKey)
         }
 //        if let arr = backup.reminders {
 //            let data = try JSONEncoder().encode(arr)
@@ -172,7 +180,9 @@ extension DataStore {
         if let notes = backup.dayNotes {
             let dict = Dictionary(uniqueKeysWithValues: notes.map { ($0.dateKey, $0.text) })
             let data = try JSONEncoder().encode(dict)
-            UserDefaults.standard.set(data, forKey: "kakebo.daynotes.v1")
+            let defaults = UserDefaults.appGroup
+            defaults.migrateIfNeeded(keys: ["kakebo.daynotes.v1"])
+            defaults.set(data, forKey: "kakebo.daynotes.v1")
         }
         if let ms = backup.monthStartSettings {
             let settings = MonthStartSettings(

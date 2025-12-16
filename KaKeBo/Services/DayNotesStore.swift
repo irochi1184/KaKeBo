@@ -10,13 +10,17 @@ import Combine
 
 /// 日付(yyyy-MM-dd) → メモ本文 のシンプルな保存
 final class DayNotesStore: ObservableObject {
-    @AppStorage("kakebo.daynotes.v1") private var rawData: Data = Data()
+    private let defaults: UserDefaults
+    private let storageKey = "kakebo.daynotes.v1"
+
     @Published private(set) var notes: [String: String] = [:]
     
     private let cal = Calendar.current
     private let tz  = TimeZone(identifier: "Asia/Tokyo") ?? .current
     
-    init() {
+    init(userDefaults: UserDefaults? = .appGroup) {
+        self.defaults = userDefaults ?? .standard
+        self.defaults.migrateIfNeeded(keys: [storageKey])
         load()
     }
     
@@ -60,8 +64,9 @@ final class DayNotesStore: ObservableObject {
     
     // MARK: - Persistence
     private func load() {
-        guard !rawData.isEmpty,
-              let dict = try? JSONDecoder().decode([String:String].self, from: rawData) else {
+        guard let data = defaults.migratedData(forKey: storageKey),
+              !data.isEmpty,
+              let dict = try? JSONDecoder().decode([String:String].self, from: data) else {
             notes = [:]
             return
         }
@@ -69,7 +74,7 @@ final class DayNotesStore: ObservableObject {
     }
     private func save() {
         if let data = try? JSONEncoder().encode(notes) {
-            rawData = data
+            defaults.set(data, forKey: storageKey)
         }
     }
     

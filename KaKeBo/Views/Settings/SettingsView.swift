@@ -21,15 +21,15 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     
-    @AppStorage("reminder.enabled") private var enabled: Bool = true
-    @AppStorage("reminder.time") private var timeRaw: Double = defaultTime.timeIntervalSinceReferenceDate
+    @AppStorage("reminder.enabled", store: .appGroup) private var enabled: Bool = true
+    @AppStorage("reminder.time", store: .appGroup) private var timeRaw: Double = defaultTime.timeIntervalSinceReferenceDate
     
     // ▼ リマインダー統一：Settings 内で共有する ToDo ストア（今日の件数評価などに使う）
     @StateObject private var todoStore = TodoStore()
     
     @State private var sheet: Sheet?
     
-    @AppStorage("kakebo.recurring.templates") private var templatesData: Data = Data()
+    @AppStorage("kakebo.recurring.templates", store: .appGroup) private var templatesData: Data = Data()
     @State private var templates: [RecurringTodoTemplate] = []
     @State private var showNotifAlert = false
     @State private var notifMessage: String = "現在通知の許可設定ができていません。iOSの「設定」アプリから通知を許可してください。"
@@ -38,6 +38,14 @@ struct SettingsView: View {
     // バックアップ作成／復元
     @State private var showImporter = false
     @State private var exportDoc: KaKeBoBackupDocument? = nil
+
+    init() {
+        let defaults = UserDefaults.appGroup
+        defaults.migrateIfNeeded(keys: ["reminder.enabled", "reminder.time", "kakebo.recurring.templates"])
+        _enabled = AppStorage(wrappedValue: true, "reminder.enabled", store: defaults)
+        _timeRaw = AppStorage(wrappedValue: defaultTime.timeIntervalSinceReferenceDate, "reminder.time", store: defaults)
+        _templatesData = AppStorage(wrappedValue: Data(), "kakebo.recurring.templates", store: defaults)
+    }
     @State private var showingExporter = false
     @State private var importReportText: String? = nil
     @State private var showImportDone = false
@@ -92,12 +100,16 @@ struct SettingsView: View {
         (try? JSONDecoder().decode([RecurringTodoTemplate].self, from: templatesData))?.count ?? 0
     }
     private var fixedCountText: String {
-        let data = UserDefaults.standard.data(forKey: DataStore.fixedTemplatesKey) ?? Data()
+        let defaults = UserDefaults.appGroup
+        defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
+        let data = defaults.migratedData(forKey: DataStore.fixedTemplatesKey) ?? Data()
         let count = (try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data))?.count ?? 0
         return "\(count)件"
     }
     private var reminderCountText: String {
-        let data = UserDefaults.standard.data(forKey: ReminderStore.storageKey) ?? Data()
+        let defaults = UserDefaults.appGroup
+        defaults.migrateIfNeeded(keys: [ReminderStore.storageKey])
+        let data = defaults.migratedData(forKey: ReminderStore.storageKey) ?? Data()
         let rules = (try? JSONDecoder().decode([ReminderRule].self, from: data)) ?? []
         let enabled = rules.filter { $0.enabled }.count
         return "有効 \(enabled)/\(rules.count) 件"

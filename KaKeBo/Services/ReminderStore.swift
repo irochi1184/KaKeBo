@@ -12,12 +12,14 @@ import Combine
 final class ReminderStore: ObservableObject {
     // 公開キー：外部（SettingsViewなど）からも参照可能
     public static let storageKey = "kakebo.reminder.rules.v1"
-    
+
     @Published var rules: [ReminderRule] = []
-    
+
     private var cancellables = Set<AnyCancellable>()
-    
+    private let defaults = UserDefaults.appGroup
+
     init() {
+        defaults.migrateIfNeeded(keys: [Self.storageKey])
         load()
         // 並び順の安定化
         rules.sort { $0.sortOrder < $1.sortOrder }
@@ -30,9 +32,9 @@ final class ReminderStore: ObservableObject {
     }
     
     // MARK: - 永続化
-    
+
     func load() {
-        guard let data = UserDefaults.standard.data(forKey: Self.storageKey) else { return }
+        guard let data = defaults.migratedData(forKey: Self.storageKey) else { return }
         do {
             let decoded = try JSONDecoder().decode([ReminderRule].self, from: data)
             self.rules = decoded
@@ -44,7 +46,7 @@ final class ReminderStore: ObservableObject {
     func save() {
         do {
             let data = try JSONEncoder().encode(rules)
-            UserDefaults.standard.set(data, forKey: Self.storageKey)
+            defaults.set(data, forKey: Self.storageKey)
         } catch {
             // 保存失敗時は必要に応じてログ出力
         }
@@ -91,7 +93,9 @@ final class ReminderStore: ObservableObject {
     
     /// 保存済みルールを読み出す（インスタンス不要）
     static func loadRules() -> [ReminderRule] {
-        guard let data = UserDefaults.standard.data(forKey: Self.storageKey) else { return [] }
+        let defaults = UserDefaults.appGroup
+        defaults.migrateIfNeeded(keys: [Self.storageKey])
+        guard let data = defaults.migratedData(forKey: Self.storageKey) else { return [] }
         return (try? JSONDecoder().decode([ReminderRule].self, from: data)) ?? []
     }
     
