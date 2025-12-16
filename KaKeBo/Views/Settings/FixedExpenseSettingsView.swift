@@ -205,14 +205,18 @@ struct FixedExpenseSettingsView: View {
         if purchase.isPremiumActive { return true }
         return templates.count < freeLimit
     }
-    
+
     // MARK: - Storage
     private func loadTemplates() {
-        let data = UserDefaults.standard.data(forKey: DataStore.fixedTemplatesKey) ?? Data()
+        let defaults = UserDefaults.appGroup
+        defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
+        let data = defaults.migratedData(forKey: DataStore.fixedTemplatesKey) ?? Data()
         templates = (try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data)) ?? []
     }
     private func saveTemplates() {
-        UserDefaults.standard.set(try? JSONEncoder().encode(templates), forKey: DataStore.fixedTemplatesKey)
+        let defaults = UserDefaults.appGroup
+        defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
+        defaults.set(try? JSONEncoder().encode(templates), forKey: DataStore.fixedTemplatesKey)
     }
     
     // MARK: - Helpers

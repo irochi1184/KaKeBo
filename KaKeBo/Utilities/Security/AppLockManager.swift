@@ -23,25 +23,25 @@ final class AppLockManager: ObservableObject {
     private let service = "com.irochi.KaKeBo.lock"
     private let accHash = "passwordHash"
     private let accSalt = "passwordSalt"
+    private let defaults = UserDefaults.appGroup
     
     private init() {
-        let d = UserDefaults.standard
-        let enabled = d.bool(forKey: "applock.enabled")
-        let bio = d.bool(forKey: "applock.biometrics")
+        defaults.migrateIfNeeded(keys: ["applock.enabled", "applock.biometrics", "applock.passcodeLength"])
+        let enabled = defaults.bool(forKey: "applock.enabled")
+        let bio = defaults.bool(forKey: "applock.biometrics")
         let locked = enabled // 起動直後は有効ならロック
-        let length = Self.clampLength(d.integer(forKey: "applock.passcodeLength"), defaultValue: 6)
+        let length = Self.clampLength(defaults.integer(forKey: "applock.passcodeLength"), defaultValue: 6)
         
         _isEnabled = Published(initialValue: enabled)
         _biometricsEnabled = Published(initialValue: bio)
         _isLocked = Published(initialValue: locked)
         _passcodeLength = Published(initialValue: length)
     }
-    
+
     private func persist() {
-        let d = UserDefaults.standard
-        d.set(isEnabled, forKey: "applock.enabled")
-        d.set(biometricsEnabled, forKey: "applock.biometrics")
-        d.set(passcodeLength, forKey: "applock.passcodeLength")
+        defaults.set(isEnabled, forKey: "applock.enabled")
+        defaults.set(biometricsEnabled, forKey: "applock.biometrics")
+        defaults.set(passcodeLength, forKey: "applock.passcodeLength")
     }
     
     // 設定変更API

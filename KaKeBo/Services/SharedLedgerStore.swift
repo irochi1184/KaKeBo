@@ -40,11 +40,14 @@ final class SharedLedgerStore: ObservableObject {
     }
     
     private var ledgerSourceMap: [CKRecord.ID: LedgerSource] = [:]
+    private let defaults = UserDefaults.appGroup
 
     init(container: CKContainer = .default()) {
         self.container = container
         self.db = container.privateCloudDatabase
         self.sharedDB = container.sharedCloudDatabase
+
+        defaults.migrateIfNeeded(keys: [lastOpenedLedgerKey])
 
         Task {
             try? await self.ensureSharedZone()
@@ -55,12 +58,12 @@ final class SharedLedgerStore: ObservableObject {
     
     // 最後に開いた家計簿を記録
     func rememberLastOpened(ledger: SharedLedger) {
-        UserDefaults.standard.set(ledger.id.recordName, forKey: lastOpenedLedgerKey)
+        defaults.set(ledger.id.recordName, forKey: lastOpenedLedgerKey)
     }
     
     // 現在の ledgers から、最後に開いた家計簿を探す
     func findLastOpenedLedger() -> SharedLedger? {
-        guard let recordName = UserDefaults.standard.string(forKey: lastOpenedLedgerKey) else {
+        guard let recordName = defaults.string(forKey: lastOpenedLedgerKey) else {
             return nil
         }
         return ledgers.first { $0.id.recordName == recordName }

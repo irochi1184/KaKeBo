@@ -12,22 +12,30 @@ import Combine
 final class TodoStore: ObservableObject {
     @Published private(set) var todos: [CalendarTodo] = []
     private var cal: Calendar { .current }
-    
+
+    private let defaults: UserDefaults
+    private let recurringTemplatesKey = "kakebo.recurring.templates"
+
     // Recurring（テンプレ）もここで管理（必要に応じて元の実装から移植）
-    @AppStorage("kakebo.recurring.templates") private var templatesData: Data = Data()
     private var templates: [RecurringTodoTemplate] {
-        (try? JSONDecoder().decode([RecurringTodoTemplate].self, from: templatesData)) ?? []
+        guard let data = defaults.migratedData(forKey: recurringTemplatesKey) else { return [] }
+        return (try? JSONDecoder().decode([RecurringTodoTemplate].self, from: data)) ?? []
     }
-    
+
+    init(userDefaults: UserDefaults? = .appGroup) {
+        self.defaults = userDefaults ?? .standard
+        self.defaults.migrateIfNeeded(keys: [recurringTemplatesKey])
+    }
+
     // MARK: - Load / Save (month-scoped)
     private func key(for month: Date) -> String {
         let f = DateFormatter(); f.locale = .init(identifier:"ja_JP"); f.dateFormat = "yyyy-MM"
         return "kakebo.todos.\(f.string(from: month))"
     }
-    
+
     func load(for month: Date) {
         let k = key(for: month)
-        if let data = UserDefaults.standard.data(forKey: k),
+        if let data = defaults.migratedData(forKey: k),
            let items = try? JSONDecoder().decode([CalendarTodo].self, from: data) {
             self.todos = items
         } else {
@@ -36,11 +44,11 @@ final class TodoStore: ObservableObject {
         ensureRecurringTodos(for: month)
         save(for: month) // normalize
     }
-    
+
     func save(for month: Date) {
         let k = key(for: month)
         if let data = try? JSONEncoder().encode(todos) {
-            UserDefaults.standard.set(data, forKey: k)
+            defaults.set(data, forKey: k)
         }
     }
     

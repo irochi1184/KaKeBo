@@ -239,15 +239,19 @@ extension DataStore {
         let today = cal.startOfDay(for: Date())
         
         // テンプレ取得
+        let defaults = UserDefaults.appGroup
+        defaults.migrateIfNeeded(keys: [Self.fixedTemplatesKey])
         let templates = (try? JSONDecoder().decode([FixedExpenseTemplate].self,
-                                                   from: UserDefaults.standard.data(forKey: Self.fixedTemplatesKey) ?? Data())) ?? []
-        
+                                                   from: defaults.migratedData(forKey: Self.fixedTemplatesKey) ?? Data())) ?? []
+
         guard templates.contains(where: { $0.isActive }) else { return }
         
         // 当月の「計上済みテンプレID集合」を読み出し
         let monthKey = monthKeyString(for: start)  // "yyyy-MM"
+        let postedKey = Self.fixedPostedKeyPrefix + monthKey
+        defaults.migrateIfNeeded(keys: [postedKey])
         var posted: Set<UUID> = {
-            if let data = UserDefaults.standard.data(forKey: Self.fixedPostedKeyPrefix + monthKey),
+            if let data = defaults.migratedData(forKey: postedKey),
                let ids = try? JSONDecoder().decode([UUID].self, from: data) {
                 return Set(ids)
             }
@@ -282,7 +286,7 @@ extension DataStore {
             saveTransactions()
             // 計上済み更新
             let data = try? JSONEncoder().encode(Array(posted))
-            UserDefaults.standard.set(data, forKey: Self.fixedPostedKeyPrefix + monthKey)
+            defaults.set(data, forKey: postedKey)
             WidgetCenter.shared.reloadAllTimelines()
         }
     }
@@ -307,8 +311,11 @@ extension DataStore {
         
         // 当月の posted 印も付ける
         let monthKey = monthKeyString(for: start)
+        let defaults = UserDefaults.appGroup
+        let postedKey = Self.fixedPostedKeyPrefix + monthKey
+        defaults.migrateIfNeeded(keys: [postedKey])
         var posted: Set<UUID> = {
-            if let data = UserDefaults.standard.data(forKey: Self.fixedPostedKeyPrefix + monthKey),
+            if let data = defaults.migratedData(forKey: postedKey),
                let ids = try? JSONDecoder().decode([UUID].self, from: data) {
                 return Set(ids)
             }
@@ -316,7 +323,7 @@ extension DataStore {
         }()
         posted.insert(t.id)
         let data = try? JSONEncoder().encode(Array(posted))
-        UserDefaults.standard.set(data, forKey: Self.fixedPostedKeyPrefix + monthKey)
+        defaults.set(data, forKey: postedKey)
         WidgetCenter.shared.reloadAllTimelines()
     }
     
