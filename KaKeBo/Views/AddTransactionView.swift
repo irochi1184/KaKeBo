@@ -179,29 +179,21 @@ struct AddTransactionView: View {
     }
 
     private func addLifecycleHandlers<Content: View>(to view: Content, usesCustomKeypad: Bool) -> some View {
-        view
-            .onAppear {
-                if !usesCustomKeypad { showCustomKeypad = false }
-                amountText = amount == 0 ? "" : String(amount)
-            }
+        let appearHandled = view
+            .onAppear { handleAppear(usesCustomKeypad: usesCustomKeypad) }
             .onChange(of: usesCustomKeypad) { _, newValue in
-                if !newValue {
-                    showCustomKeypad = false
-                    amountFieldFocused = false
-                }
+                handleCustomKeypadChange(isEnabled: newValue)
             }
             .onChange(of: amount) { _, newValue in
-                amountText = newValue == 0 ? "" : String(newValue)
+                syncAmountText(with: newValue)
             }
+
+        let withAmountTextChange = appearHandled
             .onChange(of: amountText) { _, newValue in
-                let filtered = newValue.filter { $0.isNumber }
-                if filtered != newValue { amountText = filtered }
-                if let val = Int(filtered) {
-                    amount = val
-                } else {
-                    amount = 0
-                }
+                updateAmount(from: newValue)
             }
+
+        let withAlerts = withAmountTextChange
             .alert("保存しました", isPresented: $showTemplateSaved) {
                 Button("OK", role: .cancel) { }
             } message: {
@@ -212,6 +204,33 @@ struct AddTransactionView: View {
             } message: {
                 Text(templateErrorMessage)
             }
+
+        return withAlerts
+    }
+
+    private func handleAppear(usesCustomKeypad: Bool) {
+        if !usesCustomKeypad { showCustomKeypad = false }
+        amountText = amount == 0 ? "" : String(amount)
+    }
+
+    private func handleCustomKeypadChange(isEnabled: Bool) {
+        guard !isEnabled else { return }
+        showCustomKeypad = false
+        amountFieldFocused = false
+    }
+
+    private func syncAmountText(with newValue: Int) {
+        amountText = newValue == 0 ? "" : String(newValue)
+    }
+
+    private func updateAmount(from text: String) {
+        let filtered = text.filter { $0.isNumber }
+        if filtered != text { amountText = filtered }
+        if let val = Int(filtered) {
+            amount = val
+        } else {
+            amount = 0
+        }
     }
 
     private func applyReceiptResult(_ recognizedText: String, usesCustomKeypad: Bool) {
