@@ -11,6 +11,11 @@ extension DataStore {
     
     // ===== エクスポート（完全復元用 JSON） =====
     func exportFullBackupJSON(theme: AppTheme? = nil) -> Data {
+        if categories.isEmpty && transactions.isEmpty {
+            let year = Calendar.current.component(.year, from: Date())
+            return makeEmptyStateSampleBackupJSON(for: year)
+        }
+
         // カテゴリ
         let cats: [BackupCategory] = categories.map {
             .init(id: $0.id, name: $0.name, symbolName: $0.symbolName, colorHex: colorToHex($0.color))
