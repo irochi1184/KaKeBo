@@ -104,32 +104,7 @@ struct AddTransactionView: View {
         let withKeyboardHandling = addKeyboardHandling(to: withCustomKeypad)
         let withReceiptSheet = addReceiptSheet(to: withKeyboardHandling, usesCustomKeypad: usesCustomKeypad)
 
-        withReceiptSheet
-            .onAppear {
-                if !usesCustomKeypad { showCustomKeypad = false }
-                amountText = amount == 0 ? "" : String(amount)
-            }
-            .onChange(of: usesCustomKeypad) { _, newValue in
-                if !newValue { showCustomKeypad = false; amountFieldFocused = false }
-            }
-            .onChange(of: amount) { _, newValue in
-                amountText = newValue == 0 ? "" : String(newValue)
-            }
-            .onChange(of: amountText) { _, newValue in
-                let filtered = newValue.filter { $0.isNumber }
-                if filtered != newValue { amountText = filtered }
-                if let val = Int(filtered) { amount = val } else { amount = 0 }
-            }
-            .alert("保存しました", isPresented: $showTemplateSaved) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(templateSavedMessage)
-            }
-            .alert("適用できません", isPresented: $showTemplateError) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(templateErrorMessage)
-            }
+        addLifecycleHandlers(to: withReceiptSheet, usesCustomKeypad: usesCustomKeypad)
     }
 
     // MARK: - レイアウト補助
@@ -201,6 +176,42 @@ struct AddTransactionView: View {
                 .navigationTitle("レシート読み取り")
             }
         }
+    }
+
+    private func addLifecycleHandlers<Content: View>(to view: Content, usesCustomKeypad: Bool) -> some View {
+        view
+            .onAppear {
+                if !usesCustomKeypad { showCustomKeypad = false }
+                amountText = amount == 0 ? "" : String(amount)
+            }
+            .onChange(of: usesCustomKeypad) { _, newValue in
+                if !newValue {
+                    showCustomKeypad = false
+                    amountFieldFocused = false
+                }
+            }
+            .onChange(of: amount) { _, newValue in
+                amountText = newValue == 0 ? "" : String(newValue)
+            }
+            .onChange(of: amountText) { _, newValue in
+                let filtered = newValue.filter { $0.isNumber }
+                if filtered != newValue { amountText = filtered }
+                if let val = Int(filtered) {
+                    amount = val
+                } else {
+                    amount = 0
+                }
+            }
+            .alert("保存しました", isPresented: $showTemplateSaved) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(templateSavedMessage)
+            }
+            .alert("適用できません", isPresented: $showTemplateError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(templateErrorMessage)
+            }
     }
 
     private func applyReceiptResult(_ recognizedText: String, usesCustomKeypad: Bool) {
