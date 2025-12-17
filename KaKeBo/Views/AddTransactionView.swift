@@ -94,13 +94,13 @@ struct AddTransactionView: View {
 
     @ViewBuilder
     private func mainContent(usingCustomKeypad usesCustomKeypad: Bool) -> some View {
-        contentScroll
+        let base = contentScroll
             .background(bgGradient.ignoresSafeArea())
             .navigationTitle("新規追加")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
 
-        // カスタム電卓
+        let withCustomKeypad = base
             .safeAreaInset(edge: .bottom) {
                 if usesCustomKeypad && showCustomKeypad {
                     ZStack {
@@ -119,8 +119,6 @@ struct AddTransactionView: View {
                     .offset(y: -keypadLift)
                 }
             }
-
-        // 自作キーパッドの閉じる
             .overlay(alignment: .bottomTrailing) {
                 if usesCustomKeypad && showCustomKeypad {
                     CloseKeyboardButton { showCustomKeypad = false }
@@ -131,8 +129,6 @@ struct AddTransactionView: View {
                         )
                 }
             }
-
-        // システムキーボード時の閉じる
             .overlay(alignment: .bottomTrailing) {
                 if memoFocused && kb.height > 0 {
                     CloseKeyboardButton {
@@ -145,6 +141,7 @@ struct AddTransactionView: View {
                 }
             }
 
+        let withKeyboardHandling = withCustomKeypad
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isKeyboardVisible = true
@@ -157,16 +154,14 @@ struct AddTransactionView: View {
                 }
             }
 
-        // ★ レシートスキャンのシート
+        let withReceiptSheet = withKeyboardHandling
             .sheet(isPresented: $showReceiptScanner) {
                 NavigationStack {
                     ReceiptScanView { recognized in
-                        // 解析してフィールドへ反映（ReceiptParser.swift を利用）
                         let r = ReceiptParser.parse(recognized)
                         if let v = r.total { amount = v }
                         if let d = r.date  { date   = d }
                         if let m = r.merchant, m.isEmpty == false {
-                            // 既にメモがあれば追記、なければ置換
                             memo = memo.isEmpty ? m : "\(memo) \(m)"
                         }
                         if let hint = r.categoryHint {
@@ -181,12 +176,13 @@ struct AddTransactionView: View {
                                 }
                             }
                         }
-                        // 金額編集しやすいよう自作キーパッドを出しておく
                         if usesCustomKeypad { showCustomKeypad = true }
                     }
                     .navigationTitle("レシート読み取り")
                 }
             }
+
+        withReceiptSheet
             .onAppear {
                 if !usesCustomKeypad { showCustomKeypad = false }
                 amountText = amount == 0 ? "" : String(amount)
