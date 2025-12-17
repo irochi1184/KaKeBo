@@ -19,6 +19,8 @@ struct KaKeBoBackupV1: Codable {
     var recurringTodos: [BackupRecurringTodo]?
     var fixedExpenses: [BackupFixedExpense]?
     var reminders: [BackupReminderRule]?
+    var dayNotes: [BackupDayNote]?
+    var monthStartSettings: BackupMonthStartSettings?
     var theme: BackupTheme?
 }
 
@@ -63,6 +65,20 @@ struct BackupReminderRule: Codable, Identifiable {
     var hour: Int
     var minute: Int
     // 条件等があれば拡張
+}
+
+struct BackupDayNote: Codable, Identifiable {
+    var id: String { dateKey }
+    /// "yyyy-MM-dd" 形式
+    var dateKey: String
+    var text: String
+}
+
+struct BackupMonthStartSettings: Codable {
+    var isCustomStartEnabled: Bool
+    var boundaryTypeRaw: String
+    var startDay: Int
+    var holidayAdjustmentRaw: String
 }
 
 struct BackupTheme: Codable {

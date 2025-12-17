@@ -41,6 +41,11 @@ struct AddTransactionView: View {
     @State private var showAddCategory = false
     @State private var showAddSharedCategory = false
     @State private var showPaywall = false
+
+    @State private var showTemplateSaved = false
+    @State private var templateSavedMessage = ""
+    @State private var showTemplateError = false
+    @State private var templateErrorMessage = ""
     
     // ★ レシートスキャン表示フラグ
     @State private var showReceiptScanner = false
@@ -83,114 +88,130 @@ struct AddTransactionView: View {
     var body: some View {
         let usesCustomKeypad = prefersCustomKeypad
         NavigationStack {
-            contentScroll
-                .background(bgGradient.ignoresSafeArea())
-                .navigationTitle("新規追加")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { toolbarContent }
+            mainContent(usingCustomKeypad: usesCustomKeypad)
+        }
+    }
 
-            // カスタム電卓
-                .safeAreaInset(edge: .bottom) {
-                    if usesCustomKeypad && showCustomKeypad {
-                        ZStack {
-                            NumericKeypad(
-                                amount: $amount,
-                                maxDigits: 9,
-                                style: .attached,
-                                isIncome: type == .income,
-                                baseColorOverride: keypadColor,
-                                sizeScale: keypadScale,
-                                preferredHeightRatio: keypadHeightRatio,
-                                onHeightChange: { h in keypadHeight = h }
-                            )
-                            .padding(.bottom, safeBottomInset)
-                        }
-                        .offset(y: -keypadLift)
-                    }
-                }
+    @ViewBuilder
+    private func mainContent(usingCustomKeypad usesCustomKeypad: Bool) -> some View {
+        contentScroll
+            .background(bgGradient.ignoresSafeArea())
+            .navigationTitle("新規追加")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbarContent }
 
-            // 自作キーパッドの閉じる
-                .overlay(alignment: .bottomTrailing) {
-                    if usesCustomKeypad && showCustomKeypad {
-                        CloseKeyboardButton { showCustomKeypad = false }
-                            .padding(.trailing, 12)
-                            .padding(.bottom,
-                                     max(8, (keypadHeight - keypadLift) + extraButtonLift + safeBottomInset)
-                            )
+        // カスタム電卓
+            .safeAreaInset(edge: .bottom) {
+                if usesCustomKeypad && showCustomKeypad {
+                    ZStack {
+                        NumericKeypad(
+                            amount: $amount,
+                            maxDigits: 9,
+                            style: .attached,
+                            isIncome: type == .income,
+                            baseColorOverride: keypadColor,
+                            sizeScale: keypadScale,
+                            preferredHeightRatio: keypadHeightRatio,
+                            onHeightChange: { h in keypadHeight = h }
+                        )
+                        .padding(.bottom, safeBottomInset)
                     }
+                    .offset(y: -keypadLift)
                 }
-            
-            // システムキーボード時の閉じる
-                .overlay(alignment: .bottomTrailing) {
-                    if memoFocused && kb.height > 0 {
-                        CloseKeyboardButton {
-                            memoFocused = false
-                            showCustomKeypad = false
-                        }
+            }
+
+        // 自作キーパッドの閉じる
+            .overlay(alignment: .bottomTrailing) {
+                if usesCustomKeypad && showCustomKeypad {
+                    CloseKeyboardButton { showCustomKeypad = false }
                         .padding(.trailing, 12)
-                        .padding(.bottom, 8 + safeBottomInset)
-                        .animation(.easeInOut(duration: 0.2), value: kb.height)
-                    }
+                        .padding(
+                            .bottom,
+                            max(8, (keypadHeight - keypadLift) + extraButtonLift + safeBottomInset)
+                        )
                 }
-            
-                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isKeyboardVisible = true
+            }
+
+        // システムキーボード時の閉じる
+            .overlay(alignment: .bottomTrailing) {
+                if memoFocused && kb.height > 0 {
+                    CloseKeyboardButton {
+                        memoFocused = false
                         showCustomKeypad = false
                     }
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 8 + safeBottomInset)
+                    .animation(.easeInOut(duration: 0.2), value: kb.height)
                 }
-                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isKeyboardVisible = false
-                    }
+            }
+
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isKeyboardVisible = true
+                    showCustomKeypad = false
                 }
-            
-            // ★ レシートスキャンのシート
-                .sheet(isPresented: $showReceiptScanner) {
-                    NavigationStack {
-                        ReceiptScanView { recognized in
-                            // 解析してフィールドへ反映（ReceiptParser.swift を利用）
-                            let r = ReceiptParser.parse(recognized)
-                            if let v = r.total { amount = v }
-                            if let d = r.date  { date   = d }
-                            if let m = r.merchant, m.isEmpty == false {
-                                // 既にメモがあれば追記、なければ置換
-                                memo = memo.isEmpty ? m : "\(memo) \(m)"
-                            }
-                            if let hint = r.categoryHint {
-                                if ledgerContext.isPersonal {
-                                    if let cat = store.categories.first(where: { $0.name.contains(hint) }) {
-                                        selectedCategoryId = cat.id
-                                    }
-                                } else if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore),
-                                          let cats = sharedLedgerStore.categoriesByLedger[ledger.id] {
-                                    if let cat = cats.first(where: { $0.name.contains(hint) }) {
-                                        selectedSharedCategoryId = cat.id
-                                    }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isKeyboardVisible = false
+                }
+            }
+
+        // ★ レシートスキャンのシート
+            .sheet(isPresented: $showReceiptScanner) {
+                NavigationStack {
+                    ReceiptScanView { recognized in
+                        // 解析してフィールドへ反映（ReceiptParser.swift を利用）
+                        let r = ReceiptParser.parse(recognized)
+                        if let v = r.total { amount = v }
+                        if let d = r.date  { date   = d }
+                        if let m = r.merchant, m.isEmpty == false {
+                            // 既にメモがあれば追記、なければ置換
+                            memo = memo.isEmpty ? m : "\(memo) \(m)"
+                        }
+                        if let hint = r.categoryHint {
+                            if ledgerContext.isPersonal {
+                                if let cat = store.categories.first(where: { $0.name.contains(hint) }) {
+                                    selectedCategoryId = cat.id
+                                }
+                            } else if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore),
+                                      let cats = sharedLedgerStore.categoriesByLedger[ledger.id] {
+                                if let cat = cats.first(where: { $0.name.contains(hint) }) {
+                                    selectedSharedCategoryId = cat.id
                                 }
                             }
-                            // 金額編集しやすいよう自作キーパッドを出しておく
-                            if usesCustomKeypad { showCustomKeypad = true }
                         }
-                        .navigationTitle("レシート読み取り")
+                        // 金額編集しやすいよう自作キーパッドを出しておく
+                        if usesCustomKeypad { showCustomKeypad = true }
                     }
+                    .navigationTitle("レシート読み取り")
                 }
-                .onAppear {
-                    if !usesCustomKeypad { showCustomKeypad = false }
-                    amountText = amount == 0 ? "" : String(amount)
-                }
-                .onChange(of: usesCustomKeypad) { _, newValue in
-                    if !newValue { showCustomKeypad = false; amountFieldFocused = false }
-                }
-                .onChange(of: amount) { _, newValue in
-                    amountText = newValue == 0 ? "" : String(newValue)
-                }
-                .onChange(of: amountText) { _, newValue in
-                    let filtered = newValue.filter { $0.isNumber }
-                    if filtered != newValue { amountText = filtered }
-                    if let val = Int(filtered) { amount = val } else { amount = 0 }
-                }
-        }
+            }
+            .onAppear {
+                if !usesCustomKeypad { showCustomKeypad = false }
+                amountText = amount == 0 ? "" : String(amount)
+            }
+            .onChange(of: usesCustomKeypad) { _, newValue in
+                if !newValue { showCustomKeypad = false; amountFieldFocused = false }
+            }
+            .onChange(of: amount) { _, newValue in
+                amountText = newValue == 0 ? "" : String(newValue)
+            }
+            .onChange(of: amountText) { _, newValue in
+                let filtered = newValue.filter { $0.isNumber }
+                if filtered != newValue { amountText = filtered }
+                if let val = Int(filtered) { amount = val } else { amount = 0 }
+            }
+            .alert("保存しました", isPresented: $showTemplateSaved) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(templateSavedMessage)
+            }
+            .alert("適用できません", isPresented: $showTemplateError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(templateErrorMessage)
+            }
     }
     
     // MARK: - 分割ビュー
@@ -206,6 +227,8 @@ struct AddTransactionView: View {
                             showAddCategory = true
                         }
                     )
+                    frequentTemplateSection
+                        .luxCard()
                 } else {
                     SharedCategorySelector(
                         selectedCategoryId: $selectedSharedCategoryId,
@@ -415,6 +438,52 @@ struct AddTransactionView: View {
             }
         }
     }
+
+    private var frequentTemplateSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("よく使う取引", systemImage: "star.fill")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+            }
+
+            if store.frequentTemplates.isEmpty {
+                Text("金額やカテゴリを保存しておくと、次回からワンタップで呼び出せます。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(store.frequentTemplates) { tpl in
+                            FrequentTemplateChip(
+                                template: tpl,
+                                category: categoryForTemplate(tpl),
+                                currencyFormatter: currency
+                            )
+                            .onTapGesture { applyFrequentTemplate(tpl) }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    store.deleteFrequentTemplate(id: tpl.id)
+                                } label: {
+                                    Label("ショートカットを削除", systemImage: "trash")
+                                }
+                            }
+                            .opacity(isTemplateUsable(tpl) ? 1 : 0.4)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            Button {
+                saveCurrentAsFrequentTemplate()
+            } label: {
+                Label("現在の内容をよく使う取引に登録", systemImage: "plus")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
     
     // MARK: - ヘルパ
     private func currency(_ n: Int) -> String {
@@ -422,6 +491,58 @@ struct AddTransactionView: View {
         f.numberStyle = .decimal
         f.groupingSeparator = ","
         return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
+    }
+
+    private func saveCurrentAsFrequentTemplate() {
+        guard ledgerContext.isPersonal else { return }
+        guard
+            let selId = selectedCategoryId,
+            let chosen = store.categories.first(where: { $0.id == selId }),
+            amount > 0
+        else {
+            templateErrorMessage = "金額とカテゴリを入力してから保存してください。"
+            showTemplateError = true
+            return
+        }
+
+        let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayTitle = trimmedMemo.isEmpty ? chosen.name : trimmedMemo
+
+        let tpl = FrequentTransactionTemplate(
+            title: displayTitle,
+            amount: amount,
+            type: type,
+            memo: trimmedMemo,
+            categoryId: chosen.id,
+            tags: tags
+        )
+
+        store.addFrequentTemplate(tpl)
+        templateSavedMessage = "\(displayTitle) を保存しました。長押しで削除できます。"
+        showTemplateSaved = true
+    }
+
+    private func applyFrequentTemplate(_ tpl: FrequentTransactionTemplate) {
+        guard let _ = categoryForTemplate(tpl) else {
+            templateErrorMessage = "対応するカテゴリが見つからないため適用できません。"
+            showTemplateError = true
+            return
+        }
+        selectedCategoryId = tpl.categoryId
+        amount = tpl.amount
+        type = tpl.type
+        memo = tpl.memo
+        tags = tpl.tags
+
+        if prefersCustomKeypad { showCustomKeypad = true }
+    }
+
+    private func categoryForTemplate(_ tpl: FrequentTransactionTemplate) -> Category? {
+        store.categories.first(where: { $0.id == tpl.categoryId })
+    }
+
+    private func isTemplateUsable(_ tpl: FrequentTransactionTemplate) -> Bool {
+        categoryForTemplate(tpl) != nil
     }
     
     private var bgGradient: LinearGradient {
@@ -729,6 +850,55 @@ struct FlowTagLayout: Layout {
             lineHeight = max(lineHeight, size.height)
             x += size.width + spacing
         }
+    }
+}
+
+// ===== よく使う取引用のチップ =====
+private struct FrequentTemplateChip: View {
+    let template: FrequentTransactionTemplate
+    let category: Category?
+    let currencyFormatter: (Int) -> String
+
+    private var accent: Color {
+        category?.color ?? .secondary
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(accent.opacity(0.15))
+                    .frame(width: 22, height: 22)
+                    .overlay(
+                        Image(systemName: category?.symbolName ?? "tag")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(accent)
+                    )
+                Text(template.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: 8) {
+                Text(currencyFormatter(template.amount))
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.primary)
+                Text(template.type == .income ? "収入" : "支出")
+                    .font(.caption2.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(accent.opacity(0.16)))
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(accent.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(accent.opacity(0.12))
+        )
     }
 }
 

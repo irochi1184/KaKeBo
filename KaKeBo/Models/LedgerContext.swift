@@ -43,13 +43,14 @@ final class LedgerContext: ObservableObject {
     
     // MARK: - UserDefaults
     
-    private let defaults = UserDefaults.standard
+    private let defaults = UserDefaults.appGroup
     private let modeKey = "ledger.lastMode"
     private let sharedIdKey = "ledger.lastSharedLedgerId"
     
     // MARK: - Init
     
     init() {
+        defaults.migrateIfNeeded(keys: [modeKey, sharedIdKey])
         // 起動直後はこちらで「即座に」モードだけ復元する
         if let raw = defaults.string(forKey: modeKey),
            let m = Mode(rawValue: raw) {

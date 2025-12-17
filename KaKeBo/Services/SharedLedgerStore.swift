@@ -40,11 +40,14 @@ final class SharedLedgerStore: ObservableObject {
     }
     
     private var ledgerSourceMap: [CKRecord.ID: LedgerSource] = [:]
+    private let defaults = UserDefaults.appGroup
 
     init(container: CKContainer = .default()) {
         self.container = container
         self.db = container.privateCloudDatabase
         self.sharedDB = container.sharedCloudDatabase
+
+        defaults.migrateIfNeeded(keys: [lastOpenedLedgerKey])
 
         Task {
             try? await self.ensureSharedZone()
@@ -55,12 +58,12 @@ final class SharedLedgerStore: ObservableObject {
     
     // 最後に開いた家計簿を記録
     func rememberLastOpened(ledger: SharedLedger) {
-        UserDefaults.standard.set(ledger.id.recordName, forKey: lastOpenedLedgerKey)
+        defaults.set(ledger.id.recordName, forKey: lastOpenedLedgerKey)
     }
     
     // 現在の ledgers から、最後に開いた家計簿を探す
     func findLastOpenedLedger() -> SharedLedger? {
-        guard let recordName = UserDefaults.standard.string(forKey: lastOpenedLedgerKey) else {
+        guard let recordName = defaults.string(forKey: lastOpenedLedgerKey) else {
             return nil
         }
         return ledgers.first { $0.id.recordName == recordName }
@@ -395,6 +398,20 @@ final class SharedLedgerStore: ObservableObject {
             self.lastError = error
         }
     }
+
+    func deleteTransaction(_ tx: SharedTransaction, from ledger: SharedLedger) async {
+        do {
+            let targetDB = database(for: ledger)
+            try await targetDB.deleteRecord(withID: tx.id)
+
+            if var list = transactionsByLedger[ledger.id] {
+                list.removeAll { $0.id == tx.id }
+                transactionsByLedger[ledger.id] = list
+            }
+        } catch {
+            self.lastError = error
+        }
+    }
     
     // MARK: - カテゴリー
     func reloadCategories(for ledger: SharedLedger) async {
@@ -684,12 +701,19 @@ extension SharedLedgerStore {
                     userInfo: [NSLocalizedDescriptionKey: "既存の共有情報を取得できませんでした。"]
                 )
             }
-            return SharePayload(share: share, rootRecord: rootRecord)
+
+            let updatedShare = try await ensureShareIsJoinable(
+                share,
+                rootRecord: rootRecord,
+                ledgerName: ledger.name
+            )
+            return SharePayload(share: updatedShare, rootRecord: rootRecord)
         }
-        
+
         // ③ 新しい share を作成（必ず rootRecord を渡す）
         let share = CKShare(rootRecord: rootRecord)
         share[CKShare.SystemFieldKey.title] = ledger.name as CKRecordValue
+        share.publicPermission = .readWrite
 
         // ④ root + share を同じ modifyRecords で保存
         var saveResults: [CKRecord.ID: Result<CKRecord, any Error>]
@@ -707,7 +731,7 @@ extension SharedLedgerStore {
 
             // プロダクション環境で atomic failure が発生するケースがあったため、
             // 非アトミック & 変更差分のみの保存で再試行する
-            if let ckError = error as? CKError, ckError.code == .atomicFailure {
+            if let ckError = error as? CKError, ckError.code == .partialFailure {
                 do {
                     (saveResults, _) = try await db.modifyRecords(
                         saving: [rootRecord, share],
@@ -751,7 +775,12 @@ extension SharedLedgerStore {
                     userInfo: [NSLocalizedDescriptionKey: "保存されたレコードが CKShare ではありません。"]
                 )
             }
-            savedShare = s
+            let ensuredShare = try await ensureShareIsJoinable(
+                s,
+                rootRecord: savedRoot,
+                ledgerName: ledger.name
+            )
+            savedShare = ensuredShare
         case .failure(let error):
             throw error    // ← ここで CKError.code12 とかが返ってくる
         case .none:
@@ -774,7 +803,50 @@ extension SharedLedgerStore {
         let shareRecord = try await db.record(for: shareRef.recordID)
         guard let share = shareRecord as? CKShare else { return nil }
 
-        return SharePayload(share: share, rootRecord: latestRoot)
+        let updatedShare = try await ensureShareIsJoinable(
+            share,
+            rootRecord: latestRoot,
+            ledgerName: ledger.name
+        )
+
+        return SharePayload(share: updatedShare, rootRecord: latestRoot)
+    }
+
+    /// 共有リンクから誰でも参加できるよう、必要な設定が抜けていた場合に補正する
+    private func ensureShareIsJoinable(
+        _ share: CKShare,
+        rootRecord: CKRecord,
+        ledgerName: String
+    ) async throws -> CKShare {
+
+        var needsSave = false
+
+        if share.publicPermission != .readWrite {
+            share.publicPermission = .readWrite
+            needsSave = true
+        }
+
+        if share[CKShare.SystemFieldKey.title] as? String != ledgerName {
+            share[CKShare.SystemFieldKey.title] = ledgerName as CKRecordValue
+            needsSave = true
+        }
+
+        guard needsSave else { return share }
+
+        let (saveResults, _) = try await db.modifyRecords(
+            saving: [rootRecord, share],
+            deleting: [],
+            savePolicy: .changedKeys
+        )
+
+        guard let shareResult = saveResults[share.recordID] else { return share }
+
+        switch shareResult {
+        case .success(let record):
+            return record as? CKShare ?? share
+        case .failure(let error):
+            throw error
+        }
     }
         
     /// 個人用家計簿の全カテゴリを共有家計簿にコピー

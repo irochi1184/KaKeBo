@@ -5,6 +5,7 @@
 //  Created by 有田健一郎 on 2025/09/21.
 //
 
+import Foundation
 import SwiftUI
 
 @main
@@ -35,7 +36,10 @@ struct KaKeBoApp: App {
                 .environmentObject(ledgerContext)
                 .environmentObject(monthStartStore)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
-                .task { await purchase.load() }
+                .task {
+//                    debugAppGroupFiles()
+                    await purchase.load()
+                }
             // 初回起動時のみ、ロック有効ならロック
                 .onAppear {
                     if !didInitialAppear {
@@ -86,6 +90,90 @@ private struct ScenePhaseLockGate: ViewModifier {
                     }
                     lastPhase = newPhase
                 }
+        }
+    }
+}
+
+func debugAppGroups() {
+    let groups = [
+        "group.com.irochiTech.KaKeBo",
+        "group.com.irochi.KaKeBo"
+    ]
+    
+    for id in groups {
+        let ud = UserDefaults(suiteName: id)
+        
+        let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id)
+        print("✅ AppGroup:", id)
+        print("  - containerURL:", url?.path ?? "nil")
+        
+        // 目印キーを書いて読めるか（アクセス可否確認）
+        ud?.set(Date().description, forKey: "debug_group_probe")
+        print("  - probe:", ud?.string(forKey: "debug_group_probe") ?? "nil")
+        
+        // そのグループの UserDefaults に何個キーがあるか（どっちに実データが居そうかのヒント）
+        let count = ud?.dictionaryRepresentation().keys.count ?? -1
+        print("  - keys:", count)
+    }
+}
+
+func debugAppGroupsDeep() {
+    let groups = [
+        "group.com.irochiTech.KaKeBo",
+        "group.com.irochi.KaKeBo"
+    ]
+    
+    for id in groups {
+        let ud = UserDefaults(suiteName: id)!
+        let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id)
+        
+        let keys = ud.dictionaryRepresentation().keys
+            .filter { $0 != "debug_group_probe" }
+            .sorted()
+        
+        print("✅ AppGroup:", id)
+        print("  - containerURL:", url?.path ?? "nil")
+        print("  - keys(\(keys.count)):", keys)
+    }
+}
+
+func debugAppGroupFiles() {
+    let groups = [
+        "group.com.irochiTech.KaKeBo",
+        "group.com.irochi.KaKeBo"
+    ]
+    
+    let fm = FileManager.default
+    
+    for id in groups {
+        guard let base = fm.containerURL(forSecurityApplicationGroupIdentifier: id) else {
+            print("❌ AppGroup:", id, "containerURL nil")
+            continue
+        }
+        
+        print("✅ AppGroup:", id)
+        print("  - base:", base.path)
+        
+        // 直下を一覧
+        if let items = try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey], options: []) {
+            for u in items.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                let values = try? u.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])
+                let isDir = values?.isDirectory == true
+                let size = values?.fileSize ?? 0
+                print("  -", isDir ? "[DIR]" : "[FILE]", u.lastPathComponent, "size:", size)
+            }
+        }
+        
+        // よくある保存先もざっくり探す
+        let candidates = [
+            base.appendingPathComponent("Library"),
+            base.appendingPathComponent("Documents"),
+            base.appendingPathComponent("tmp")
+        ]
+        for c in candidates {
+            if fm.fileExists(atPath: c.path) {
+                print("  - exists:", c.lastPathComponent)
+            }
         }
     }
 }

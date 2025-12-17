@@ -23,29 +23,50 @@ extension DataStore {
         }
         // 毎月ToDo（あるなら）
         let recTodos: [BackupRecurringTodo]? = {
-            guard let data = UserDefaults.standard.data(forKey: "kakebo.recurring.templates"),
+            let defaults = UserDefaults.appGroup
+            guard let data = defaults.migratedData(forKey: "kakebo.recurring.templates"),
                   let arr  = try? JSONDecoder().decode([RecurringTodoTemplate].self, from: data)
             else { return nil }
             return arr.map {
                 .init(id: $0.id, title: $0.title, dayOfMonth: $0.dayOfMonth, isActive: $0.isActive)
             }
         }()
-//        // 固定費
-//        let fixed: [BackupFixedExpense]? = {
-//            let data = UserDefaults.standard.data(forKey: DataStore.fixedTemplatesKey) ?? Data()
-//            guard let arr = try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data) else { return nil }
-//            return arr.map {
-//                .init(id: $0.id, title: $0.title, amount: $0.amount,
-//                      dayOfMonth: $0.dayOfMonth, categoryId: $0.categoryId,
-//                      memo: $0.memo, isActive: $0.isActive)
-//            }
-//        }()
+        // 固定費
+        let fixed: [BackupFixedExpense]? = {
+            let defaults = UserDefaults.appGroup
+            defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
+            let data = defaults.migratedData(forKey: DataStore.fixedTemplatesKey) ?? Data()
+            guard let arr = try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data) else { return nil }
+            return arr.map {
+                .init(id: $0.id, title: $0.title, amount: $0.amount,
+                      dayOfMonth: $0.dayOfMonth, categoryId: $0.categoryId,
+                      memo: $0.memo ?? "", isActive: $0.isActive)
+            }
+        }()
 //        // リマインダールール
 //        let reminders: [BackupReminderRule]? = {
 //            let data = UserDefaults.standard.data(forKey: ReminderStore.storageKey) ?? Data()
 //            guard let arr = try? JSONDecoder().decode([ReminderRule].self, from: data) else { return nil }
 //            return arr.map { .init(id: $0.id, enabled: $0.enabled, hour: $0.hour, minute: $0.minute) }
 //        }()
+        let dayNotes: [BackupDayNote]? = {
+            let defaults = UserDefaults.appGroup
+            guard let data = defaults.migratedData(forKey: "kakebo.daynotes.v1"),
+                  let dict = try? JSONDecoder().decode([String: String].self, from: data) else { return nil }
+            return dict.map { BackupDayNote(dateKey: $0.key, text: $0.value) }
+        }()
+
+        let monthStart: BackupMonthStartSettings? = {
+            let defaults = UserDefaults(suiteName: AppGroup.id) ?? .standard
+            guard let data = defaults.data(forKey: "kakebo.monthStart.settings"),
+                  let settings = try? JSONDecoder().decode(MonthStartSettings.self, from: data) else { return nil }
+            return BackupMonthStartSettings(
+                isCustomStartEnabled: settings.isCustomStartEnabled,
+                boundaryTypeRaw: settings.boundaryType.rawValue,
+                startDay: settings.startDay,
+                holidayAdjustmentRaw: settings.holidayAdjustment.rawValue
+            )
+        }()
         // テーマ
         let themeBackup: BackupTheme? = {
             guard let t = theme else { return nil }
@@ -66,8 +87,10 @@ extension DataStore {
             categories: cats,
             transactions: txs,
             recurringTodos: recTodos,
-            //            fixedExpenses: fixed,
+            fixedExpenses: fixed,
             //            reminders: reminders,
+            dayNotes: dayNotes,
+            monthStartSettings: monthStart,
             theme: themeBackup
         )
         let enc = JSONEncoder()
@@ -79,17 +102,17 @@ extension DataStore {
     // ===== インポート（JSON または 旧CSV） =====
     struct ImportReport { let inserted: Int; let createdCategories: Int; let skipped: Int }
     
-    func importBackup(data: Data, applyTheme: ((AppTheme) -> Void)? = nil) throws -> ImportReport {
+    func importBackup(data: Data, applyTheme: ((AppTheme) -> Void)? = nil, applyMonthStartSettings: ((MonthStartSettings) -> Void)? = nil) throws -> ImportReport {
 
         // 1) まず JSON を試す
-        if let rep = try? importJSONBackup(data: data, applyTheme: applyTheme) {
+        if let rep = try? importJSONBackup(data: data, applyTheme: applyTheme, applyMonthStartSettings: applyMonthStartSettings) {
             return rep
         }
         // 2) ダメなら後方互換：旧 CSV を読む
         return try importCSV(data: data)
     }
     
-    private func importJSONBackup(data: Data, applyTheme: ((AppTheme) -> Void)?) throws -> ImportReport {
+    private func importJSONBackup(data: Data, applyTheme: ((AppTheme) -> Void)?, applyMonthStartSettings: ((MonthStartSettings) -> Void)?) throws -> ImportReport {
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .iso8601
         let backup = try dec.decode(KaKeBoBackupV1.self, from: data)
@@ -128,16 +151,51 @@ extension DataStore {
         // 任意テーブル：復元できるものはする（無ければ無視）
         if let arr = backup.recurringTodos {
             let data = try JSONEncoder().encode(arr)
-            UserDefaults.standard.set(data, forKey: "kakebo.recurring.templates")
+            let defaults = UserDefaults.appGroup
+            defaults.migrateIfNeeded(keys: ["kakebo.recurring.templates"])
+            defaults.set(data, forKey: "kakebo.recurring.templates")
         }
-//        if let arr = backup.fixedExpenses {
-//            let data = try JSONEncoder().encode(arr)
-//            UserDefaults.standard.set(data, forKey: DataStore.fixedTemplatesKey)
-//        }
+        if let arr = backup.fixedExpenses {
+            let templates: [FixedExpenseTemplate] = arr.compactMap { tpl in
+                guard let mappedCategory = tpl.categoryId.flatMap({ idMap[$0] }) else { return nil }
+                return FixedExpenseTemplate(
+                    id: tpl.id,
+                    title: tpl.title,
+                    amount: tpl.amount,
+                    dayOfMonth: tpl.dayOfMonth,
+                    categoryId: mappedCategory,
+                    memo: tpl.memo,
+                    isActive: tpl.isActive
+                )
+            }
+            let data = try JSONEncoder().encode(templates)
+            let defaults = UserDefaults.appGroup
+            defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
+            defaults.set(data, forKey: DataStore.fixedTemplatesKey)
+        }
 //        if let arr = backup.reminders {
 //            let data = try JSONEncoder().encode(arr)
 //            UserDefaults.standard.set(data, forKey: ReminderStore.storageKey)
 //        }
+        if let notes = backup.dayNotes {
+            let dict = Dictionary(uniqueKeysWithValues: notes.map { ($0.dateKey, $0.text) })
+            let data = try JSONEncoder().encode(dict)
+            let defaults = UserDefaults.appGroup
+            defaults.migrateIfNeeded(keys: ["kakebo.daynotes.v1"])
+            defaults.set(data, forKey: "kakebo.daynotes.v1")
+        }
+        if let ms = backup.monthStartSettings {
+            let settings = MonthStartSettings(
+                isCustomStartEnabled: ms.isCustomStartEnabled,
+                boundaryType: MonthBoundaryType(rawValue: ms.boundaryTypeRaw) ?? .startDay,
+                startDay: ms.startDay,
+                holidayAdjustment: MonthStartAdjustment(rawValue: ms.holidayAdjustmentRaw) ?? .none
+            )
+            let data = try JSONEncoder().encode(settings)
+            let defaults = UserDefaults(suiteName: AppGroup.id) ?? .standard
+            defaults.set(data, forKey: "kakebo.monthStart.settings")
+            applyMonthStartSettings?(settings)
+        }
         // --- import 側（applyThemeコールバックに渡して適用） ---
         if let th = backup.theme {
             var working = AppTheme()
