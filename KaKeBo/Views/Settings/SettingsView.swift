@@ -22,7 +22,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     
     @AppStorage("reminder.enabled", store: .appGroup) private var enabled: Bool = true
-    @AppStorage("reminder.time", store: .appGroup) private var timeRaw: Double = defaultTime.timeIntervalSinceReferenceDate
+    @AppStorage("reminder.time", store: .appGroup) private var timeRaw: Double = Self.defaultTime.timeIntervalSinceReferenceDate
     
     // ▼ リマインダー統一：Settings 内で共有する ToDo ストア（今日の件数評価などに使う）
     @StateObject private var todoStore = TodoStore()
@@ -43,7 +43,7 @@ struct SettingsView: View {
         let defaults = UserDefaults.appGroup
         defaults.migrateIfNeeded(keys: ["reminder.enabled", "reminder.time", "kakebo.recurring.templates"])
         _enabled = AppStorage(wrappedValue: true, "reminder.enabled", store: defaults)
-        _timeRaw = AppStorage(wrappedValue: defaultTime.timeIntervalSinceReferenceDate, "reminder.time", store: defaults)
+        _timeRaw = AppStorage(wrappedValue: Self.defaultTime.timeIntervalSinceReferenceDate, "reminder.time", store: defaults)
         _templatesData = AppStorage(wrappedValue: Data(), "kakebo.recurring.templates", store: defaults)
     }
     @State private var showingExporter = false
