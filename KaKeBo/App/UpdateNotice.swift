@@ -72,10 +72,13 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
-        .init(title: "共有家計簿がさらに使いやすく", message: "みんなと使う家計簿をホーム・カレンダー・レポートでワンタップ切替。" , symbol: "person.3.sequence.fill", tint: .teal),
-        .init(title: "締め日を自由に設定", message: "月の開始日を1〜31日から指定でき、給料日や締め日に合わせて管理できます。", symbol: "calendar.badge.clock", tint: .orange),
-        .init(title: "カスタムキーボードを強化", message: "ON / OFF の切り替えに加え、プレミアムなら色も好みでカスタマイズ。", symbol: "keyboard.fill", tint: .indigo),
-        .init(title: "レシート読み取り精度アップ", message: "OCR を改良し、金額や店舗名がより正確に取り込まれるようになりました。", symbol: "doc.text.viewfinder", tint: .green)
+        .init(title: "共有招待の参加を改善", message: "iCloud 招待を受ける側で参加できない不具合を解消し、共有家計簿への合流がスムーズに。", symbol: "icloud.and.arrow.down", tint: .blue),
+        .init(title: "共有家計簿での削除・整理", message: "共有家計簿でも取引の削除に対応し、誤入力の修正や整理が簡単になりました。", symbol: "person.3.sequence.fill", tint: .teal),
+        .init(title: "固定費へのタグ付け（プレミアム）", message: "プレミアムプランで固定費を登録・編集するときにタグ付けができ、レポートの精度が向上。", symbol: "tag.fill", tint: .purple),
+        .init(title: "バックアップ範囲を拡大", message: "カレンダーメモ、固定費、月の開始日・締め日、テーマ管理設定まで保存・復元できるよう強化しました。", symbol: "archivebox.fill", tint: .orange),
+        .init(title: "テーマ設定の維持", message: "アプリアップデート時にテーマが初期化されてしまう問題を修正し、お気に入りの配色をそのまま利用できます。", symbol: "paintbrush.pointed.fill", tint: .pink),
+        .init(title: "Todo テンプレートの追加タイミングを調整", message: "テンプレートは現在日付への移行時のみ自動追加され、過去に遡っても増えないように改良しました。", symbol: "checklist.checked", tint: .green),
+        .init(title: "よく使う取引ショートカット", message: "よく使う取引セクションでショートカットの登録・適用・削除ができ、入力がよりスピーディーに。", symbol: "bolt.fill", tint: .yellow)
     ]
 
     let accent: Color
@@ -151,9 +154,9 @@ private struct UpdateNoticeContent: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("最新バージョン")
+            Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("大切なお金の管理がもっと楽しく、もっと簡単になるアップデートをお届けします。")
+            Text("みなさまの声を受けて、共有機能やバックアップ、テーマ周りを中心に使い勝手を磨きました。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
