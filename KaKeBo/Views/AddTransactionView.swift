@@ -100,7 +100,42 @@ struct AddTransactionView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
 
-        let withCustomKeypad = base
+        let withCustomKeypad = addCustomKeypad(to: base, usesCustomKeypad: usesCustomKeypad)
+        let withKeyboardHandling = addKeyboardHandling(to: withCustomKeypad)
+        let withReceiptSheet = addReceiptSheet(to: withKeyboardHandling, usesCustomKeypad: usesCustomKeypad)
+
+        withReceiptSheet
+            .onAppear {
+                if !usesCustomKeypad { showCustomKeypad = false }
+                amountText = amount == 0 ? "" : String(amount)
+            }
+            .onChange(of: usesCustomKeypad) { _, newValue in
+                if !newValue { showCustomKeypad = false; amountFieldFocused = false }
+            }
+            .onChange(of: amount) { _, newValue in
+                amountText = newValue == 0 ? "" : String(newValue)
+            }
+            .onChange(of: amountText) { _, newValue in
+                let filtered = newValue.filter { $0.isNumber }
+                if filtered != newValue { amountText = filtered }
+                if let val = Int(filtered) { amount = val } else { amount = 0 }
+            }
+            .alert("保存しました", isPresented: $showTemplateSaved) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(templateSavedMessage)
+            }
+            .alert("適用できません", isPresented: $showTemplateError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(templateErrorMessage)
+            }
+    }
+
+    // MARK: - レイアウト補助
+    @ViewBuilder
+    private func addCustomKeypad<Content: View>(to view: Content, usesCustomKeypad: Bool) -> some View {
+        view
             .safeAreaInset(edge: .bottom) {
                 if usesCustomKeypad && showCustomKeypad {
                     ZStack {
@@ -140,8 +175,10 @@ struct AddTransactionView: View {
                     .animation(.easeInOut(duration: 0.2), value: kb.height)
                 }
             }
+    }
 
-        let withKeyboardHandling = withCustomKeypad
+    private func addKeyboardHandling<Content: View>(to view: Content) -> some View {
+        view
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isKeyboardVisible = true
@@ -153,63 +190,41 @@ struct AddTransactionView: View {
                     isKeyboardVisible = false
                 }
             }
+    }
 
-        let withReceiptSheet = withKeyboardHandling
-            .sheet(isPresented: $showReceiptScanner) {
-                NavigationStack {
-                    ReceiptScanView { recognized in
-                        let r = ReceiptParser.parse(recognized)
-                        if let v = r.total { amount = v }
-                        if let d = r.date  { date   = d }
-                        if let m = r.merchant, m.isEmpty == false {
-                            memo = memo.isEmpty ? m : "\(memo) \(m)"
-                        }
-                        if let hint = r.categoryHint {
-                            if ledgerContext.isPersonal {
-                                if let cat = store.categories.first(where: { $0.name.contains(hint) }) {
-                                    selectedCategoryId = cat.id
-                                }
-                            } else if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore),
-                                      let cats = sharedLedgerStore.categoriesByLedger[ledger.id] {
-                                if let cat = cats.first(where: { $0.name.contains(hint) }) {
-                                    selectedSharedCategoryId = cat.id
-                                }
-                            }
-                        }
-                        if usesCustomKeypad { showCustomKeypad = true }
-                    }
-                    .navigationTitle("レシート読み取り")
+    private func addReceiptSheet<Content: View>(to view: Content, usesCustomKeypad: Bool) -> some View {
+        view.sheet(isPresented: $showReceiptScanner) {
+            NavigationStack {
+                ReceiptScanView { recognized in
+                    applyReceiptResult(recognized, usesCustomKeypad: usesCustomKeypad)
+                }
+                .navigationTitle("レシート読み取り")
+            }
+        }
+    }
+
+    private func applyReceiptResult(_ recognizedText: String, usesCustomKeypad: Bool) {
+        let parsed = ReceiptParser.parse(recognizedText)
+        if let v = parsed.total { amount = v }
+        if let d = parsed.date  { date   = d }
+        if let m = parsed.merchant, m.isEmpty == false {
+            memo = memo.isEmpty ? m : "\(memo) \(m)"
+        }
+        if let hint = parsed.categoryHint {
+            if ledgerContext.isPersonal {
+                if let cat = store.categories.first(where: { $0.name.contains(hint) }) {
+                    selectedCategoryId = cat.id
+                }
+            } else if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore),
+                      let cats = sharedLedgerStore.categoriesByLedger[ledger.id] {
+                if let cat = cats.first(where: { $0.name.contains(hint) }) {
+                    selectedSharedCategoryId = cat.id
                 }
             }
-
-        withReceiptSheet
-            .onAppear {
-                if !usesCustomKeypad { showCustomKeypad = false }
-                amountText = amount == 0 ? "" : String(amount)
-            }
-            .onChange(of: usesCustomKeypad) { _, newValue in
-                if !newValue { showCustomKeypad = false; amountFieldFocused = false }
-            }
-            .onChange(of: amount) { _, newValue in
-                amountText = newValue == 0 ? "" : String(newValue)
-            }
-            .onChange(of: amountText) { _, newValue in
-                let filtered = newValue.filter { $0.isNumber }
-                if filtered != newValue { amountText = filtered }
-                if let val = Int(filtered) { amount = val } else { amount = 0 }
-            }
-            .alert("保存しました", isPresented: $showTemplateSaved) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(templateSavedMessage)
-            }
-            .alert("適用できません", isPresented: $showTemplateError) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(templateErrorMessage)
-            }
+        }
+        if usesCustomKeypad { showCustomKeypad = true }
     }
-    
+
     // MARK: - 分割ビュー
     private var contentScroll: some View {
         ScrollView {
