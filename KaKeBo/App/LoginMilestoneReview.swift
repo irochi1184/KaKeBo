@@ -2,6 +2,8 @@ import StoreKit
 import SwiftUI
 import UIKit
 
+let totalday = 100
+
 // MARK: - ログイン日数の集計
 enum LoginDayTracker {
     enum Keys {
@@ -33,7 +35,7 @@ enum LoginDayTracker {
     }
 }
 
-// MARK: - 100日達成時のレビュー導線
+// MARK: - totalday日達成時のレビュー導線
 struct LoginMilestoneReviewGate: View {
     @AppStorage(LoginDayTracker.Keys.totalLoginDays, store: .appGroup) private var totalLoginDays = 0
     @AppStorage("engagement.reviewPrompt.completed", store: .appGroup) private var reviewPromptCompleted = false
@@ -56,7 +58,7 @@ struct LoginMilestoneReviewGate: View {
                 }
             }
             .onChange(of: isPresented) { _, newValue in
-                if newValue == false && totalLoginDays >= 100 {
+                if newValue == false && totalLoginDays >= totalday {
                     reviewPromptCompleted = true
                 }
             }
@@ -67,7 +69,7 @@ struct LoginMilestoneReviewGate: View {
             _ = LoginDayTracker.registerLogin()
         }
 
-        if totalLoginDays >= 100 && !reviewPromptCompleted {
+        if totalLoginDays >= totalday && !reviewPromptCompleted {
             isPresented = true
         }
     }
@@ -122,7 +124,7 @@ private struct LoginMilestoneReviewOverlay: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("おめでとうございます！")
                     .font(.title3.weight(.semibold))
-                Text("累計100日利用の達成です")
+                Text("累計\(totalday)日利用の達成です")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -133,8 +135,8 @@ private struct LoginMilestoneReviewOverlay: View {
 
     private var message: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("あなたはこのアプリを使用して累計100日が経過しました。")
-            Text("100日間、使い続けてくれてありがとうございます！")
+            Text("あなたはこのアプリを使用して累計\(totalday)日が経過しました。")
+            Text("\(totalday)日間、使い続けてくれてありがとうございます！")
             Text("この家計簿アプリは、\n「広告なしで、安心して使えるものを作りたい」\nという想いで、ひとりで開発・運営しています。")
             Text("正直、大きな収益はありません。\nそれでも続けられているのは、\n使ってくれている皆さんのおかげです。")
             Text("レビューでの応援が、\n次のアップデートの原動力になります。\nもし良ければレビューにご協力ください。")
@@ -167,14 +169,15 @@ private struct LoginMilestoneReviewOverlay: View {
     }
 
     private func requestReview() {
-        if let scene = UIApplication.shared.connectedScenes
+        guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive }) {
-            SKStoreReviewController.requestReview(in: scene)
-        } else {
-            SKStoreReviewController.requestReview()
+            .first(where: { $0.activationState == .foregroundActive })
+        else {
+            isPresented = false
+            return
         }
-
+        
+        SKStoreReviewController.requestReview(in: scene)
         isPresented = false
     }
 }

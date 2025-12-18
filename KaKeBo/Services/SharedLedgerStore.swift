@@ -300,7 +300,7 @@ final class SharedLedgerStore: ObservableObject {
         if let idx = ledgers.firstIndex(where: { $0.id == ledger.id }) {
             removedLedger = ledgers[idx]
             removedIndex = idx
-            withAnimation {
+            _ = withAnimation {
                 ledgers.remove(at: idx)
             }
         }
