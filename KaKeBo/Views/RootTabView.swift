@@ -28,6 +28,7 @@ struct RootTabView: View {
         }
         .overlay(TutorialGate())
         .overlay(UpdateNoticeGate())
+        .overlay(LoginMilestoneReviewGate())
         .tint(themeStore.theme.accentColor(for: scheme))
     }
 }
