@@ -17,8 +17,9 @@ final class SharedLedgerStore: ObservableObject {
     @Published var categoriesByLedger: [CKRecord.ID: [SharedCategory]] = [:]
     @Published var isLoading = false
     @Published var lastError: Error?
-    
+
     @Published var activeCopy: CopyState? = nil
+    @Published var deletingLedgerIDs: Set<CKRecord.ID> = []
     
     private let container: CKContainer
     private let db: CKDatabase          // 自分の private DB
@@ -284,19 +285,41 @@ final class SharedLedgerStore: ObservableObject {
         }
     }
     
-    func deleteLedger(_ ledger: SharedLedger) async {
+    @discardableResult
+    func deleteLedger(_ ledger: SharedLedger) async -> Bool {
         guard isOwned(ledger) else {
             print("deleteLedger: non-owned ledger, skip")
-            return
+            return false
         }
+
+        deletingLedgerIDs.insert(ledger.id)
+
+        var removedLedger: SharedLedger?
+        var removedIndex: Int?
+
+        if let idx = ledgers.firstIndex(where: { $0.id == ledger.id }) {
+            removedLedger = ledgers[idx]
+            removedIndex = idx
+            withAnimation {
+                ledgers.remove(at: idx)
+            }
+        }
+
         do {
             try await db.deleteRecord(withID: ledger.id)
-            ledgers.removeAll { $0.id == ledger.id }
+            ledgerSourceMap[ledger.id] = nil
             // 必要なら関連トランザクションのキャッシュも削除
             transactionsByLedger[ledger.id] = nil
             categoriesByLedger[ledger.id] = nil
+            deletingLedgerIDs.remove(ledger.id)
+            return true
         } catch {
             lastError = error
+            if let ledger = removedLedger, let idx = removedIndex {
+                ledgers.insert(ledger, at: idx)
+            }
+            deletingLedgerIDs.remove(ledger.id)
+            return false
         }
     }
     
