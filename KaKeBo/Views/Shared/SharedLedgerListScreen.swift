@@ -22,33 +22,17 @@ struct SharedLedgerListScreen: View {
     @State private var showShareError = false
     @State private var deleteErrorMessage: String? = nil
     @State private var showDeleteError = false
-    @State private var deleteToastMessage: String? = nil
-    @State private var deleteToastTask: Task<Void, Never>? = nil
-    
+
     var body: some View {
         ZStack(alignment: .bottom) {
             Color(.systemGroupedBackground)
                 .ignoresSafeArea()
-            
+
             content
-            
-            // コピー進捗のバナー
-            if let copy = store.activeCopy {
-                copyProgressView(copy: copy)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
-            }
 
             if shareLoading {
                 sharingLoadingView
                     .padding(.horizontal, 20)
-            }
-
-            if let message = deleteToastMessage {
-                deletionToastView(message: message)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .task {
@@ -343,63 +327,13 @@ struct SharedLedgerListScreen: View {
         let success = await store.deleteLedger(ledger)
 
         if success {
-            await MainActor.run {
-                showDeletionToast(message: "「\(ledger.name)」の削除が完了しました")
-            }
+            // 成功メッセージは共有オーバーレイで表示
         } else {
             await MainActor.run {
                 deleteErrorMessage = (store.lastError as NSError?)?.localizedDescription
                 showDeleteError = true
             }
         }
-    }
-
-    private func showDeletionToast(message: String) {
-        deleteToastTask?.cancel()
-
-        withAnimation {
-            deleteToastMessage = message
-        }
-
-        deleteToastTask = Task { @MainActor in
-            do {
-                try await Task.sleep(nanoseconds: 2_000_000_000)
-                withAnimation {
-                    deleteToastMessage = nil
-                }
-            } catch {
-                // Cancelled
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private func copyProgressView(copy: SharedLedgerStore.CopyState) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.caption)
-                Text("「\(copy.ledgerName)」を同期中…")
-                    .font(.caption)
-                Spacer()
-            }
-            
-            ProgressView(
-                value: Double(copy.done),
-                total: Double(copy.total)
-            )
-            .progressViewStyle(.linear)
-            
-            Text("\(copy.done) / \(copy.total) 件をコピー中")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.systemBackground).opacity(0.95))
-        )
-        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
     }
 
     private var sharingLoadingView: some View {
@@ -417,27 +351,6 @@ struct SharedLedgerListScreen: View {
             Spacer()
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(.systemBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 6)
-    }
-
-    private func deletionToastView(message: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-            Text(message)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-            Spacer()
-        }
-        .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color(.systemBackground))

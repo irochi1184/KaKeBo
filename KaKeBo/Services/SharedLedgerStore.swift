@@ -19,6 +19,7 @@ final class SharedLedgerStore: ObservableObject {
     @Published var lastError: Error?
 
     @Published var activeCopy: CopyState? = nil
+    @Published var globalToast: ToastState? = nil
     @Published var deletingLedgerIDs: Set<CKRecord.ID> = []
     
     private let container: CKContainer
@@ -39,9 +40,16 @@ final class SharedLedgerStore: ObservableObject {
         var isCopyingCategories: Bool
         var isCopyingTransactions: Bool
     }
+
+    struct ToastState: Identifiable, Equatable {
+        let id = UUID()
+        let message: String
+        let systemImage: String
+    }
     
     private var ledgerSourceMap: [CKRecord.ID: LedgerSource] = [:]
     private let defaults = UserDefaults.appGroup
+    private var toastTask: Task<Void, Never>?
 
     init(container: CKContainer = .default()) {
         self.container = container
@@ -312,6 +320,7 @@ final class SharedLedgerStore: ObservableObject {
             transactionsByLedger[ledger.id] = nil
             categoriesByLedger[ledger.id] = nil
             deletingLedgerIDs.remove(ledger.id)
+            showToast(message: "「\(ledger.name)」の削除が完了しました")
             return true
         } catch {
             lastError = error
@@ -706,6 +715,29 @@ extension SharedLedgerStore {
         guard var state = activeCopy else { return }
         state.done += 1
         activeCopy = state
+    }
+
+    func showToast(
+        message: String,
+        systemImage: String = "checkmark.circle.fill",
+        duration: UInt64 = 2_000_000_000
+    ) {
+        toastTask?.cancel()
+
+        withAnimation {
+            globalToast = ToastState(message: message, systemImage: systemImage)
+        }
+
+        toastTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: duration)
+                withAnimation {
+                    globalToast = nil
+                }
+            } catch {
+                // Cancelled
+            }
+        }
     }
     
     /// 指定した共有家計簿用の CKShare を用意して返す
