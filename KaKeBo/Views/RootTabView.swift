@@ -10,6 +10,7 @@ import SwiftUI
 struct RootTabView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @Environment(\.colorScheme) private var scheme
     @State private var showSettings = false
     
@@ -29,6 +30,11 @@ struct RootTabView: View {
         .overlay(TutorialGate())
         .overlay(UpdateNoticeGate())
         .overlay(LoginMilestoneReviewGate())
+        .overlay(alignment: .bottom) {
+            SharedLedgerNotificationOverlay()
+                .environmentObject(sharedLedgerStore)
+                .allowsHitTesting(false)
+        }
         .tint(themeStore.theme.accentColor(for: scheme))
     }
 }
