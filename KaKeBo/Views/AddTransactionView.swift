@@ -46,6 +46,8 @@ struct AddTransactionView: View {
     @State private var templateSavedMessage = ""
     @State private var showTemplateError = false
     @State private var templateErrorMessage = ""
+    @State private var showFrequentTemplateSortSheet = false
+    @State private var showSharedFrequentTemplateSortSheet = false
     
     // ★ レシートスキャン表示フラグ
     @State private var showReceiptScanner = false
@@ -187,6 +189,9 @@ struct AddTransactionView: View {
             .onChange(of: amount) { _, newValue in
                 syncAmountText(with: newValue)
             }
+            .onChange(of: ledgerContext.selectedSharedLedgerId) { _, _ in
+                loadSharedFrequentTemplatesIfNeeded()
+            }
 
         let withAmountTextChange = appearHandled
             .onChange(of: amountText) { _, newValue in
@@ -211,12 +216,21 @@ struct AddTransactionView: View {
     private func handleAppear(usesCustomKeypad: Bool) {
         if !usesCustomKeypad { showCustomKeypad = false }
         amountText = amount == 0 ? "" : String(amount)
+        loadSharedFrequentTemplatesIfNeeded()
     }
 
     private func handleCustomKeypadChange(isEnabled: Bool) {
         guard !isEnabled else { return }
         showCustomKeypad = false
         amountFieldFocused = false
+    }
+
+    private func loadSharedFrequentTemplatesIfNeeded() {
+        guard ledgerContext.isShared,
+              let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) else {
+            return
+        }
+        sharedLedgerStore.loadFrequentTemplates(for: ledger)
     }
 
     private func syncAmountText(with newValue: Int) {
@@ -277,6 +291,8 @@ struct AddTransactionView: View {
                             showAddSharedCategory = true
                         }
                     )
+                    sharedFrequentTemplateSection
+                        .luxCard()
                 }
                 
                 // タグ
@@ -400,6 +416,19 @@ struct AddTransactionView: View {
                     .padding()
             }
         }
+        .sheet(isPresented: $showFrequentTemplateSortSheet) {
+            FrequentTemplateSortSheet()
+                .environmentObject(store)
+        }
+        .sheet(isPresented: $showSharedFrequentTemplateSortSheet) {
+            if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
+                SharedFrequentTemplateSortSheet(ledger: ledger)
+                    .environmentObject(sharedLedgerStore)
+            } else {
+                Text("共有家計簿が選択されていません")
+                    .padding()
+            }
+        }
 
     }
     
@@ -486,6 +515,12 @@ struct AddTransactionView: View {
                 Label("よく使う取引", systemImage: "star.fill")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
+                if !store.frequentTemplates.isEmpty {
+                    Button("並び替え") {
+                        showFrequentTemplateSortSheet = true
+                    }
+                    .font(.caption.weight(.semibold))
+                }
             }
 
             if store.frequentTemplates.isEmpty {
@@ -525,6 +560,58 @@ struct AddTransactionView: View {
             .buttonStyle(.borderedProminent)
         }
     }
+
+    private var sharedFrequentTemplateSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("よく使う取引", systemImage: "star.fill")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                if !sharedFrequentTemplates.isEmpty {
+                    Button("並び替え") {
+                        showSharedFrequentTemplateSortSheet = true
+                    }
+                    .font(.caption.weight(.semibold))
+                }
+            }
+
+            if sharedFrequentTemplates.isEmpty {
+                Text("金額やカテゴリを保存しておくと、次回からワンタップで呼び出せます。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(sharedFrequentTemplates) { tpl in
+                            SharedFrequentTemplateChip(
+                                template: tpl,
+                                category: sharedCategoryForTemplate(tpl),
+                                currencyFormatter: currency
+                            )
+                            .onTapGesture { applySharedFrequentTemplate(tpl) }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    deleteSharedFrequentTemplate(tpl)
+                                } label: {
+                                    Label("ショートカットを削除", systemImage: "trash")
+                                }
+                            }
+                            .opacity(isSharedTemplateUsable(tpl) ? 1 : 0.4)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            Button {
+                saveCurrentAsFrequentTemplate()
+            } label: {
+                Label("現在の内容をよく使う取引に登録", systemImage: "plus")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
     
     // MARK: - ヘルパ
     private func currency(_ n: Int) -> String {
@@ -535,32 +622,57 @@ struct AddTransactionView: View {
     }
 
     private func saveCurrentAsFrequentTemplate() {
-        guard ledgerContext.isPersonal else { return }
-        guard
-            let selId = selectedCategoryId,
-            let chosen = store.categories.first(where: { $0.id == selId }),
-            amount > 0
-        else {
+        if ledgerContext.isPersonal {
+            guard
+                let selId = selectedCategoryId,
+                let chosen = store.categories.first(where: { $0.id == selId }),
+                amount > 0
+            else {
+                templateErrorMessage = "金額とカテゴリを入力してから保存してください。"
+                showTemplateError = true
+                return
+            }
+
+            let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayTitle = trimmedMemo.isEmpty ? chosen.name : trimmedMemo
+
+            let tpl = FrequentTransactionTemplate(
+                title: displayTitle,
+                amount: amount,
+                type: type,
+                memo: trimmedMemo,
+                categoryId: chosen.id,
+                tags: tags
+            )
+
+            store.addFrequentTemplate(tpl)
+            templateSavedMessage = "\(displayTitle) を保存しました。長押しで削除できます。"
+            showTemplateSaved = true
+        } else if ledgerContext.isShared,
+                  let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore),
+                  let selId = selectedSharedCategoryId,
+                  let cats = sharedLedgerStore.categoriesByLedger[ledger.id],
+                  let chosen = cats.first(where: { $0.id == selId }),
+                  amount > 0 {
+            let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayTitle = trimmedMemo.isEmpty ? chosen.name : trimmedMemo
+
+            let tpl = SharedFrequentTransactionTemplate(
+                title: displayTitle,
+                amount: amount,
+                type: type,
+                memo: trimmedMemo,
+                categoryRecordName: chosen.id.recordName,
+                tags: tags
+            )
+
+            sharedLedgerStore.addFrequentTemplate(tpl, for: ledger)
+            templateSavedMessage = "\(displayTitle) を保存しました。長押しで削除できます。"
+            showTemplateSaved = true
+        } else {
             templateErrorMessage = "金額とカテゴリを入力してから保存してください。"
             showTemplateError = true
-            return
         }
-
-        let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
-        let displayTitle = trimmedMemo.isEmpty ? chosen.name : trimmedMemo
-
-        let tpl = FrequentTransactionTemplate(
-            title: displayTitle,
-            amount: amount,
-            type: type,
-            memo: trimmedMemo,
-            categoryId: chosen.id,
-            tags: tags
-        )
-
-        store.addFrequentTemplate(tpl)
-        templateSavedMessage = "\(displayTitle) を保存しました。長押しで削除できます。"
-        showTemplateSaved = true
     }
 
     private func applyFrequentTemplate(_ tpl: FrequentTransactionTemplate) {
@@ -584,6 +696,41 @@ struct AddTransactionView: View {
 
     private func isTemplateUsable(_ tpl: FrequentTransactionTemplate) -> Bool {
         categoryForTemplate(tpl) != nil
+    }
+
+    private var sharedFrequentTemplates: [SharedFrequentTransactionTemplate] {
+        guard let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) else { return [] }
+        return sharedLedgerStore.frequentTemplatesByLedger[ledger.id] ?? []
+    }
+
+    private func applySharedFrequentTemplate(_ tpl: SharedFrequentTransactionTemplate) {
+        guard let category = sharedCategoryForTemplate(tpl) else {
+            templateErrorMessage = "対応するカテゴリが見つからないため適用できません。"
+            showTemplateError = true
+            return
+        }
+        selectedSharedCategoryId = category.id
+        amount = tpl.amount
+        type = tpl.type
+        memo = tpl.memo
+        tags = tpl.tags
+
+        if prefersCustomKeypad { showCustomKeypad = true }
+    }
+
+    private func sharedCategoryForTemplate(_ tpl: SharedFrequentTransactionTemplate) -> SharedCategory? {
+        guard let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) else { return nil }
+        let cats = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
+        return cats.first { $0.id.recordName == tpl.categoryRecordName }
+    }
+
+    private func deleteSharedFrequentTemplate(_ tpl: SharedFrequentTransactionTemplate) {
+        guard let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) else { return }
+        sharedLedgerStore.deleteFrequentTemplate(id: tpl.id, in: ledger)
+    }
+
+    private func isSharedTemplateUsable(_ tpl: SharedFrequentTransactionTemplate) -> Bool {
+        sharedCategoryForTemplate(tpl) != nil
     }
     
     private var bgGradient: LinearGradient {
@@ -940,6 +1087,168 @@ private struct FrequentTemplateChip: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(accent.opacity(0.12))
         )
+    }
+}
+
+// ===== 共有家計簿：よく使う取引チップ =====
+private struct SharedFrequentTemplateChip: View {
+    let template: SharedFrequentTransactionTemplate
+    let category: SharedCategory?
+    let currencyFormatter: (Int) -> String
+
+    private var accent: Color {
+        if let category {
+            return Color.fromHex(category.colorHex) ?? .secondary
+        }
+        return .secondary
+    }
+
+    private var symbolName: String {
+        category?.icon ?? "tag"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(accent.opacity(0.15))
+                    .frame(width: 22, height: 22)
+                    .overlay(
+                        Image(systemName: symbolName)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(accent)
+                    )
+                Text(template.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: 8) {
+                Text(currencyFormatter(template.amount))
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.primary)
+                Text(template.type == .income ? "収入" : "支出")
+                    .font(.caption2.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(accent.opacity(0.16)))
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(accent.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(accent.opacity(0.12))
+        )
+    }
+}
+
+// ===== 並び替えシート（個人） =====
+private struct FrequentTemplateSortSheet: View {
+    @EnvironmentObject var store: DataStore
+    @Environment(\.dismiss) private var dismiss
+
+    private func currency(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(store.frequentTemplates) { tpl in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(tpl.title)
+                            .font(.subheadline.weight(.semibold))
+                        HStack(spacing: 6) {
+                            Text(currency(tpl.amount))
+                                .font(.footnote.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                            if let cat = store.categories.first(where: { $0.id == tpl.categoryId }) {
+                                Text(cat.name)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .onMove { offsets, destination in
+                    store.moveFrequentTemplates(from: offsets, to: destination)
+                }
+            }
+            .navigationTitle("よく使う取引の並び替え")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    EditButton()
+                }
+            }
+        }
+    }
+}
+
+// ===== 並び替えシート（共有） =====
+private struct SharedFrequentTemplateSortSheet: View {
+    let ledger: SharedLedger
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
+    @Environment(\.dismiss) private var dismiss
+
+    private func currency(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
+    }
+
+    private var templates: [SharedFrequentTransactionTemplate] {
+        sharedLedgerStore.frequentTemplatesByLedger[ledger.id] ?? []
+    }
+
+    private func categoryName(for template: SharedFrequentTransactionTemplate) -> String? {
+        let cats = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
+        return cats.first(where: { $0.id.recordName == template.categoryRecordName })?.name
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(templates) { tpl in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(tpl.title)
+                            .font(.subheadline.weight(.semibold))
+                        HStack(spacing: 6) {
+                            Text(currency(tpl.amount))
+                                .font(.footnote.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                            if let name = categoryName(for: tpl) {
+                                Text(name)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .onMove { offsets, destination in
+                    sharedLedgerStore.moveFrequentTemplates(for: ledger, from: offsets, to: destination)
+                }
+            }
+            .navigationTitle("よく使う取引の並び替え")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    EditButton()
+                }
+            }
+        }
     }
 }
 

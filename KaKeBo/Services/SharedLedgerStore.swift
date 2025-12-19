@@ -15,6 +15,7 @@ final class SharedLedgerStore: ObservableObject {
     @Published var ledgers: [SharedLedger] = []
     @Published var transactionsByLedger: [CKRecord.ID: [SharedTransaction]] = [:]
     @Published var categoriesByLedger: [CKRecord.ID: [SharedCategory]] = [:]
+    @Published var frequentTemplatesByLedger: [CKRecord.ID: [SharedFrequentTransactionTemplate]] = [:]
     @Published var isLoading = false
     @Published var lastError: Error?
 
@@ -64,6 +65,11 @@ final class SharedLedgerStore: ObservableObject {
     }
 
     private let lastOpenedLedgerKey = "LastOpenedSharedLedgerRecordName"
+    private let sharedFrequentTemplatesKeyPrefix = "kakebo.shared.frequent.transactions."
+
+    private func frequentTemplatesKey(for ledger: SharedLedger) -> String {
+        sharedFrequentTemplatesKeyPrefix + ledger.id.recordName
+    }
     
     // 最後に開いた家計簿を記録
     func rememberLastOpened(ledger: SharedLedger) {
@@ -188,6 +194,43 @@ final class SharedLedgerStore: ObservableObject {
             self.lastError = error
             print("reloadLedgers error:", error)
         }
+    }
+
+    // MARK: - よく使う取引（共有家計簿）
+    func loadFrequentTemplates(for ledger: SharedLedger) {
+        let key = frequentTemplatesKey(for: ledger)
+        let data = defaults.migratedData(forKey: key) ?? Data()
+        let decoded = (try? JSONDecoder().decode([SharedFrequentTransactionTemplate].self, from: data)) ?? []
+        frequentTemplatesByLedger[ledger.id] = decoded
+    }
+
+    func addFrequentTemplate(_ tpl: SharedFrequentTransactionTemplate, for ledger: SharedLedger) {
+        var templates = frequentTemplatesByLedger[ledger.id] ?? []
+        if let idx = templates.firstIndex(where: { $0.isEquivalent(to: tpl) }) {
+            templates[idx] = tpl
+        } else {
+            templates.insert(tpl, at: 0)
+        }
+        frequentTemplatesByLedger[ledger.id] = templates
+        saveFrequentTemplates(for: ledger, templates: templates)
+    }
+
+    func deleteFrequentTemplate(id: UUID, in ledger: SharedLedger) {
+        var templates = frequentTemplatesByLedger[ledger.id] ?? []
+        templates.removeAll { $0.id == id }
+        frequentTemplatesByLedger[ledger.id] = templates
+        saveFrequentTemplates(for: ledger, templates: templates)
+    }
+
+    func moveFrequentTemplates(for ledger: SharedLedger, from offsets: IndexSet, to destination: Int) {
+        var templates = frequentTemplatesByLedger[ledger.id] ?? []
+        templates.move(fromOffsets: offsets, toOffset: destination)
+        frequentTemplatesByLedger[ledger.id] = templates
+        saveFrequentTemplates(for: ledger, templates: templates)
+    }
+
+    private func saveFrequentTemplates(for ledger: SharedLedger, templates: [SharedFrequentTransactionTemplate]) {
+        defaults.set(try? JSONEncoder().encode(templates), forKey: frequentTemplatesKey(for: ledger))
     }
 
     // 自分が owner の Ledger（今までの挙動）
