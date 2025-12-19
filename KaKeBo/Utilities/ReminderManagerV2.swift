@@ -75,28 +75,54 @@ enum ReminderManagerV2 {
     
     private static func content(for rule: ReminderRule, store: DataStore, todoStore: TodoStore, weekday: Int? = nil) -> UNMutableNotificationContent {
         let c = UNMutableNotificationContent()
-        c.title = rule.title
         
         // 条件用の簡易集計
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
         let hasUnlogged = store.transactions.first(where: { cal.isDate($0.date, inSameDayAs: today) }) == nil
         let todosToday = todoStore.todos.filter { $0.due.map{ cal.isDate($0, inSameDayAs: today) } ?? false && !$0.done }.count
+        let isConditionMet = (!rule.onlyIfUnloggedToday || hasUnlogged)
+            && (!rule.onlyIfTodosDueToday || todosToday > 0)
         
-        // 本文テンプレ置換
-        var body = rule.bodyTemplate
-            .replacingOccurrences(of: "{todosToday}", with: "\(todosToday)")
-            .replacingOccurrences(of: "{unloggedToday}", with: hasUnlogged ? "はい" : "いいえ")
-        
-        // 条件：満たさない場合でも「通知抑制」はせず軽い文言へ置換（iOSの仕様上サイレント抑制は難しいため）
-        if (rule.onlyIfUnloggedToday && !hasUnlogged) ||
-            (rule.onlyIfTodosDueToday && todosToday == 0) {
-            body = "進捗チェック：条件に一致しないため通知のみ表示しています。"
+        let baseBodyTemplate: String
+        if isConditionMet {
+            baseBodyTemplate = rule.bodyTemplate
+        } else {
+            baseBodyTemplate = rule.fallbackBodyTemplate.isEmpty ? rule.bodyTemplate : rule.fallbackBodyTemplate
         }
+        let body = resolveTemplate(baseBodyTemplate,
+                                   todosToday: todosToday,
+                                   hasUnlogged: hasUnlogged,
+                                   date: today,
+                                   weekdayOverride: weekday)
+        let resolvedTitle = resolveTemplate(rule.title,
+                                            todosToday: todosToday,
+                                            hasUnlogged: hasUnlogged,
+                                            date: today,
+                                            weekdayOverride: weekday)
         
+        c.title = resolvedTitle.isEmpty ? "KaKeBo" : resolvedTitle
         c.body = body
         if rule.soundEnabled { c.sound = .default }
         return c
+    }
+
+    private static func resolveTemplate(_ template: String,
+                                        todosToday: Int,
+                                        hasUnlogged: Bool,
+                                        date: Date,
+                                        weekdayOverride: Int? = nil) -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "ja_JP")
+        dateFormatter.dateFormat = "M/d"
+        let weekdaySymbols = Calendar.current.shortStandaloneWeekdaySymbols
+        let weekdayIndex = weekdayOverride ?? Calendar.current.component(.weekday, from: date)
+        let weekdaySymbol = weekdaySymbols[(weekdayIndex - 1) % weekdaySymbols.count]
+        return template
+            .replacingOccurrences(of: ReminderPlaceholder.todosToday.rawValue, with: "\(todosToday)")
+            .replacingOccurrences(of: ReminderPlaceholder.unloggedToday.rawValue, with: hasUnlogged ? "はい" : "いいえ")
+            .replacingOccurrences(of: ReminderPlaceholder.todayDate.rawValue, with: dateFormatter.string(from: date))
+            .replacingOccurrences(of: ReminderPlaceholder.todayWeekday.rawValue, with: weekdaySymbol)
     }
     
     // MARK: - Helpers

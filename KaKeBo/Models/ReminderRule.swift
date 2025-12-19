@@ -26,6 +26,8 @@ struct ReminderRule: Identifiable, Codable, Equatable {
     var title: String = "家計簿の記録をお忘れなく"
     /// 簡易テンプレ: {todosToday}, {unloggedToday}
     var bodyTemplate: String = "今日の支出・収入をサクッと登録しましょう。残りToDo: {todosToday}"
+    /// 条件未達時に使う本文テンプレ（空なら通常本文を使う）
+    var fallbackBodyTemplate: String = "進捗チェック：条件に一致しないため通知のみ表示しています。"
     
     // 条件
     var onlyIfUnloggedToday: Bool = false       // まだ今日の取引が0件のときだけ
