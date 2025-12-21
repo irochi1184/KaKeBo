@@ -14,7 +14,6 @@ struct CalendarDayDetailCard: View {
     @EnvironmentObject var todoStore: TodoStore
     @EnvironmentObject var dayNotes: DayNotesStore
     @EnvironmentObject var themeStore: ThemeStore
-    @Environment(\.colorScheme) private var scheme
 
     let date: Date
     let accent: Color
@@ -50,7 +49,7 @@ struct CalendarDayDetailCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(spacing: 8) {
             header
 
             List {
@@ -112,21 +111,10 @@ struct CalendarDayDetailCard: View {
                     )
                 }
             }
-            .listStyle(.plain)
+            .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .frame(maxHeight: 320)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(scheme == .dark ? Color.white.opacity(0.06) : .white)
-                    .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.06), radius: 10, y: 5)
-            )
+            .frame(maxHeight: .infinity)
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(scheme == .dark ? Color.white.opacity(0.06) : .white)
-                .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.06), radius: 10, y: 5)
-        )
         .sheet(item: $editingTx) { tx in
             EditTransactionView(transaction: tx)
                 .environmentObject(store)

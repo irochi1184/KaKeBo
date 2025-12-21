@@ -134,9 +134,11 @@ struct CalendarScreen: View {
                         .environmentObject(dayNotes)
                     }
                 }
+                .id(calendarBottomMode)
+                .frame(maxHeight: calendarBottomMode == .dayDetail ? .infinity : nil)
                 .padding(.horizontal)
                 
-                Spacer(minLength: 8)
+                Spacer(minLength: calendarBottomMode == .dayDetail ? 0 : 8)
             }
             .background(
                 themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea()
