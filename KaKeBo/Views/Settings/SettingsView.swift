@@ -23,7 +23,7 @@ struct SettingsView: View {
     
     @AppStorage("reminder.enabled", store: .appGroup) private var enabled: Bool = true
     @AppStorage("reminder.time", store: .appGroup) private var timeRaw: Double = Self.defaultTime.timeIntervalSinceReferenceDate
-    @AppStorage("calendar.bottom.display.mode", store: .appGroup) private var calendarBottomModeRaw: String = CalendarBottomDisplayMode.monthTodo.rawValue
+    @AppStorage("calendar.bottom.display.mode", store: .appGroup) private var calendarBottomMode: CalendarBottomDisplayMode = .monthTodo
     
     // ▼ リマインダー統一：Settings 内で共有する ToDo ストア（今日の件数評価などに使う）
     @StateObject private var todoStore = TodoStore()
@@ -68,7 +68,7 @@ struct SettingsView: View {
     }
     
     enum Sheet: Identifiable {
-        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers, monthStart
+        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers, monthStart, calendarBottomDisplay
         var id: String { "sheet-\(self)" }
     }
     // 外部URL
@@ -95,17 +95,6 @@ struct SettingsView: View {
         }
     }
 
-    private var calendarBottomMode: CalendarBottomDisplayMode {
-        get { CalendarBottomDisplayMode(rawValue: calendarBottomModeRaw) ?? .monthTodo }
-        set { calendarBottomModeRaw = newValue.rawValue }
-    }
-
-    private var calendarBottomModeBinding: Binding<CalendarBottomDisplayMode> {
-        Binding(
-            get: { calendarBottomMode },
-            set: { calendarBottomMode = $0 }
-        )
-    }
     private func saveTemplates() {
         templatesData = (try? JSONEncoder().encode(templates)) ?? Data()
     }
@@ -237,6 +226,18 @@ struct SettingsView: View {
                                 .navigationBarTitleDisplayMode(.inline)
                         }
                         .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+
+                    case .calendarBottomDisplay:
+                        NavigationStack {
+                            CalendarBottomDisplaySettingsView(
+                                selection: $calendarBottomMode,
+                                accent: accent
+                            )
+                            .navigationTitle("カレンダー下部の表示")
+                            .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
 
                     }
@@ -408,6 +409,13 @@ struct SettingsView: View {
             ) { sheet = .monthStart }
 
             SettingsRowButton(
+                title: "カレンダー下部の表示",
+                systemImage: "rectangle.bottomthird.inset.filled",
+                accent: accent,
+                trailingText: calendarBottomMode.title
+            ) { sheet = .calendarBottomDisplay }
+
+            SettingsRowButton(
                 title: "共有家計簿を管理",
                 systemImage: "person.2",
                 accent: accent,
@@ -421,19 +429,6 @@ struct SettingsView: View {
         }
         .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
 
-        Section {
-            Picker("カレンダー下部の表示", selection: calendarBottomModeBinding) {
-                ForEach(CalendarBottomDisplayMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-        } header: {
-            Text("カレンダー表示")
-        } footer: {
-            Text(calendarBottomMode.description)
-        }
-        .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
     }
     
     @ViewBuilder
@@ -580,6 +575,47 @@ struct SettingsView: View {
 }
 
 // ======================================================
+
+private struct CalendarBottomDisplaySettingsView: View {
+    @Binding var selection: CalendarBottomDisplayMode
+    let accent: Color
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(CalendarBottomDisplayMode.allCases) { mode in
+                    Button {
+                        selection = mode
+                    } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(mode.title)
+                                    .foregroundStyle(.primary)
+                                Text(mode.description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if selection == mode {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(accent)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("閉じる") { dismiss() }
+            }
+        }
+    }
+}
 
 private struct SettingsRowButton: View {
     let title: String

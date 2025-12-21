@@ -43,12 +43,7 @@ struct CalendarScreen: View {
     @StateObject private var todoStore = TodoStore()
     @State private var showOnlyUndone: Bool = false
     @State private var selectedDay: Date = Calendar.current.startOfDay(for: .now)
-    @AppStorage("calendar.bottom.display.mode", store: .appGroup) private var calendarBottomModeRaw: String = CalendarBottomDisplayMode.monthTodo.rawValue
-
-    private var calendarBottomMode: CalendarBottomDisplayMode {
-        get { CalendarBottomDisplayMode(rawValue: calendarBottomModeRaw) ?? .monthTodo }
-        set { calendarBottomModeRaw = newValue.rawValue }
-    }
+    @AppStorage("calendar.bottom.display.mode", store: .appGroup) private var calendarBottomMode: CalendarBottomDisplayMode = .monthTodo
     
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
@@ -230,7 +225,7 @@ struct CalendarScreen: View {
                     selectedDay = cal.date(from: cal.dateComponents([.year, .month], from: newMonth)) ?? newMonth
                 }
             }
-            .onChange(of: calendarBottomModeRaw) { _ in
+            .onChange(of: calendarBottomMode) { _ in
                 if calendarBottomMode == .dayDetail {
                     selectedDay = cal.startOfDay(for: .now)
                 }
