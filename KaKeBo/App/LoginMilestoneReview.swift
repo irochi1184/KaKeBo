@@ -6,6 +6,7 @@ let totalday = 100
 
 // MARK: - ログイン日数の集計
 enum LoginDayTracker {
+    private static let loginStartYear = 2026
     enum Keys {
         static let totalLoginDays = "engagement.login.totalDays"
         static let lastLoginDate = "engagement.login.lastDate"
@@ -18,6 +19,11 @@ enum LoginDayTracker {
         defaults: UserDefaults = .appGroup,
         calendar: Calendar = .current
     ) -> Int {
+        let loginYear = calendar.component(.year, from: date)
+        if loginYear < loginStartYear {
+            return defaults.integer(forKey: Keys.totalLoginDays)
+        }
+
         let today = calendar.startOfDay(for: date)
         let lastInterval = defaults.double(forKey: Keys.lastLoginDate)
 
@@ -45,12 +51,23 @@ struct LoginMilestoneReviewGate: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var themeStore: ThemeStore
     @Environment(\.colorScheme) private var scheme
+    private let calendar = Calendar.current
 
     private var accent: Color { themeStore.theme.accentColor(for: scheme) }
     private var background: Color { themeStore.theme.backgroundColor(for: scheme) }
+    private var isNewYearGreeting: Bool {
+        let today = Date()
+        return calendar.component(.month, from: today) == 1
+            && calendar.component(.day, from: today) == 1
+    }
 
     var body: some View {
-        LoginMilestoneReviewOverlay(isPresented: $isPresented, accent: accent, background: background)
+        LoginMilestoneReviewOverlay(
+            isPresented: $isPresented,
+            accent: accent,
+            background: background,
+            isNewYearGreeting: isNewYearGreeting
+        )
             .onAppear { evaluateAndMaybeShow(registerLogin: true) }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
@@ -79,6 +96,7 @@ private struct LoginMilestoneReviewOverlay: View {
     @Binding var isPresented: Bool
     let accent: Color
     let background: Color
+    let isNewYearGreeting: Bool
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -135,6 +153,9 @@ private struct LoginMilestoneReviewOverlay: View {
 
     private var message: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if isNewYearGreeting {
+                Text("明けましておめでとうございます！")
+            }
             Text("あなたはこのアプリを使用して累計\(totalday)日が経過しました。")
             Text("\(totalday)日間、使い続けてくれてありがとうございます！")
             Text("この家計簿アプリは、\n「広告なしで、安心して使えるものを作りたい」\nという想いで、ひとりで開発・運営しています。")
