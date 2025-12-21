@@ -28,6 +28,7 @@ struct AllTransactionsView: View {
     @State private var selectedTags: Set<String> = []
     @State private var editingTx: Transaction? = nil
     @State private var showFilter = false
+    @State private var selectedSort: TransactionSortOption = .dateDesc
 
     // 共有用の絞り込み状態
     @State private var sharedSelectedType: SharedTransactionType? = nil
@@ -38,6 +39,7 @@ struct AllTransactionsView: View {
     @State private var sharedMaxAmount: Int? = nil
     @State private var sharedSelectedTags: Set<String> = []
     @State private var editingSharedTx: SharedTransaction? = nil
+    @State private var sharedSelectedSort: TransactionSortOption = .dateDesc
     
     // タグの正規化（検索・比較用）：8文字・lowercased
     private func normTag(_ raw: String) -> String {
@@ -126,7 +128,8 @@ struct AllTransactionsView: View {
                     minAmount: $sharedMinAmount,
                     maxAmount: $sharedMaxAmount,
                     allTags: allTagsForFilter,
-                    selectedTags: $sharedSelectedTags
+                    selectedTags: $sharedSelectedTags,
+                    selectedSort: $sharedSelectedSort
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -140,7 +143,8 @@ struct AllTransactionsView: View {
                     minAmount: $minAmount,
                     maxAmount: $maxAmount,
                     allTags: allTagsForFilter,
-                    selectedTags: $selectedTags
+                    selectedTags: $selectedTags,
+                    selectedSort: $selectedSort
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -257,6 +261,25 @@ private extension AllTransactionsView {
     }
 }
 
+private enum TransactionSortOption: String, CaseIterable, Identifiable {
+    case dateDesc
+    case categoryAsc
+    case amountDesc
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .dateDesc:
+            return "日付順"
+        case .categoryAsc:
+            return "カテゴリ順"
+        case .amountDesc:
+            return "金額の大きい順"
+        }
+    }
+}
+
 // MARK: - 検索＋フィルタ ヘッダ
 
 private struct SearchHeader: View {
@@ -323,6 +346,10 @@ private extension AllTransactionsView {
     var filteredPersonal: [Transaction] {
         var items = store.transactions
 
+        func categoryName(for tx: Transaction) -> String {
+            store.categories.first(where: { $0.id == tx.categoryId })?.name ?? "未分類"
+        }
+
         // キーワード検索：メモ / カテゴリ名 / タグ
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if !q.isEmpty {
@@ -363,13 +390,44 @@ private extension AllTransactionsView {
         if let hi = maxAmount {
             items = items.filter { $0.amount <= hi }
         }
-        return items.sorted { $0.date > $1.date }
+        return items.sorted { lhs, rhs in
+            switch selectedSort {
+            case .dateDesc:
+                return lhs.date > rhs.date
+            case .categoryAsc:
+                let lName = categoryName(for: lhs)
+                let rName = categoryName(for: rhs)
+                if lName != rName {
+                    return lName.localizedStandardCompare(rName) == .orderedAscending
+                }
+                if lhs.date != rhs.date {
+                    return lhs.date > rhs.date
+                }
+                return lhs.amount > rhs.amount
+            case .amountDesc:
+                if lhs.amount != rhs.amount {
+                    return lhs.amount > rhs.amount
+                }
+                return lhs.date > rhs.date
+            }
+        }
     }
 
     var filteredShared: [SharedTransaction] {
         guard let ledger = currentSharedLedger else { return [] }
         var items = sharedLedgerStore.transactionsByLedger[ledger.id] ?? []
         let categories = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
+
+        func categoryName(for tx: SharedTransaction) -> String {
+            if let cid = tx.categoryId,
+               let cat = categories.first(where: { $0.id == cid }) {
+                return cat.name
+            }
+            if let fallback = categories.first(where: { $0.name == tx.categoryName }) {
+                return fallback.name
+            }
+            return tx.categoryName
+        }
 
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if !q.isEmpty {
@@ -410,7 +468,27 @@ private extension AllTransactionsView {
         if let hi = sharedMaxAmount {
             items = items.filter { $0.amount <= hi }
         }
-        return items.sorted { $0.date > $1.date }
+        return items.sorted { lhs, rhs in
+            switch sharedSelectedSort {
+            case .dateDesc:
+                return lhs.date > rhs.date
+            case .categoryAsc:
+                let lName = categoryName(for: lhs)
+                let rName = categoryName(for: rhs)
+                if lName != rName {
+                    return lName.localizedStandardCompare(rName) == .orderedAscending
+                }
+                if lhs.date != rhs.date {
+                    return lhs.date > rhs.date
+                }
+                return lhs.amount > rhs.amount
+            case .amountDesc:
+                if lhs.amount != rhs.amount {
+                    return lhs.amount > rhs.amount
+                }
+                return lhs.date > rhs.date
+            }
+        }
     }
 
     var filteredIncomeTotal: Int { displayed.filter { $0.isIncome }.reduce(0) { $0 + $1.amount } }
@@ -453,6 +531,7 @@ private extension AllTransactionsView {
         minAmount = nil
         maxAmount = nil
         selectedTags.removeAll()
+        selectedSort = .dateDesc
 
         sharedSelectedType = nil
         sharedSelectedCategoryIDs = []
@@ -461,6 +540,7 @@ private extension AllTransactionsView {
         sharedMinAmount = nil
         sharedMaxAmount = nil
         sharedSelectedTags.removeAll()
+        sharedSelectedSort = .dateDesc
     }
 }
 
@@ -614,6 +694,7 @@ private struct FilterSheet: View {
     @Binding var dateTo: Date?
     @Binding var minAmount: Int?
     @Binding var maxAmount: Int?
+    @Binding var selectedSort: TransactionSortOption
     
     // ★ タグ
     let allTags: [String]                    // 表示用（最大8文字）
@@ -629,6 +710,15 @@ private struct FilterSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("並び替え") {
+                    Picker("並び替え", selection: $selectedSort) {
+                        ForEach(TransactionSortOption.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
                 Section("種別") {
                     Picker("種別", selection: $selectedType) {
                         Text("すべて").tag(TransactionType?.none)
@@ -748,6 +838,7 @@ private struct SharedFilterSheet: View {
     @Binding var dateTo: Date?
     @Binding var minAmount: Int?
     @Binding var maxAmount: Int?
+    @Binding var selectedSort: TransactionSortOption
 
     let allTags: [String]
     @Binding var selectedTags: Set<String>
@@ -765,6 +856,15 @@ private struct SharedFilterSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("並び替え") {
+                    Picker("並び替え", selection: $selectedSort) {
+                        ForEach(TransactionSortOption.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
                 Section("種別") {
                     Picker("種別", selection: $selectedType) {
                         Text("すべて").tag(SharedTransactionType?.none)
