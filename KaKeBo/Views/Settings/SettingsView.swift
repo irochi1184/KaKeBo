@@ -67,7 +67,7 @@ struct SettingsView: View {
     }
     
     enum Sheet: Identifiable {
-        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers, monthStart
+        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers, monthStart, emailImport
         var id: String { "sheet-\(self)" }
     }
     // 外部URL
@@ -222,6 +222,15 @@ struct SettingsView: View {
                             MonthStartSettingsView()
                                 .navigationTitle("月の開始日")
                                 .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+
+                    case .emailImport:
+                        NavigationStack {
+                            EmailImportSettingsView()
+                                .environmentObject(store)
+                                .environmentObject(pm)
                         }
                         .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
@@ -401,6 +410,19 @@ struct SettingsView: View {
                 trailingText: "\(sharedLedgerStore.ledgers.count)件"
             ) {
                 sheet = .sharedLedgers
+            }
+
+            SettingsRowButton(
+                title: "メール通知で取引追加",
+                systemImage: "envelope.badge",
+                accent: accent,
+                trailingText: nil
+            ) {
+                if pm.isPremiumActive {
+                    sheet = .emailImport
+                } else {
+                    showPaywall = true
+                }
             }
 
         } header: {
