@@ -142,9 +142,9 @@ struct AllTransactionsView: View {
                     dateTo: $dateTo,
                     minAmount: $minAmount,
                     maxAmount: $maxAmount,
+                    selectedSort: $selectedSort,
                     allTags: allTagsForFilter,
-                    selectedTags: $selectedTags,
-                    selectedSort: $selectedSort
+                    selectedTags: $selectedTags
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -851,6 +851,30 @@ private struct SharedFilterSheet: View {
 
     private func color(for cat: SharedCategory) -> Color {
         Color.fromHex(cat.colorHex) ?? .accentColor
+    }
+    
+    init(
+        allCategories: [SharedCategory],
+        selectedType: Binding<SharedTransactionType?>,
+        selectedCategoryIDs: Binding<Set<CKRecord.ID>>,
+        dateFrom: Binding<Date?>,
+        dateTo: Binding<Date?>,
+        minAmount: Binding<Int?>,
+        maxAmount: Binding<Int?>,
+        allTags: [String],
+        selectedTags: Binding<Set<String>>,
+        selectedSort: Binding<TransactionSortOption>
+    ) {
+        self.allCategories = allCategories
+        self._selectedType = selectedType
+        self._selectedCategoryIDs = selectedCategoryIDs
+        self._dateFrom = dateFrom
+        self._dateTo = dateTo
+        self._minAmount = minAmount
+        self._maxAmount = maxAmount
+        self.allTags = allTags
+        self._selectedTags = selectedTags
+        self._selectedSort = selectedSort
     }
 
     var body: some View {

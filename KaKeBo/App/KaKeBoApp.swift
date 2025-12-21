@@ -74,15 +74,6 @@ struct KaKeBoApp: App {
     }
 }
 
-final class AppDelegate: NSObject, UIApplicationDelegate {
-    func application(_ application: UIApplication, userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
-        NotificationCenter.default.post(
-            name: .cloudKitShareAccepted,
-            object: cloudKitShareMetadata
-        )
-    }
-}
-
 extension Notification.Name {
     static let cloudKitShareAccepted = Notification.Name("cloudKitShareAccepted")
 }
