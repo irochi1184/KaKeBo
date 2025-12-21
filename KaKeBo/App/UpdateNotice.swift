@@ -74,6 +74,7 @@ private struct UpdateNoticeContent: View {
     static let defaultHighlights: [Highlight] = [
         .init(title: "リマインダーにプレースホルダー追加（プレミアム）", message: "プレミアムプランのリマインダーでプレースホルダーを使えるようになり、通知文のカスタマイズが簡単に。", symbol: "bell.badge.fill", tint: .orange),
         .init(title: "よくある取引の並び替え", message: "よく使う取引の順番を自由に並び替えられるようになりました。", symbol: "arrow.up.arrow.down.circle.fill", tint: .blue),
+        .init(title: "取引一覧のフィルター機能追加", message: "取引一覧の項目を並び順を選べるようになりました。", symbol: "arrow.up.arrow.down.circle.fill", tint: .blue),
         .init(title: "共有家計簿でもよくある取引が利用可能", message: "共有家計簿でもテンプレートを使ってワンタップ入力ができるようになりました。", symbol: "person.2.fill", tint: .teal),
         .init(title: "2026年からログイン日数をカウント", message: "2026年以降のログイン日数を集計し、マイルストーン表示に反映します。", symbol: "calendar.badge.clock", tint: .purple),
         .init(title: "共有家計簿の微調整", message: "共有家計簿まわりの体験を細かく改善しました。", symbol: "slider.horizontal.3", tint: .pink)
