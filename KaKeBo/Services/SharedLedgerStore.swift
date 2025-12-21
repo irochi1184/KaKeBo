@@ -172,6 +172,34 @@ final class SharedLedgerStore: ObservableObject {
     
     // MARK: - Ledger
     
+    func acceptShare(_ metadata: CKShare.Metadata) async {
+        do {
+            try await acceptShareMetadata(metadata)
+            await reloadLedgers()
+            globalToast = ToastState(message: "共有家計簿に参加しました。", systemImage: "person.2.fill")
+        } catch {
+            lastError = error
+            globalToast = ToastState(message: "共有家計簿の参加に失敗しました。", systemImage: "exclamationmark.triangle.fill")
+            print("acceptShare error:", error)
+        }
+    }
+
+    private func acceptShareMetadata(_ metadata: CKShare.Metadata) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            let operation = CKAcceptSharesOperation(shareMetadatas: [metadata])
+            operation.qualityOfService = .userInitiated
+            operation.acceptSharesResultBlock = { result in
+                switch result {
+                case .success:
+                    continuation.resume()
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+            container.add(operation)
+        }
+    }
+
     func reloadLedgers() async {
         isLoading = true
         defer { isLoading = false }
