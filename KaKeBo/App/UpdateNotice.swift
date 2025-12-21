@@ -72,14 +72,22 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
-        .init(title: "共有招待の参加を改善", message: "iCloud 招待を受ける側で参加できない不具合を解消し、共有家計簿への合流がスムーズに。", symbol: "icloud.and.arrow.down", tint: .blue),
-        .init(title: "共有家計簿での削除・整理", message: "共有家計簿でも取引の削除に対応し、誤入力の修正や整理が簡単になりました。", symbol: "person.3.sequence.fill", tint: .teal),
-        .init(title: "固定費へのタグ付け（プレミアム）", message: "プレミアムプランで固定費を登録・編集するときにタグ付けができ、レポートの精度が向上。", symbol: "tag.fill", tint: .purple),
-        .init(title: "バックアップ範囲を拡大", message: "カレンダーメモ、固定費、月の開始日・締め日、テーマ管理設定まで保存・復元できるよう強化しました。", symbol: "archivebox.fill", tint: .orange),
-        .init(title: "テーマ設定の維持", message: "アプリアップデート時にテーマが初期化されてしまう問題を修正し、お気に入りの配色をそのまま利用できます。", symbol: "paintbrush.pointed.fill", tint: .pink),
-        .init(title: "Todo テンプレートの追加タイミングを調整", message: "テンプレートは現在日付への移行時のみ自動追加され、過去に遡っても増えないように改良しました。", symbol: "checklist.checked", tint: .green),
-        .init(title: "よく使う取引ショートカット", message: "よく使う取引セクションでショートカットの登録・適用・削除ができ、入力がよりスピーディーに。", symbol: "bolt.fill", tint: .yellow)
+        .init(title: "リマインダーにプレースホルダー追加（プレミアム）", message: "プレミアムプランのリマインダーでプレースホルダーを使えるようになり、通知文のカスタマイズが簡単に。", symbol: "bell.badge.fill", tint: .orange),
+        .init(title: "よくある取引の並び替え", message: "よく使う取引の順番を自由に並び替えられるようになりました。", symbol: "arrow.up.arrow.down.circle.fill", tint: .blue),
+        .init(title: "共有家計簿でもよくある取引が利用可能", message: "共有家計簿でもテンプレートを使ってワンタップ入力ができるようになりました。", symbol: "person.2.fill", tint: .teal),
+        .init(title: "2026年からログイン日数をカウント", message: "2026年以降のログイン日数を集計し、マイルストーン表示に反映します。", symbol: "calendar.badge.clock", tint: .purple),
+        .init(title: "共有家計簿の微調整", message: "共有家計簿まわりの体験を細かく改善しました。", symbol: "slider.horizontal.3", tint: .pink)
     ]
+    /*
+     旧アップデート通知（2.1.0）
+     - 共有招待の参加を改善
+     - 共有家計簿での削除・整理
+     - 固定費へのタグ付け（プレミアム）
+     - バックアップ範囲を拡大
+     - テーマ設定の維持
+     - Todo テンプレートの追加タイミングを調整
+     - よく使う取引ショートカット
+     */
 
     let accent: Color
     @Binding var isPresented: Bool
