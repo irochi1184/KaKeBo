@@ -42,6 +42,13 @@ struct CalendarScreen: View {
 
     @StateObject private var todoStore = TodoStore()
     @State private var showOnlyUndone: Bool = false
+    @State private var selectedDay: Date = Calendar.current.startOfDay(for: .now)
+    @AppStorage("calendar.bottom.display.mode", store: .appGroup) private var calendarBottomModeRaw: String = CalendarBottomDisplayMode.monthTodo.rawValue
+
+    private var calendarBottomMode: CalendarBottomDisplayMode {
+        get { CalendarBottomDisplayMode(rawValue: calendarBottomModeRaw) ?? .monthTodo }
+        set { calendarBottomModeRaw = newValue.rawValue }
+    }
     
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
@@ -81,7 +88,13 @@ struct CalendarScreen: View {
                                 maxIncome: maxIncomeInMonth,
                                 todoCounts: todoStore.dueCounts(in: month),
                                 accent: accent,
-                                onTapDay: { day in sheet = .detail(day) },
+                                onTapDay: { day in
+                                    if calendarBottomMode == .dayDetail {
+                                        selectedDay = day
+                                    } else {
+                                        sheet = .detail(day)
+                                    }
+                                },
                                 onLongPressDay: { day in sheet = .add(day) },
                                 notedDays: dayNotes.notedDays(in: month),
                                 noteSnippets: dayNotes.snippets(in: month, limit: 8)
@@ -95,24 +108,37 @@ struct CalendarScreen: View {
                     }
                 }
                 
-                TodoListCard(
-                    month: month,
-                    todos: showOnlyUndone ? todoStore.todos.filter{ !$0.done } : todoStore.todos,
-                    accent: accent,
-                    onToggle: { id in todoStore.toggle(id); todoStore.save(for: month) },
-                    onDelete: { offsets in
-                        let base = showOnlyUndone ? todoStore.todos.filter{ !$0.done } : todoStore.todos
-                        let ids = offsets.map { base[$0].id }
-                        todoStore.delete(ids: ids)
-                        todoStore.save(for: month)
-                    },
-                    onEditDue: { id, newDate in todoStore.setDue(id, newDate); todoStore.save(for: month) },
-                    onQuickAdd: { tapped in handleQuickAdd(tapped) },
-                    onRename: { id, newTitle in todoStore.rename(id, newTitle); todoStore.save(for: month) },
-                    onTapAdd: { sheet = .todoAdd },
-                    showOnlyUndone: $showOnlyUndone
-                )
-                .environmentObject(todoStore)
+                Group {
+                    switch calendarBottomMode {
+                    case .monthTodo:
+                        TodoListCard(
+                            month: month,
+                            todos: showOnlyUndone ? todoStore.todos.filter { !$0.done } : todoStore.todos,
+                            accent: accent,
+                            onToggle: { id in todoStore.toggle(id); todoStore.save(for: month) },
+                            onDelete: { offsets in
+                                let base = showOnlyUndone ? todoStore.todos.filter { !$0.done } : todoStore.todos
+                                let ids = offsets.map { base[$0].id }
+                                todoStore.delete(ids: ids)
+                                todoStore.save(for: month)
+                            },
+                            onEditDue: { id, newDate in todoStore.setDue(id, newDate); todoStore.save(for: month) },
+                            onQuickAdd: { tapped in handleQuickAdd(tapped) },
+                            onRename: { id, newTitle in todoStore.rename(id, newTitle); todoStore.save(for: month) },
+                            onTapAdd: { sheet = .todoAdd },
+                            showOnlyUndone: $showOnlyUndone
+                        )
+                        .environmentObject(todoStore)
+
+                    case .dayDetail:
+                        CalendarDayDetailCard(
+                            date: selectedDay,
+                            accent: accent
+                        )
+                        .environmentObject(todoStore)
+                        .environmentObject(dayNotes)
+                    }
+                }
                 .padding(.horizontal)
                 
                 Spacer(minLength: 8)
@@ -192,8 +218,23 @@ struct CalendarScreen: View {
                     )
                 }
             }
-            .onAppear { todoStore.load(for: month) }
-            .onChange(of: month) { todoStore.load(for: month) }
+            .onAppear {
+                todoStore.load(for: month)
+                if calendarBottomMode == .dayDetail {
+                    selectedDay = cal.startOfDay(for: .now)
+                }
+            }
+            .onChange(of: month) { newMonth in
+                todoStore.load(for: newMonth)
+                if calendarBottomMode == .dayDetail, !cal.isDate(selectedDay, equalTo: newMonth, toGranularity: .month) {
+                    selectedDay = cal.date(from: cal.dateComponents([.year, .month], from: newMonth)) ?? newMonth
+                }
+            }
+            .onChange(of: calendarBottomModeRaw) { _ in
+                if calendarBottomMode == .dayDetail {
+                    selectedDay = cal.startOfDay(for: .now)
+                }
+            }
             .task { await reloadSharedLedgerDataIfNeeded() }
             .task(id: ledgerContext.isShared) {
                 await reloadSharedLedgerDataIfNeeded()

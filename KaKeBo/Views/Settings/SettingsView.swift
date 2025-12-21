@@ -23,6 +23,7 @@ struct SettingsView: View {
     
     @AppStorage("reminder.enabled", store: .appGroup) private var enabled: Bool = true
     @AppStorage("reminder.time", store: .appGroup) private var timeRaw: Double = Self.defaultTime.timeIntervalSinceReferenceDate
+    @AppStorage("calendar.bottom.display.mode", store: .appGroup) private var calendarBottomModeRaw: String = CalendarBottomDisplayMode.monthTodo.rawValue
     
     // ▼ リマインダー統一：Settings 内で共有する ToDo ストア（今日の件数評価などに使う）
     @StateObject private var todoStore = TodoStore()
@@ -92,6 +93,18 @@ struct SettingsView: View {
         if let items = try? JSONDecoder().decode([RecurringTodoTemplate].self, from: templatesData) {
             templates = items
         }
+    }
+
+    private var calendarBottomMode: CalendarBottomDisplayMode {
+        get { CalendarBottomDisplayMode(rawValue: calendarBottomModeRaw) ?? .monthTodo }
+        set { calendarBottomModeRaw = newValue.rawValue }
+    }
+
+    private var calendarBottomModeBinding: Binding<CalendarBottomDisplayMode> {
+        Binding(
+            get: { calendarBottomMode },
+            set: { calendarBottomMode = $0 }
+        )
     }
     private func saveTemplates() {
         templatesData = (try? JSONEncoder().encode(templates)) ?? Data()
@@ -405,6 +418,20 @@ struct SettingsView: View {
 
         } header: {
             Text("各種設定")
+        }
+        .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
+
+        Section {
+            Picker("カレンダー下部の表示", selection: calendarBottomModeBinding) {
+                ForEach(CalendarBottomDisplayMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+        } header: {
+            Text("カレンダー表示")
+        } footer: {
+            Text(calendarBottomMode.description)
         }
         .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
     }
