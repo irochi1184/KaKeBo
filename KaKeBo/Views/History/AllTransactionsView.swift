@@ -1226,7 +1226,7 @@ private struct AmountField: View {
 private struct FilteredChartsSheet: View {
     let transactions: [DisplayTransaction]
     let background: Color
-    
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -1304,27 +1304,84 @@ private struct FilteredChartsSheet: View {
     }
 
     private var dailySeries: [FilteredDailyPoint] {
-        var dict: [Date: Int] = [:]
+        var dict: [DailyCategoryKey: DailyCategoryPoint] = [:]
         let calendar = Calendar.current
+        let signed = usesSignedAmount
         for tx in transactions {
             let day = calendar.startOfDay(for: tx.date)
-            let signed = tx.isIncome ? tx.amount : -tx.amount
-            dict[day, default: 0] += signed
+            let amount = signed ? (tx.isIncome ? tx.amount : -tx.amount) : tx.amount
+            let key = DailyCategoryKey(
+                date: day,
+                category: tx.title,
+                isIncome: tx.isIncome
+            )
+            if var point = dict[key] {
+                point.amount += amount
+                dict[key] = point
+            } else {
+                dict[key] = DailyCategoryPoint(
+                    date: day,
+                    amount: amount,
+                    category: tx.title,
+                    color: tx.color,
+                    isIncome: tx.isIncome
+                )
+            }
         }
         return dict
-            .map { FilteredDailyPoint(date: $0.key, amount: $0.value) }
-            .sorted { $0.date < $1.date }
+            .map(\.value)
+            .sorted {
+                if $0.date != $1.date { return $0.date < $1.date }
+                if $0.isIncome != $1.isIncome { return $0.isIncome && !$1.isIncome }
+                return $0.category < $1.category
+            }
+    }
+
+    private var hasIncome: Bool {
+        transactions.contains { $0.isIncome }
+    }
+
+    private var hasExpense: Bool {
+        transactions.contains { !$0.isIncome }
+    }
+
+    private var usesSignedAmount: Bool {
+        hasIncome && hasExpense
     }
 }
 
-private struct FilteredDailyPoint: Identifiable {
+private struct DailyCategoryKey: Hashable {
     let date: Date
-    let amount: Int
-    var id: Date { date }
+    let category: String
+    let isIncome: Bool
+}
+
+private struct DailyCategoryPoint: Identifiable {
+    let date: Date
+    var amount: Int
+    let category: String
+    let color: Color
+    let isIncome: Bool
+    var id: String { "\(date.timeIntervalSince1970)-\(category)-\(isIncome)" }
 }
 
 private struct FilteredBarChart: View {
-    let series: [FilteredDailyPoint]
+    let series: [DailyCategoryPoint]
+
+    private var colorMap: [String: Color] {
+        var map: [String: Color] = [:]
+        for point in series {
+            if map[point.category] == nil {
+                map[point.category] = point.color
+            }
+        }
+        return map
+    }
+
+    private var colorScale: (domain: [String], range: [Color]) {
+        let entries = colorMap.sorted { $0.key < $1.key }
+        return (entries.map { $0.key }, entries.map { $0.value })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1337,9 +1394,10 @@ private struct FilteredBarChart: View {
                     x: .value("日", point.date, unit: .day),
                     y: .value("金額", point.amount)
                 )
-                .foregroundStyle(point.amount >= 0 ? Color.green : Color.red)
+                .foregroundStyle(by: .value("カテゴリ", point.category))
                 .cornerRadius(3)
             }
+            .chartForegroundStyleScale(domain: colorScale.domain, range: colorScale.range)
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day, count: 5)) { _ in
                     AxisGridLine().foregroundStyle(.secondary.opacity(0.2))
