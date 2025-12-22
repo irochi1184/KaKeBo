@@ -235,28 +235,32 @@ private extension AllTransactionsView {
 
     @ViewBuilder
     var contentList: some View {
-        List {
-            ForEach(pagedDisplayed) { item in
-                Button {
-                    if let tx = item.personal {
-                        editingTx = tx
-                    } else if let tx = item.shared {
-                        editingSharedTx = tx
+        VStack(spacing: 0) {
+            List {
+                ForEach(pagedDisplayed) { item in
+                    Button {
+                        if let tx = item.personal {
+                            editingTx = tx
+                        } else if let tx = item.shared {
+                            editingSharedTx = tx
+                        }
+                    } label: {
+                        HistoryRow(content: item)
                     }
-                } label: {
-                    HistoryRow(content: item)
+                    .buttonStyle(.plain)
+                    .listRowBackground(themeStore.theme.backgroundColor(for: scheme))
                 }
-                .buttonStyle(.plain)
-                .listRowBackground(themeStore.theme.backgroundColor(for: scheme))
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
 
             if shouldShowPagination {
                 paginationRow
-                    .listRowBackground(themeStore.theme.backgroundColor(for: scheme))
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(themeStore.theme.backgroundColor(for: scheme))
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
         .background(themeStore.theme.backgroundColor(for: scheme))
     }
 
@@ -376,7 +380,6 @@ private extension AllTransactionsView {
             }
             .disabled(currentPage >= totalPages - 1)
         }
-        .padding(.vertical, 8)
     }
 
     var filterSignature: String {
