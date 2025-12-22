@@ -17,6 +17,7 @@ struct CalendarMonthGrid: View {
     let maxIncome:  Int
     let todoCounts: [Date: Int]
     let accent: Color
+    let selectedDate: Date?
     let onTapDay: (Date) -> Void
     let onLongPressDay: (Date) -> Void
     let notedDays: Set<Date>
@@ -39,6 +40,7 @@ struct CalendarMonthGrid: View {
                         maxExpense: maxExpense,
                         maxIncome: maxIncome,
                         isToday: cal.isDateInToday(day),
+                        isSelected: selectedDate.map { cal.isDate(day, inSameDayAs: $0) } ?? false,
                         todoCount: todoCounts[k] ?? 0,
                         accent: accent,
                         hasNote: notedDays.contains(key),
@@ -89,6 +91,7 @@ private struct DayCell: View {
     let maxExpense: Int
     let maxIncome: Int
     let isToday: Bool
+    let isSelected: Bool
     let todoCount: Int
     let accent: Color
     let hasNote: Bool
@@ -102,6 +105,11 @@ private struct DayCell: View {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .stroke(isToday ? accent.opacity(0.6) : accent.opacity(0.4),
                         lineWidth: isToday ? 2 : 0.8)
+
+            if isSelected {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(accent.opacity(0.18))
+            }
             
             VStack(spacing: 4) {
                 // 上：日付は右上に表示

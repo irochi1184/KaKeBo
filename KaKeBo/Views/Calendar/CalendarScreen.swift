@@ -83,6 +83,7 @@ struct CalendarScreen: View {
                                 maxIncome: maxIncomeInMonth,
                                 todoCounts: todoStore.dueCounts(in: month),
                                 accent: accent,
+                                selectedDate: calendarBottomMode == .dayDetail ? selectedDay : nil,
                                 onTapDay: { day in
                                     if calendarBottomMode == .dayDetail {
                                         selectedDay = day
