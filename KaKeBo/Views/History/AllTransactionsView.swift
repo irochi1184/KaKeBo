@@ -1303,7 +1303,7 @@ private struct FilteredChartsSheet: View {
         .sorted { $0.value > $1.value }
     }
 
-    private var dailySeries: [FilteredDailyPoint] {
+    private var dailySeries: [DailyCategoryPoint] {
         var dict: [DailyCategoryKey: DailyCategoryPoint] = [:]
         let calendar = Calendar.current
         let signed = usesSignedAmount
