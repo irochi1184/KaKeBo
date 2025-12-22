@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CloudKit
+import Charts
 
 struct AllTransactionsView: View {
     @EnvironmentObject var store: DataStore
@@ -381,35 +382,54 @@ private extension AllTransactionsView {
     var filterSignature: String {
         switch ledgerContext.mode {
         case .personal:
-            let categories = selectedCategoryIDs.map { $0.uuidString }.sorted().joined(separator: ",")
-            let tags = selectedTags.sorted().joined(separator: ",")
-            return [
-                searchText.lowercased(),
-                selectedType?.rawValue ?? "all",
-                categories,
-                dateFrom?.description ?? "nil",
-                dateTo?.description ?? "nil",
-                minAmount.map(String.init) ?? "nil",
-                maxAmount.map(String.init) ?? "nil",
-                tags,
-                selectedSort.rawValue
-            ].joined(separator: "|")
+            return personalFilterSignature()
         case .shared:
-            let categories = sharedSelectedCategoryIDs.map(\.recordName).sorted().joined(separator: ",")
-            let tags = sharedSelectedTags.sorted().joined(separator: ",")
-            return [
-                searchText.lowercased(),
-                sharedSelectedType?.rawValue ?? "all",
-                categories,
-                sharedDateFrom?.description ?? "nil",
-                sharedDateTo?.description ?? "nil",
-                sharedMinAmount.map(String.init) ?? "nil",
-                sharedMaxAmount.map(String.init) ?? "nil",
-                tags,
-                sharedSelectedSort.rawValue,
-                ledgerContext.selectedSharedLedgerId?.recordName ?? "nil"
-            ].joined(separator: "|")
+            return sharedFilterSignature()
         }
+    }
+
+    func personalFilterSignature() -> String {
+        let categories = selectedCategoryIDs.map { $0.uuidString }.sorted().joined(separator: ",")
+        let tags = selectedTags.sorted().joined(separator: ",")
+        let from = dateFrom?.description ?? "nil"
+        let to = dateTo?.description ?? "nil"
+        let min = minAmount.map(String.init) ?? "nil"
+        let max = maxAmount.map(String.init) ?? "nil"
+        let parts = [
+            searchText.lowercased(),
+            selectedType?.rawValue ?? "all",
+            categories,
+            from,
+            to,
+            min,
+            max,
+            tags,
+            selectedSort.rawValue
+        ]
+        return parts.joined(separator: "|")
+    }
+
+    func sharedFilterSignature() -> String {
+        let categories = sharedSelectedCategoryIDs.map(\.recordName).sorted().joined(separator: ",")
+        let tags = sharedSelectedTags.sorted().joined(separator: ",")
+        let from = sharedDateFrom?.description ?? "nil"
+        let to = sharedDateTo?.description ?? "nil"
+        let min = sharedMinAmount.map(String.init) ?? "nil"
+        let max = sharedMaxAmount.map(String.init) ?? "nil"
+        let ledgerId = ledgerContext.selectedSharedLedgerId?.recordName ?? "nil"
+        let parts = [
+            searchText.lowercased(),
+            sharedSelectedType?.rawValue ?? "all",
+            categories,
+            from,
+            to,
+            min,
+            max,
+            tags,
+            sharedSelectedSort.rawValue,
+            ledgerId
+        ]
+        return parts.joined(separator: "|")
     }
 
     func requestShowCharts() {
