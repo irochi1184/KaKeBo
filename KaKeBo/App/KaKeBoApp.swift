@@ -48,6 +48,16 @@ struct KaKeBoApp: App {
                         await sharedLedgerStore.acceptShare(metadata)
                     }
                 }
+                .onOpenURL { url in
+                    Task {
+                        do {
+                            let metadata = try await CKContainer.default().shareMetadata(for: url)
+                            await sharedLedgerStore.acceptShare(metadata)
+                        } catch {
+                            print("shareMetadata error:", error)
+                        }
+                    }
+                }
             // 初回起動時のみ、ロック有効ならロック
                 .onAppear {
                     if !didInitialAppear {
