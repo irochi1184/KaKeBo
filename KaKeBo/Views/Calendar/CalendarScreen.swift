@@ -103,6 +103,9 @@ struct CalendarScreen: View {
                         .simultaneousGesture(swipeGesture, including: .all)
                     }
                 }
+
+                Divider()
+                    .padding(.horizontal)
                 
                 Group {
                     switch calendarBottomMode {

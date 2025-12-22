@@ -114,7 +114,6 @@ struct CalendarDayDetailCard: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .frame(maxHeight: .infinity)
-            .background(LinedPaperBackground())
         }
         .sheet(item: $editingTx) { tx in
             EditTransactionView(transaction: tx)
@@ -319,33 +318,5 @@ struct CalendarDayDetailCard: View {
 
     private func sharedSymbol(for tx: SharedTransaction) -> String {
         sharedCategory(for: tx)?.icon ?? "tag.fill"
-    }
-}
-
-private struct LinedPaperBackground: View {
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        GeometryReader { proxy in
-            let lineSpacing: CGFloat = 22
-            let lineColor = scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
-            ZStack(alignment: .topLeading) {
-                Color.clear
-                VStack(spacing: lineSpacing) {
-                    ForEach(0..<lineCount(height: proxy.size.height, spacing: lineSpacing), id: \.self) { _ in
-                        Rectangle()
-                            .fill(lineColor)
-                            .frame(height: 1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .padding(.top, 16)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func lineCount(height: CGFloat, spacing: CGFloat) -> Int {
-        max(1, Int(height / spacing) + 1)
     }
 }
