@@ -225,13 +225,13 @@ struct CalendarScreen: View {
                     selectedDay = cal.startOfDay(for: .now)
                 }
             }
-            .onChange(of: month) { newMonth in
+            .onChange(of: month) { _, newMonth in
                 todoStore.load(for: newMonth)
                 if calendarBottomMode == .dayDetail, !cal.isDate(selectedDay, equalTo: newMonth, toGranularity: .month) {
                     selectedDay = cal.date(from: cal.dateComponents([.year, .month], from: newMonth)) ?? newMonth
                 }
             }
-            .onChange(of: calendarBottomMode) { _ in
+            .onChange(of: calendarBottomMode) {
                 if calendarBottomMode == .dayDetail {
                     selectedDay = cal.startOfDay(for: .now)
                 }

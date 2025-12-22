@@ -104,11 +104,11 @@ private struct DayCell: View {
             // 枠
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .stroke(isToday ? accent.opacity(0.6) : accent.opacity(0.4),
-                        lineWidth: isToday ? 2 : 0.8)
+                        lineWidth: isToday ? 1.6 : 0.8)
 
             if isSelected {
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(accent.opacity(0.18))
+                    .fill(accent.opacity(0.1))
             }
             
             VStack(spacing: 4) {

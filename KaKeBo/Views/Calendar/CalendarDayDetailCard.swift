@@ -258,8 +258,8 @@ struct CalendarDayDetailCard: View {
                                 Text(sharedCategoryName(for: tx))
                                     .font(.subheadline.weight(.medium))
                                     .lineLimit(1)
-                                if !tx.memo.isEmpty {
-                                    Text(tx.memo)
+                                if let memo = tx.memo, !memo.isEmpty {
+                                    Text(memo)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
