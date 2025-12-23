@@ -7,12 +7,14 @@
 
 import SwiftUI
 import CloudKit
+import Charts
 
 struct AllTransactionsView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @EnvironmentObject var ledgerContext: LedgerContext
+    @EnvironmentObject var purchase: PurchaseManager
     @Environment(\.colorScheme) private var scheme
     
     // 検索テキスト
@@ -40,6 +42,15 @@ struct AllTransactionsView: View {
     @State private var sharedSelectedTags: Set<String> = []
     @State private var editingSharedTx: SharedTransaction? = nil
     @State private var sharedSelectedSort: TransactionSortOption = .dateDesc
+
+    @State private var currentPage: Int = 0
+    @State private var showChartSheet = false
+    @State private var showChartLimitAlert = false
+
+    @AppStorage("historyFilterChartUsageMonth") private var chartUsageMonth: String = ""
+    @AppStorage("historyFilterChartUsageCount") private var chartUsageCount: Int = 0
+
+    private let itemsPerPage = 100
     
     // タグの正規化（検索・比較用）：8文字・lowercased
     private func normTag(_ raw: String) -> String {
@@ -107,6 +118,12 @@ struct AllTransactionsView: View {
                         .padding(.horizontal)
                         .padding(.bottom, 6)
 
+                        if isFiltering, !displayed.isEmpty {
+                            filterChartAction
+                                .padding(.horizontal)
+                                .padding(.bottom, 8)
+                        }
+
                         contentList
                     }
                 } else {
@@ -162,27 +179,89 @@ struct AllTransactionsView: View {
         }
         .task { await ledgerContext.restoreIfNeeded(sharedLedgerStore: sharedLedgerStore) }
         .task(id: ledgerContext.selectedSharedLedgerId) { await reloadSharedLedgerDataIfNeeded() }
+        .onAppear { syncChartUsageMonth() }
+        .onChange(of: displayed.count) { _, _ in
+            if currentPage >= totalPages {
+                currentPage = max(0, totalPages - 1)
+            }
+        }
+        .onChange(of: filterSignature) { _, _ in
+            currentPage = 0
+        }
+        .alert("グラフ表示の上限に達しました", isPresented: $showChartLimitAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("無料プランではフィルター結果のグラフ表示は月に3回までご利用いただけます。プレミアムプランなら回数制限なくご利用いただけます。")
+        }
+        .sheet(isPresented: $showChartSheet) {
+            FilteredChartsSheet(
+                transactions: displayed,
+                background: themeStore.theme.backgroundColor(for: scheme)
+            )
+        }
     }
 }
 
 private extension AllTransactionsView {
+    var filterChartAction: some View {
+        let remaining = max(0, 3 - chartUsageCount)
+        return Button {
+            requestShowCharts()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "chart.pie.fill")
+                Text("フィルター結果をグラフ表示")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                if !purchase.isPremiumActive {
+                    Text("残り\(remaining)回")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("無制限")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(themeStore.theme.accentColor(for: scheme).opacity(0.12))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     @ViewBuilder
     var contentList: some View {
-        List {
-            ForEach(displayed) { item in
-                Button {
-                    if let tx = item.personal {
-                        editingTx = tx
-                    } else if let tx = item.shared {
-                        editingSharedTx = tx
+        VStack(spacing: 0) {
+            List {
+                ForEach(pagedDisplayed) { item in
+                    Button {
+                        if let tx = item.personal {
+                            editingTx = tx
+                        } else if let tx = item.shared {
+                            editingSharedTx = tx
+                        }
+                    } label: {
+                        HistoryRow(content: item)
                     }
-                } label: {
-                    HistoryRow(content: item)
+                    .buttonStyle(.plain)
+                    .listRowBackground(themeStore.theme.backgroundColor(for: scheme))
                 }
-                .buttonStyle(.plain)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+
+            if shouldShowPagination {
+                paginationRow
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(themeStore.theme.backgroundColor(for: scheme))
             }
         }
-        .listStyle(.plain)
+        .background(themeStore.theme.backgroundColor(for: scheme))
     }
 
     private var currentSharedLedger: SharedLedger? {
@@ -258,6 +337,131 @@ private extension AllTransactionsView {
 
         await sharedLedgerStore.reloadCategories(for: ledger)
         await sharedLedgerStore.reloadTransactions(for: ledger)
+    }
+
+    var totalPages: Int {
+        max(1, Int(ceil(Double(displayed.count) / Double(itemsPerPage))))
+    }
+
+    var shouldShowPagination: Bool {
+        displayed.count > itemsPerPage
+    }
+
+    var pagedDisplayed: [DisplayTransaction] {
+        guard shouldShowPagination else { return displayed }
+        let start = currentPage * itemsPerPage
+        let end = min(start + itemsPerPage, displayed.count)
+        if start >= displayed.count { return [] }
+        return Array(displayed[start..<end])
+    }
+
+    var paginationRow: some View {
+        HStack(spacing: 12) {
+            Button {
+                currentPage = max(0, currentPage - 1)
+            } label: {
+                Label("前へ", systemImage: "chevron.left")
+            }
+            .disabled(currentPage == 0)
+
+            Spacer()
+
+            Text("\(currentPage + 1) / \(totalPages)")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button {
+                currentPage = min(totalPages - 1, currentPage + 1)
+            } label: {
+                Label("次へ", systemImage: "chevron.right")
+                    .labelStyle(.titleAndIcon)
+            }
+            .disabled(currentPage >= totalPages - 1)
+        }
+    }
+
+    var filterSignature: String {
+        switch ledgerContext.mode {
+        case .personal:
+            return personalFilterSignature()
+        case .shared:
+            return sharedFilterSignature()
+        }
+    }
+
+    func personalFilterSignature() -> String {
+        let categories = selectedCategoryIDs.map { $0.uuidString }.sorted().joined(separator: ",")
+        let tags = selectedTags.sorted().joined(separator: ",")
+        let from = dateFrom?.description ?? "nil"
+        let to = dateTo?.description ?? "nil"
+        let min = minAmount.map(String.init) ?? "nil"
+        let max = maxAmount.map(String.init) ?? "nil"
+        let parts = [
+            searchText.lowercased(),
+            selectedType?.rawValue ?? "all",
+            categories,
+            from,
+            to,
+            min,
+            max,
+            tags,
+            selectedSort.rawValue
+        ]
+        return parts.joined(separator: "|")
+    }
+
+    func sharedFilterSignature() -> String {
+        let categories = sharedSelectedCategoryIDs.map(\.recordName).sorted().joined(separator: ",")
+        let tags = sharedSelectedTags.sorted().joined(separator: ",")
+        let from = sharedDateFrom?.description ?? "nil"
+        let to = sharedDateTo?.description ?? "nil"
+        let min = sharedMinAmount.map(String.init) ?? "nil"
+        let max = sharedMaxAmount.map(String.init) ?? "nil"
+        let ledgerId = ledgerContext.selectedSharedLedgerId?.recordName ?? "nil"
+        let parts = [
+            searchText.lowercased(),
+            sharedSelectedType?.rawValue ?? "all",
+            categories,
+            from,
+            to,
+            min,
+            max,
+            tags,
+            sharedSelectedSort.rawValue,
+            ledgerId
+        ]
+        return parts.joined(separator: "|")
+    }
+
+    func requestShowCharts() {
+        syncChartUsageMonth()
+        if purchase.isPremiumActive {
+            showChartSheet = true
+            return
+        }
+        if chartUsageCount >= 3 {
+            showChartLimitAlert = true
+            return
+        }
+        chartUsageCount += 1
+        showChartSheet = true
+    }
+
+    func syncChartUsageMonth() {
+        let current = currentMonthKey()
+        if chartUsageMonth != current {
+            chartUsageMonth = current
+            chartUsageCount = 0
+        }
+    }
+
+    func currentMonthKey() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM"
+        formatter.locale = Locale(identifier: "ja_JP")
+        return formatter.string(from: Date())
     }
 }
 
@@ -1019,6 +1223,213 @@ private struct AmountField: View {
             if digits != newVal { text = digits }
             value = digits.isEmpty ? nil : Int(digits)
         }
+    }
+}
+
+private struct FilteredChartsSheet: View {
+    let transactions: [DisplayTransaction]
+    let background: Color
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if transactions.isEmpty {
+                        Text("表示できる取引がありません。")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        if !expenseSlices.isEmpty {
+                            CategoryDonutChart(
+                                breakdown: expenseSlices,
+                                currentTotal: expenseTotal,
+                                previousTotal: 0,
+                                isExpense: true
+                            )
+                            .luxCard()
+                        }
+
+                        if !incomeSlices.isEmpty {
+                            CategoryDonutChart(
+                                breakdown: incomeSlices,
+                                currentTotal: incomeTotal,
+                                previousTotal: 0,
+                                isExpense: false
+                            )
+                            .luxCard()
+                        }
+
+                        FilteredBarChart(series: dailySeries)
+                    }
+                }
+                .padding()
+            }
+            .background(background.ignoresSafeArea())
+            .navigationTitle("フィルター結果のグラフ")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var expenseTotal: Int {
+        transactions.filter { !$0.isIncome }.reduce(0) { $0 + $1.amount }
+    }
+
+    private var incomeTotal: Int {
+        transactions.filter { $0.isIncome }.reduce(0) { $0 + $1.amount }
+    }
+
+    private var expenseSlices: [CategorySlice] {
+        makeSlices(isIncome: false)
+    }
+
+    private var incomeSlices: [CategorySlice] {
+        makeSlices(isIncome: true)
+    }
+
+    private func makeSlices(isIncome: Bool) -> [CategorySlice] {
+        var dict: [String: (color: Color, amount: Int, symbol: String?)] = [:]
+        for tx in transactions where tx.isIncome == isIncome {
+            let key = tx.title
+            var entry = dict[key] ?? (tx.color, 0, tx.symbolName)
+            entry.amount += tx.amount
+            dict[key] = entry
+        }
+        return dict.map { key, value in
+            CategorySlice(
+                id: UUID(),
+                name: key,
+                color: value.color,
+                value: value.amount,
+                symbolName: value.symbol
+            )
+        }
+        .sorted { $0.value > $1.value }
+    }
+
+    private var dailySeries: [DailyCategoryPoint] {
+        var dict: [DailyCategoryKey: DailyCategoryPoint] = [:]
+        let calendar = Calendar.current
+        let signed = usesSignedAmount
+        for tx in transactions {
+            let day = calendar.startOfDay(for: tx.date)
+            let amount = signed ? (tx.isIncome ? tx.amount : -tx.amount) : tx.amount
+            let key = DailyCategoryKey(
+                date: day,
+                category: tx.title,
+                isIncome: tx.isIncome
+            )
+            if var point = dict[key] {
+                point.amount += amount
+                dict[key] = point
+            } else {
+                dict[key] = DailyCategoryPoint(
+                    date: day,
+                    amount: amount,
+                    category: tx.title,
+                    color: tx.color,
+                    isIncome: tx.isIncome
+                )
+            }
+        }
+        return dict
+            .map(\.value)
+            .sorted {
+                if $0.date != $1.date { return $0.date < $1.date }
+                if $0.isIncome != $1.isIncome { return $0.isIncome && !$1.isIncome }
+                return $0.category < $1.category
+            }
+    }
+
+    private var hasIncome: Bool {
+        transactions.contains { $0.isIncome }
+    }
+
+    private var hasExpense: Bool {
+        transactions.contains { !$0.isIncome }
+    }
+
+    private var usesSignedAmount: Bool {
+        hasIncome && hasExpense
+    }
+}
+
+private struct DailyCategoryKey: Hashable {
+    let date: Date
+    let category: String
+    let isIncome: Bool
+}
+
+private struct DailyCategoryPoint: Identifiable {
+    let date: Date
+    var amount: Int
+    let category: String
+    let color: Color
+    let isIncome: Bool
+    var id: String { "\(date.timeIntervalSince1970)-\(category)-\(isIncome)" }
+}
+
+private struct FilteredBarChart: View {
+    let series: [DailyCategoryPoint]
+
+    private var colorMap: [String: Color] {
+        var map: [String: Color] = [:]
+        for point in series {
+            if map[point.category] == nil {
+                map[point.category] = point.color
+            }
+        }
+        return map
+    }
+
+    private var colorScale: (domain: [String], range: [Color]) {
+        let entries = colorMap.sorted { $0.key < $1.key }
+        return (entries.map { $0.key }, entries.map { $0.value })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("日別収支（フィルター結果）")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Chart(series) { point in
+                BarMark(
+                    x: .value("日", point.date, unit: .day),
+                    y: .value("金額", point.amount)
+                )
+                .foregroundStyle(by: .value("カテゴリ", point.category))
+                .cornerRadius(3)
+            }
+            .chartForegroundStyleScale(domain: colorScale.domain, range: colorScale.range)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day, count: 5)) { _ in
+                    AxisGridLine().foregroundStyle(.secondary.opacity(0.2))
+                    AxisTick()
+                    AxisValueLabel(format: .dateTime.day().locale(Locale(identifier: "ja_JP")))
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { v in
+                    AxisGridLine().foregroundStyle(.secondary.opacity(0.2))
+                    AxisTick()
+                    AxisValueLabel {
+                        if let n = v.as(Int.self) {
+                            Text(currency(n))
+                        }
+                    }
+                }
+            }
+            .frame(height: 220)
+            .luxCard()
+        }
+    }
+
+    private func currency(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        let prefix = n < 0 ? "-¥" : "¥"
+        return prefix + (f.string(from: abs(n) as NSNumber) ?? "\(n)")
     }
 }
 
