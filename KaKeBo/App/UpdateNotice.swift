@@ -72,12 +72,9 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
-        .init(title: "リマインダーにプレースホルダー追加（プレミアム）", message: "プレミアムプランのリマインダーでプレースホルダーを使えるようになり、通知文のカスタマイズが簡単に。", symbol: "bell.badge.fill", tint: .orange),
-        .init(title: "よくある取引の並び替え", message: "よく使う取引の順番を自由に並び替えられるようになりました。", symbol: "arrow.up.arrow.down.circle.fill", tint: .blue),
-        .init(title: "取引一覧のフィルター機能追加", message: "取引一覧の項目を並び順を選べるようになりました。", symbol: "arrow.up.arrow.down.circle.fill", tint: .blue),
-        .init(title: "共有家計簿でもよくある取引が利用可能", message: "共有家計簿でもテンプレートを使ってワンタップ入力ができるようになりました。", symbol: "person.2.fill", tint: .teal),
-        .init(title: "2026年からログイン日数をカウント", message: "2026年以降のログイン日数を集計し、マイルストーン表示に反映します。", symbol: "calendar.badge.clock", tint: .purple),
-        .init(title: "共有家計簿の微調整", message: "共有家計簿まわりの体験を細かく改善しました。", symbol: "slider.horizontal.3", tint: .pink)
+        .init(title: "カレンダー画面の下部表示を選択可能に", message: "カレンダーの下部に表示する内容を好みに合わせて切り替えられるようになりました。", symbol: "calendar.badge.plus", tint: .blue),
+        .init(title: "取引一覧のフィルター結果をグラフ出力", message: "フィルターした結果をそのままグラフに出力できます。（無料プランは毎月3回まで）", symbol: "chart.bar.fill", tint: .orange),
+        .init(title: "共有家計簿の参加画面を微調整", message: "参加画面の案内や配置を調整し、スムーズに入れるようになりました。", symbol: "person.crop.circle.badge.checkmark", tint: .teal)
     ]
     /*
      旧アップデート通知（2.1.0）
@@ -165,7 +162,7 @@ private struct UpdateNoticeContent: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("みなさまの声を受けて、共有機能やバックアップ、テーマ周りを中心に使い勝手を磨きました。")
+            Text("カレンダー表示のカスタマイズ、フィルター結果のグラフ出力、共有家計簿の参加体験を改善しました。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
