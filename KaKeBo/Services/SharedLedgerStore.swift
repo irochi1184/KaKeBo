@@ -15,10 +15,13 @@ final class SharedLedgerStore: ObservableObject {
     @Published var ledgers: [SharedLedger] = []
     @Published var transactionsByLedger: [CKRecord.ID: [SharedTransaction]] = [:]
     @Published var categoriesByLedger: [CKRecord.ID: [SharedCategory]] = [:]
+    @Published var frequentTemplatesByLedger: [CKRecord.ID: [SharedFrequentTransactionTemplate]] = [:]
     @Published var isLoading = false
     @Published var lastError: Error?
-    
+
     @Published var activeCopy: CopyState? = nil
+    @Published var globalToast: ToastState? = nil
+    @Published var deletingLedgerIDs: Set<CKRecord.ID> = []
     
     private let container: CKContainer
     private let db: CKDatabase          // 自分の private DB
@@ -38,9 +41,16 @@ final class SharedLedgerStore: ObservableObject {
         var isCopyingCategories: Bool
         var isCopyingTransactions: Bool
     }
+
+    struct ToastState: Identifiable, Equatable {
+        let id = UUID()
+        let message: String
+        let systemImage: String
+    }
     
     private var ledgerSourceMap: [CKRecord.ID: LedgerSource] = [:]
     private let defaults = UserDefaults.appGroup
+    private var toastTask: Task<Void, Never>?
 
     init(container: CKContainer = .default()) {
         self.container = container
@@ -55,6 +65,11 @@ final class SharedLedgerStore: ObservableObject {
     }
 
     private let lastOpenedLedgerKey = "LastOpenedSharedLedgerRecordName"
+    private let sharedFrequentTemplatesKeyPrefix = "kakebo.shared.frequent.transactions."
+
+    private func frequentTemplatesKey(for ledger: SharedLedger) -> String {
+        sharedFrequentTemplatesKeyPrefix + ledger.id.recordName
+    }
     
     // 最後に開いた家計簿を記録
     func rememberLastOpened(ledger: SharedLedger) {
@@ -157,6 +172,34 @@ final class SharedLedgerStore: ObservableObject {
     
     // MARK: - Ledger
     
+    func acceptShare(_ metadata: CKShare.Metadata) async {
+        do {
+            try await acceptShareMetadata(metadata)
+            await reloadLedgers()
+            globalToast = ToastState(message: "共有家計簿に参加しました。", systemImage: "person.2.fill")
+        } catch {
+            lastError = error
+            globalToast = ToastState(message: "共有家計簿の参加に失敗しました。", systemImage: "exclamationmark.triangle.fill")
+            print("acceptShare error:", error)
+        }
+    }
+
+    private func acceptShareMetadata(_ metadata: CKShare.Metadata) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            let operation = CKAcceptSharesOperation(shareMetadatas: [metadata])
+            operation.qualityOfService = .userInitiated
+            operation.acceptSharesResultBlock = { result in
+                switch result {
+                case .success:
+                    continuation.resume()
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+            container.add(operation)
+        }
+    }
+
     func reloadLedgers() async {
         isLoading = true
         defer { isLoading = false }
@@ -179,6 +222,43 @@ final class SharedLedgerStore: ObservableObject {
             self.lastError = error
             print("reloadLedgers error:", error)
         }
+    }
+
+    // MARK: - よく使う取引（共有家計簿）
+    func loadFrequentTemplates(for ledger: SharedLedger) {
+        let key = frequentTemplatesKey(for: ledger)
+        let data = defaults.migratedData(forKey: key) ?? Data()
+        let decoded = (try? JSONDecoder().decode([SharedFrequentTransactionTemplate].self, from: data)) ?? []
+        frequentTemplatesByLedger[ledger.id] = decoded
+    }
+
+    func addFrequentTemplate(_ tpl: SharedFrequentTransactionTemplate, for ledger: SharedLedger) {
+        var templates = frequentTemplatesByLedger[ledger.id] ?? []
+        if let idx = templates.firstIndex(where: { $0.isEquivalent(to: tpl) }) {
+            templates[idx] = tpl
+        } else {
+            templates.insert(tpl, at: 0)
+        }
+        frequentTemplatesByLedger[ledger.id] = templates
+        saveFrequentTemplates(for: ledger, templates: templates)
+    }
+
+    func deleteFrequentTemplate(id: UUID, in ledger: SharedLedger) {
+        var templates = frequentTemplatesByLedger[ledger.id] ?? []
+        templates.removeAll { $0.id == id }
+        frequentTemplatesByLedger[ledger.id] = templates
+        saveFrequentTemplates(for: ledger, templates: templates)
+    }
+
+    func moveFrequentTemplates(for ledger: SharedLedger, from offsets: IndexSet, to destination: Int) {
+        var templates = frequentTemplatesByLedger[ledger.id] ?? []
+        templates.move(fromOffsets: offsets, toOffset: destination)
+        frequentTemplatesByLedger[ledger.id] = templates
+        saveFrequentTemplates(for: ledger, templates: templates)
+    }
+
+    private func saveFrequentTemplates(for ledger: SharedLedger, templates: [SharedFrequentTransactionTemplate]) {
+        defaults.set(try? JSONEncoder().encode(templates), forKey: frequentTemplatesKey(for: ledger))
     }
 
     // 自分が owner の Ledger（今までの挙動）
@@ -284,19 +364,42 @@ final class SharedLedgerStore: ObservableObject {
         }
     }
     
-    func deleteLedger(_ ledger: SharedLedger) async {
+    @discardableResult
+    func deleteLedger(_ ledger: SharedLedger) async -> Bool {
         guard isOwned(ledger) else {
             print("deleteLedger: non-owned ledger, skip")
-            return
+            return false
         }
+
+        deletingLedgerIDs.insert(ledger.id)
+
+        var removedLedger: SharedLedger?
+        var removedIndex: Int?
+
+        if let idx = ledgers.firstIndex(where: { $0.id == ledger.id }) {
+            removedLedger = ledgers[idx]
+            removedIndex = idx
+            _ = withAnimation {
+                ledgers.remove(at: idx)
+            }
+        }
+
         do {
             try await db.deleteRecord(withID: ledger.id)
-            ledgers.removeAll { $0.id == ledger.id }
+            ledgerSourceMap[ledger.id] = nil
             // 必要なら関連トランザクションのキャッシュも削除
             transactionsByLedger[ledger.id] = nil
             categoriesByLedger[ledger.id] = nil
+            deletingLedgerIDs.remove(ledger.id)
+            showToast(message: "「\(ledger.name)」の削除が完了しました")
+            return true
         } catch {
             lastError = error
+            if let ledger = removedLedger, let idx = removedIndex {
+                ledgers.insert(ledger, at: idx)
+            }
+            deletingLedgerIDs.remove(ledger.id)
+            return false
         }
     }
     
@@ -683,6 +786,29 @@ extension SharedLedgerStore {
         guard var state = activeCopy else { return }
         state.done += 1
         activeCopy = state
+    }
+
+    func showToast(
+        message: String,
+        systemImage: String = "checkmark.circle.fill",
+        duration: UInt64 = 2_000_000_000
+    ) {
+        toastTask?.cancel()
+
+        withAnimation {
+            globalToast = ToastState(message: message, systemImage: systemImage)
+        }
+
+        toastTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: duration)
+                withAnimation {
+                    globalToast = nil
+                }
+            } catch {
+                // Cancelled
+            }
+        }
     }
     
     /// 指定した共有家計簿用の CKShare を用意して返す

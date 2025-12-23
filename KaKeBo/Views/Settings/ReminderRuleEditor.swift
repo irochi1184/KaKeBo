@@ -7,8 +7,6 @@
 
 import SwiftUI
 
-import SwiftUI
-
 struct ReminderRuleEditor: View {
     @State var rule: ReminderRule
     let onSave: (ReminderRule) -> Void
@@ -19,6 +17,7 @@ struct ReminderRuleEditor: View {
     @EnvironmentObject var themeStore: ThemeStore
     @Environment(\.colorScheme) private var scheme
     @State private var showPaywall = false
+    @State private var previewUsesFallback = false
     
     // プレビュー用
     var previewTodosToday: Int = 2
@@ -67,12 +66,16 @@ struct ReminderRuleEditor: View {
                 
                 DatePicker("時刻", selection: $rule.time, displayedComponents: .hourAndMinute)
                 Toggle("有効", isOn: $rule.enabled)
+                Toggle("通知音を鳴らす", isOn: $rule.soundEnabled)
             }
             
             // ===== プレミアム限定：通知メッセージ + プレビュー =====
             if purchase.isPremiumActive {
                 Section("通知メッセージ") {
                     TextField("通知タイトル（例：今日の家計簿をつけましょう）", text: $rule.title)
+                    Text("タイトルにもプレースホルダーを使えます。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 8) {
                         TextField("通知メッセージ（例：今日の支出・収入を登録しましょう。{todosToday}件のToDo）",
                                   text: $rule.bodyTemplate, axis: .vertical)
@@ -94,9 +97,13 @@ struct ReminderRuleEditor: View {
                 }
                 
                 Section("プレビュー") {
-                    let preview = resolvedBodyPreview()
+                    let preview = resolvedBodyPreview(useFallback: previewUsesFallback)
+                    if rule.onlyIfUnloggedToday || rule.onlyIfTodosDueToday {
+                        Toggle("条件不一致の本文をプレビュー", isOn: $previewUsesFallback)
+                    }
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(rule.title.isEmpty ? "（タイトル未入力）" : rule.title)
+                        let previewTitle = resolvedTextPreview(rule.title)
+                        Text(previewTitle.isEmpty ? "（タイトル未入力）" : previewTitle)
                             .font(.subheadline.weight(.semibold))
                         Text(preview.isEmpty ? "（本文未入力）" : preview)
                             .font(.caption)
@@ -121,6 +128,15 @@ struct ReminderRuleEditor: View {
                 Section("条件") {
                     Toggle("今日の取引が未登録の時だけ通知", isOn: $rule.onlyIfUnloggedToday)
                     Toggle("今日が期日のToDoがある時だけ通知", isOn: $rule.onlyIfTodosDueToday)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("条件不一致時の本文")
+                            .font(.subheadline)
+                        TextField("条件に一致しない場合の本文", text: $rule.fallbackBodyTemplate, axis: .vertical)
+                            .lineLimit(2...4)
+                        Text("空欄の場合は通常本文を使用します。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -141,12 +157,29 @@ struct ReminderRuleEditor: View {
     }
     
     // 置換してプレビュー用本文を作る（プレミアム時のみに使われる）
-    private func resolvedBodyPreview() -> String {
-        var body = rule.bodyTemplate
-        body = body.replacingOccurrences(of: ReminderPlaceholder.todosToday.rawValue,
-                                         with: "\(previewTodosToday)")
-        // 他の置換を増やす場合はここに追記
-        return body
+    private func resolvedBodyPreview(useFallback: Bool) -> String {
+        let template = (useFallback && (rule.onlyIfUnloggedToday || rule.onlyIfTodosDueToday))
+            ? (rule.fallbackBodyTemplate.isEmpty ? rule.bodyTemplate : rule.fallbackBodyTemplate)
+            : rule.bodyTemplate
+        return resolvedTextPreview(template)
+    }
+
+    private func resolvedTextPreview(_ template: String) -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "ja_JP")
+        dateFormatter.dateFormat = "M/d"
+        let weekdaySymbols = Calendar.current.shortStandaloneWeekdaySymbols
+        let weekdayIndex = Calendar.current.component(.weekday, from: Date())
+        let weekdaySymbol = weekdaySymbols[(weekdayIndex - 1) % weekdaySymbols.count]
+        return template
+            .replacingOccurrences(of: ReminderPlaceholder.todosToday.rawValue,
+                                  with: "\(previewTodosToday)")
+            .replacingOccurrences(of: ReminderPlaceholder.unloggedToday.rawValue,
+                                  with: previewUnloggedToday ? "はい" : "いいえ")
+            .replacingOccurrences(of: ReminderPlaceholder.todayDate.rawValue,
+                                  with: dateFormatter.string(from: Date()))
+            .replacingOccurrences(of: ReminderPlaceholder.todayWeekday.rawValue,
+                                  with: weekdaySymbol)
     }
 }
 
@@ -172,18 +205,20 @@ private struct LockedPremiumRow: View {
 private struct PlaceholderChips: View {
     @Binding var target: String
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(ReminderPlaceholder.allCases) { p in
-                Button {
-                    if !target.isEmpty, target.last?.isWhitespace == false { target += " " }
-                    target += p.rawValue
-                } label: {
-                    Text(p.labelJP)
-                        .font(.caption)
-                        .padding(.horizontal, 8).padding(.vertical, 6)
-                        .background(Capsule().fill(Color.secondary.opacity(0.15)))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(ReminderPlaceholder.allCases) { p in
+                    Button {
+                        if !target.isEmpty, target.last?.isWhitespace == false { target += " " }
+                        target += p.rawValue
+                    } label: {
+                        Text(p.labelJP)
+                            .font(.caption)
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                            .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
     }

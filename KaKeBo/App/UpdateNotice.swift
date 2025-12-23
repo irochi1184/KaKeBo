@@ -72,14 +72,20 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
-        .init(title: "共有招待の参加を改善", message: "iCloud 招待を受ける側で参加できない不具合を解消し、共有家計簿への合流がスムーズに。", symbol: "icloud.and.arrow.down", tint: .blue),
-        .init(title: "共有家計簿での削除・整理", message: "共有家計簿でも取引の削除に対応し、誤入力の修正や整理が簡単になりました。", symbol: "person.3.sequence.fill", tint: .teal),
-        .init(title: "固定費へのタグ付け（プレミアム）", message: "プレミアムプランで固定費を登録・編集するときにタグ付けができ、レポートの精度が向上。", symbol: "tag.fill", tint: .purple),
-        .init(title: "バックアップ範囲を拡大", message: "カレンダーメモ、固定費、月の開始日・締め日、テーマ管理設定まで保存・復元できるよう強化しました。", symbol: "archivebox.fill", tint: .orange),
-        .init(title: "テーマ設定の維持", message: "アプリアップデート時にテーマが初期化されてしまう問題を修正し、お気に入りの配色をそのまま利用できます。", symbol: "paintbrush.pointed.fill", tint: .pink),
-        .init(title: "Todo テンプレートの追加タイミングを調整", message: "テンプレートは現在日付への移行時のみ自動追加され、過去に遡っても増えないように改良しました。", symbol: "checklist.checked", tint: .green),
-        .init(title: "よく使う取引ショートカット", message: "よく使う取引セクションでショートカットの登録・適用・削除ができ、入力がよりスピーディーに。", symbol: "bolt.fill", tint: .yellow)
+        .init(title: "カレンダー画面の下部表示を選択可能に", message: "カレンダーの下部に表示する内容を好みに合わせて切り替えられるようになりました。", symbol: "calendar.badge.plus", tint: .blue),
+        .init(title: "取引一覧のフィルター結果をグラフ出力", message: "フィルターした結果をそのままグラフに出力できます。（無料プランは毎月3回まで）", symbol: "chart.bar.fill", tint: .orange),
+        .init(title: "共有家計簿の参加画面を微調整", message: "参加画面の案内や配置を調整し、スムーズに入れるようになりました。", symbol: "person.crop.circle.badge.checkmark", tint: .teal)
     ]
+    /*
+     旧アップデート通知（2.1.0）
+     - 共有招待の参加を改善
+     - 共有家計簿での削除・整理
+     - 固定費へのタグ付け（プレミアム）
+     - バックアップ範囲を拡大
+     - テーマ設定の維持
+     - Todo テンプレートの追加タイミングを調整
+     - よく使う取引ショートカット
+     */
 
     let accent: Color
     @Binding var isPresented: Bool
@@ -156,7 +162,7 @@ private struct UpdateNoticeContent: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("みなさまの声を受けて、共有機能やバックアップ、テーマ周りを中心に使い勝手を磨きました。")
+            Text("カレンダー表示のカスタマイズ、フィルター結果のグラフ出力、共有家計簿の参加体験を改善しました。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

@@ -131,7 +131,8 @@ final class DataStore: ObservableObject {
     }
 
     private func loadFrequentTemplates() {
-        let data = UserDefaults.standard.data(forKey: Self.frequentTemplatesKey) ?? Data()
+        let defaults = UserDefaults.appGroup
+        let data = defaults.migratedData(forKey: Self.frequentTemplatesKey) ?? Data()
         let decoded = (try? JSONDecoder().decode([FrequentTransactionTemplate].self, from: data)) ?? []
 
         // 削除されたカテゴリを除外してから反映
@@ -262,10 +263,13 @@ extension DataStore {
     }
 
     private func saveFrequentTemplates() {
-        UserDefaults.standard.set(
-            try? JSONEncoder().encode(frequentTemplates),
-            forKey: Self.frequentTemplatesKey
-        )
+        let defaults = UserDefaults.appGroup
+        defaults.set(try? JSONEncoder().encode(frequentTemplates), forKey: Self.frequentTemplatesKey)
+    }
+
+    func moveFrequentTemplates(from offsets: IndexSet, to destination: Int) {
+        frequentTemplates.move(fromOffsets: offsets, toOffset: destination)
+        saveFrequentTemplates()
     }
     
     /// 今月&今日までに“自動計上すべき”固定費を transactions に反映する

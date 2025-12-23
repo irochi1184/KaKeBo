@@ -8,6 +8,106 @@
 import Foundation
 import SwiftUI
 
+struct SeededRandomNumberGenerator: RandomNumberGenerator {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        self.state = seed == 0 ? 0x12345678 : seed
+    }
+
+    mutating func next() -> UInt64 {
+        state ^= state << 7
+        state ^= state >> 9
+        state &= 0xFFFFFFFFFFFFFFFF
+        return state
+    }
+}
+
+func makeEmptyStateSampleBackupJSON(for year: Int = Calendar.current.component(.year, from: Date())) -> Data {
+    let catFood      = UUID(uuidString: "E2FDA9C7-763D-4E81-B2F1-1DBBF37C2FD1")! // 食費
+    let catComms     = UUID(uuidString: "CA517276-BAC2-46E9-8001-EA4CD5B54E34")! // 通信料（サブスク等）
+    let catUtility   = UUID(uuidString: "9A4A964D-1E3A-48F9-94B0-825F9D6EA6E1")! // 水道光熱費
+    let catTransport = UUID(uuidString: "BC9D5A7F-916B-4E64-AC68-6216963D2700")! // 交通費
+    let catRent      = UUID(uuidString: "CB2983DE-40E2-49DB-99D5-BFA0F83F4985")! // 住宅費（家賃）
+    let catMedical   = UUID(uuidString: "3BD3F354-BAE8-43CA-A16D-71490B170BDC")! // 医療費
+    let catLeisure   = UUID(uuidString: "B1670827-DCB9-4128-869E-5DCA44DF7426")! // 娯楽費
+    let catSalary    = UUID(uuidString: "09F21E99-45D9-4FE1-866B-A9AF37405D2C")! // 給与
+    let catDaily     = UUID(uuidString: "1D5A9ADE-8567-49BA-960F-725CA490B299")! // 日用品費
+
+    let categories: [BackupCategory] = [
+        .init(id: catFood,      name: "食費",     symbolName: "fork.knife",          colorHex: "#F54D5BFF"),
+        .init(id: catComms,     name: "通信料",   symbolName: "wifi",                colorHex: "#9C87FFFF"),
+        .init(id: catUtility,   name: "水道光熱費", symbolName: "lightbulb.fill",      colorHex: "#00DFFFFF"),
+        .init(id: catTransport, name: "交通費",   symbolName: "tram.fill",           colorHex: "#7187A2FF"),
+        .init(id: catRent,      name: "住宅費",   symbolName: "house.fill",          colorHex: "#AC674CFF"),
+        .init(id: catMedical,   name: "医療費",   symbolName: "cross.case.fill",     colorHex: "#CC3D8BFF"),
+        .init(id: catLeisure,   name: "娯楽費",   symbolName: "gamecontroller.fill", colorHex: "#00B11FFF"),
+        .init(id: catSalary,    name: "給与",     symbolName: "yensign.circle",      colorHex: "#1B8776FF"),
+        .init(id: catDaily,     name: "日用品費", symbolName: "bag.fill",            colorHex: "#FFBF5EFF")
+    ]
+
+    struct SampleMonth {
+        let food: Int
+        let daily: Int
+        let transport: Int
+        let utility: Int
+        let leisure: Int
+        let medical: Int
+        let salary: Int = 240_000
+        let rent: Int = 84_000
+        let comms: Int = 7_500
+
+        init(rng: inout SeededRandomNumberGenerator) {
+            func pick(_ range: ClosedRange<Int>) -> Int { Int.random(in: range, using: &rng) }
+            food = pick(30_000...60_000)
+            daily = pick(10_000...30_000)
+            transport = pick(5_000...20_000)
+            utility = pick(10_000...20_000)
+            leisure = pick(5_000...25_000)
+            medical = pick(3_000...5_000)
+        }
+    }
+
+    var generator = SeededRandomNumberGenerator(seed: UInt64(year))
+    var months: [SampleMonth] = []
+    for _ in 1...12 { months.append(.init(rng: &generator)) }
+
+    var txs: [BackupTransaction] = []
+    let cal = Calendar(identifier: .gregorian)
+    func isoDate(_ y: Int, _ m: Int, _ d: Int) -> Date {
+        cal.date(from: DateComponents(calendar: cal, timeZone: TimeZone(secondsFromGMT: 0), year: y, month: m, day: d, hour: 15))!
+    }
+
+    for (index, month) in months.enumerated() {
+        let m = index + 1
+        txs.append(.init(id: UUID(), date: isoDate(year, m, 25), amount: month.salary, typeRaw: "income", memo: "給与", categoryId: catSalary))
+        txs.append(.init(id: UUID(), date: isoDate(year, m, 1), amount: month.rent, typeRaw: "expense", memo: "住宅費", categoryId: catRent))
+        txs.append(.init(id: UUID(), date: isoDate(year, m, 5), amount: month.comms, typeRaw: "expense", memo: "通信料", categoryId: catComms))
+        txs.append(.init(id: UUID(), date: isoDate(year, m, 10), amount: month.food, typeRaw: "expense", memo: "食費", categoryId: catFood))
+        txs.append(.init(id: UUID(), date: isoDate(year, m, 12), amount: month.medical, typeRaw: "expense", memo: "医療費", categoryId: catMedical))
+        txs.append(.init(id: UUID(), date: isoDate(year, m, 15), amount: month.utility, typeRaw: "expense", memo: "水道光熱費", categoryId: catUtility))
+        txs.append(.init(id: UUID(), date: isoDate(year, m, 18), amount: month.transport, typeRaw: "expense", memo: "交通費", categoryId: catTransport))
+        txs.append(.init(id: UUID(), date: isoDate(year, m, 20), amount: month.leisure, typeRaw: "expense", memo: "娯楽費", categoryId: catLeisure))
+        txs.append(.init(id: UUID(), date: isoDate(year, m, 22), amount: month.daily, typeRaw: "expense", memo: "日用品", categoryId: catDaily))
+    }
+
+    let backup = KaKeBoBackupV1(
+        exportedAt: Date(),
+        categories: categories,
+        transactions: txs,
+        recurringTodos: nil,
+        fixedExpenses: nil,
+        dayNotes: nil,
+        monthStartSettings: nil,
+        theme: nil
+    )
+
+    let enc = JSONEncoder()
+    enc.dateEncodingStrategy = .iso8601
+    enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+    return (try? enc.encode(backup)) ?? Data()
+}
+
 // 既存のバックアップ用モデル（あなたのプロジェクトにある）をそのまま使います。
 // - KaKeBoBackupV1
 // - BackupCategory

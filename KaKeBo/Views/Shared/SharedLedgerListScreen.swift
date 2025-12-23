@@ -20,20 +20,15 @@ struct SharedLedgerListScreen: View {
     @State private var shareLoading = false
     @State private var shareErrorMessage: String? = nil
     @State private var showShareError = false
-    
+    @State private var deleteErrorMessage: String? = nil
+    @State private var showDeleteError = false
+
     var body: some View {
         ZStack(alignment: .bottom) {
             Color(.systemGroupedBackground)
                 .ignoresSafeArea()
-            
+
             content
-            
-            // コピー進捗のバナー
-            if let copy = store.activeCopy {
-                copyProgressView(copy: copy)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
-            }
 
             if shareLoading {
                 sharingLoadingView
@@ -67,7 +62,7 @@ struct SharedLedgerListScreen: View {
         ) { ledger in
             Button("削除", role: .destructive) {
                 Task {
-                    await store.deleteLedger(ledger)
+                    await handleDelete(ledger)
                 }
             }
             Button("キャンセル", role: .cancel) { }
@@ -78,6 +73,11 @@ struct SharedLedgerListScreen: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text(shareErrorMessage ?? "不明なエラーが発生しました。時間をおいて再度お試しください。")
+        }
+        .alert("削除に失敗しました", isPresented: $showDeleteError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(deleteErrorMessage ?? "通信環境をご確認のうえ、時間をおいて再度お試しください。")
         }
     }
     
@@ -322,34 +322,18 @@ struct SharedLedgerListScreen: View {
             }
         }
     }
-    
-    @ViewBuilder
-    private func copyProgressView(copy: SharedLedgerStore.CopyState) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.caption)
-                Text("「\(copy.ledgerName)」を同期中…")
-                    .font(.caption)
-                Spacer()
+
+    private func handleDelete(_ ledger: SharedLedger) async {
+        let success = await store.deleteLedger(ledger)
+
+        if success {
+            // 成功メッセージは共有オーバーレイで表示
+        } else {
+            await MainActor.run {
+                deleteErrorMessage = (store.lastError as NSError?)?.localizedDescription
+                showDeleteError = true
             }
-            
-            ProgressView(
-                value: Double(copy.done),
-                total: Double(copy.total)
-            )
-            .progressViewStyle(.linear)
-            
-            Text("\(copy.done) / \(copy.total) 件をコピー中")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.systemBackground).opacity(0.95))
-        )
-        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
     }
 
     private var sharingLoadingView: some View {

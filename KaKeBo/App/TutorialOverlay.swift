@@ -9,19 +9,25 @@ import SwiftUI
 import UIKit
 
 struct TutorialGate: View {
-    @AppStorage("tutorial.lastShownVersion") private var lastShownVersion = ""
+    @AppStorage("tutorial.completed") private var tutorialCompleted = false
+    @AppStorage("tutorial.lastShownVersion") private var legacyLastShownVersion = ""
     @State private var isPresented = false
 
     var body: some View {
         TutorialOverlay(isPresented: $isPresented)
             .onAppear {
-                if lastShownVersion != AppVersion.current {
-                    isPresented = true
+                if tutorialCompleted == false {
+                    if legacyLastShownVersion.isEmpty {
+                        isPresented = true
+                    } else {
+                        tutorialCompleted = true
+                    }
                 }
             }
             .onChange(of: isPresented) { _, newValue in
                 if newValue == false {
-                    lastShownVersion = AppVersion.current
+                    tutorialCompleted = true
+                    legacyLastShownVersion = AppVersion.current
                 }
             }
     }
@@ -108,7 +114,7 @@ private struct TutorialOverlay: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("はじめての設定を行いましょう")
                         .font(.headline.weight(.semibold))
-                    Text("初回やアップデート直後の一度だけ表示されます")
+                    Text("初回の一度だけ表示されます")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

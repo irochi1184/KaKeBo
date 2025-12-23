@@ -7,9 +7,11 @@
 
 import Foundation
 import SwiftUI
+import CloudKit
 
 @main
 struct KaKeBoApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var dataStore = DataStore()
     @StateObject private var themeStore = ThemeStore()
     @StateObject private var sharedLedgerStore = SharedLedgerStore()
@@ -40,6 +42,22 @@ struct KaKeBoApp: App {
 //                    debugAppGroupFiles()
                     await purchase.load()
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .cloudKitShareAccepted)) { notification in
+                    guard let metadata = notification.object as? CKShare.Metadata else { return }
+                    Task {
+                        await sharedLedgerStore.acceptShare(metadata)
+                    }
+                }
+                .onOpenURL { url in
+                    Task {
+                        do {
+                            let metadata = try await CKContainer.default().shareMetadata(for: url)
+                            await sharedLedgerStore.acceptShare(metadata)
+                        } catch {
+                            print("shareMetadata error:", error)
+                        }
+                    }
+                }
             // 初回起動時のみ、ロック有効ならロック
                 .onAppear {
                     if !didInitialAppear {
@@ -64,6 +82,10 @@ struct KaKeBoApp: App {
                 }
         }
     }
+}
+
+extension Notification.Name {
+    static let cloudKitShareAccepted = Notification.Name("cloudKitShareAccepted")
 }
 
 /// background→active の時だけロックを復帰させるゲート
