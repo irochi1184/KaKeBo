@@ -1041,3 +1041,180 @@ extension SharedLedgerStore {
         }
     }
 }
+
+// MARK: - バックアップ（共有家計簿）
+extension SharedLedgerStore {
+    
+    /// 共有家計簿をバックアップファイル（個人用と同じ JSON 形式）としてエクスポート
+    func exportBackup(for ledger: SharedLedger) async throws -> Data {
+        await reloadCategories(for: ledger)
+        await reloadTransactions(for: ledger)
+        
+        let categories = categoriesByLedger[ledger.id] ?? []
+        let transactions = transactionsByLedger[ledger.id] ?? []
+        
+        // 共有カテゴリ ID -> バックアップ用 UUID のマップ
+        var idMap: [CKRecord.ID: UUID] = [:]
+        var backupCategories: [BackupCategory] = []
+        for cat in categories {
+            let backupId = UUID()
+            idMap[cat.id] = backupId
+            backupCategories.append(
+                .init(
+                    id: backupId,
+                    name: cat.name,
+                    symbolName: cat.icon,
+                    colorHex: cat.colorHex
+                )
+            )
+        }
+        
+        var backupTransactions: [BackupTransaction] = []
+        for tx in transactions {
+            let backupCategoryId: UUID = {
+                if let original = tx.categoryId, let mapped = idMap[original] { return mapped }
+                // 取引に紐付くカテゴリが見つからない場合は、新規カテゴリを用意して付与する
+                if let existing = backupCategories.first(where: { $0.name == tx.categoryName }) {
+                    return existing.id
+                } else {
+                    let new = BackupCategory(
+                        id: UUID(),
+                        name: tx.categoryName,
+                        symbolName: "tag.fill",
+                        colorHex: tx.categoryColorHex
+                    )
+                    backupCategories.append(new)
+                    return new.id
+                }
+            }()
+            
+            backupTransactions.append(
+                .init(
+                    id: UUID(),
+                    date: tx.date,
+                    amount: tx.amount,
+                    typeRaw: tx.type == .income ? "income" : "expense",
+                    memo: tx.memo ?? "",
+                    categoryId: backupCategoryId,
+                    tags: nil
+                )
+            )
+        }
+        
+        let payload = KaKeBoBackupV1(
+            exportedAt: Date(),
+            categories: backupCategories,
+            transactions: backupTransactions,
+            recurringTodos: nil,
+            fixedExpenses: nil,
+            reminders: nil,
+            dayNotes: nil,
+            monthStartSettings: nil,
+            theme: nil
+        )
+        
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(payload)
+    }
+    
+    /// バックアップファイルを共有家計簿へ復元
+    func importBackup(data: Data, to ledger: SharedLedger) async throws -> DataStore.ImportReport {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let backup = try decoder.decode(KaKeBoBackupV1.self, from: data)
+        
+        // 事前に最新データを反映
+        await reloadCategories(for: ledger)
+        await reloadTransactions(for: ledger)
+        
+        var createdCategories = 0
+        var insertedTransactions = 0
+        var skippedTransactions = 0
+        
+        let backupCategoryById = Dictionary(uniqueKeysWithValues: backup.categories.map { ($0.id, $0) })
+        var sharedCategories = categoriesByLedger[ledger.id] ?? []
+        
+        // バックアップ ID -> 共有カテゴリ ID
+        var categoryIdMap: [UUID: CKRecord.ID] = [:]
+        
+        // 既存カテゴリがあればマッピング、なければ新規作成
+        for bc in backup.categories {
+            if let existing = sharedCategories.first(where: { $0.name == bc.name }) {
+                categoryIdMap[bc.id] = existing.id
+            } else if let created = await createCategory(
+                for: ledger,
+                name: bc.name,
+                colorHex: bc.colorHex,
+                icon: bc.symbolName
+            ) {
+                categoryIdMap[bc.id] = created.id
+                createdCategories += 1
+                sharedCategories.append(created)
+            }
+        }
+        
+        // 作成/更新後のカテゴリキャッシュを最新化
+        await reloadCategories(for: ledger)
+        sharedCategories = categoriesByLedger[ledger.id] ?? sharedCategories
+        var categoryById = Dictionary(uniqueKeysWithValues: sharedCategories.map { ($0.id, $0) })
+        var categoryByName = Dictionary(uniqueKeysWithValues: sharedCategories.map { ($0.name, $0) })
+        
+        // 既存取引との重複チェック用
+        let existingTransactions = transactionsByLedger[ledger.id] ?? []
+        let calendar = Calendar.current
+        
+        func resolveCategory(for backupId: UUID) async -> SharedCategory? {
+            if let mappedId = categoryIdMap[backupId], let cat = categoryById[mappedId] {
+                return cat
+            }
+            guard let backupCategory = backupCategoryById[backupId] else { return nil }
+            if let existing = categoryByName[backupCategory.name] {
+                categoryIdMap[backupCategory.id] = existing.id
+                return existing
+            }
+            if let created = await createCategory(
+                for: ledger,
+                name: backupCategory.name,
+                colorHex: backupCategory.colorHex,
+                icon: backupCategory.symbolName
+            ) {
+                categoryIdMap[backupCategory.id] = created.id
+                categoryById[created.id] = created
+                categoryByName[created.name] = created
+                createdCategories += 1
+                return created
+            }
+            return nil
+        }
+        
+        for bt in backup.transactions {
+            // 既存の重複（同日/金額/メモ一致）を除外
+            let memo = bt.memo
+            if existingTransactions.contains(where: {
+                calendar.isDate($0.date, inSameDayAs: bt.date) &&
+                $0.amount == bt.amount &&
+                ($0.memo ?? "") == memo
+            }) {
+                skippedTransactions += 1
+                continue
+            }
+            
+            let category = await resolveCategory(for: bt.categoryId)
+            let sharedType: SharedTransactionType = bt.typeRaw == "income" ? .income : .expense
+            
+            await addTransaction(
+                to: ledger,
+                amount: bt.amount,
+                date: bt.date,
+                type: sharedType,
+                memo: memo,
+                category: category
+            )
+            insertedTransactions += 1
+        }
+        
+        return .init(inserted: insertedTransactions, createdCategories: createdCategories, skipped: skippedTransactions)
+    }
+}
