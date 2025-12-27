@@ -1047,11 +1047,26 @@ extension SharedLedgerStore {
     
     /// 共有家計簿をバックアップファイル（個人用と同じ JSON 形式）としてエクスポート
     func exportBackup(for ledger: SharedLedger) async throws -> Data {
+        // 事前に過去のエラーをクリアし、フェッチ失敗を見逃さない
+        lastError = nil
+        
         await reloadCategories(for: ledger)
         await reloadTransactions(for: ledger)
         
-        let categories = categoriesByLedger[ledger.id] ?? []
-        let transactions = transactionsByLedger[ledger.id] ?? []
+        if let error = lastError {
+            throw error
+        }
+        
+        guard
+            let categories = categoriesByLedger[ledger.id],
+            let transactions = transactionsByLedger[ledger.id]
+        else {
+            throw NSError(
+                domain: "SharedLedgerStore",
+                code: -10,
+                userInfo: [NSLocalizedDescriptionKey: "バックアップ用データの取得に失敗しました。ネットワーク接続を確認して再度お試しください。"]
+            )
+        }
         
         // 共有カテゴリ ID -> バックアップ用 UUID のマップ
         var idMap: [CKRecord.ID: UUID] = [:]
