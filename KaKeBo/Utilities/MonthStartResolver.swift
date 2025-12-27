@@ -161,6 +161,22 @@ struct MonthStartResolver {
         return date >= interval.lowerBound && date < interval.upperBound
     }
 
+    /// 指定した日付が属する「月」を返す（開始日／締め日の設定を考慮）
+    ///
+    /// - Returns: 対象日付を含むアンカー月の先頭日（00:00）
+    func anchorMonth(containing date: Date) -> Date {
+        let base = startOfMonth(date)
+        if contains(date, inMonthOf: base) { return base }
+
+        let prev = calendar.date(byAdding: .month, value: -1, to: base).map(startOfMonth) ?? base
+        if contains(date, inMonthOf: prev) { return prev }
+
+        let next = calendar.date(byAdding: .month, value: 1, to: base).map(startOfMonth) ?? base
+        if contains(date, inMonthOf: next) { return next }
+
+        return base
+    }
+
     private func isNonBusinessDay(_ date: Date) -> Bool {
         calendar.isDateInWeekend(date) || holidayProvider.isHoliday(date)
     }
@@ -197,5 +213,9 @@ struct MonthStartResolver {
             current = next
         }
         return calendar.startOfDay(for: current)
+    }
+
+    private func startOfMonth(_ date: Date) -> Date {
+        calendar.date(from: calendar.dateComponents([.year, .month], from: date)) ?? date
     }
 }
