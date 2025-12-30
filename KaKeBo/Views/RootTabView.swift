@@ -29,6 +29,7 @@ struct RootTabView: View {
         }
         .overlay(TutorialGate())
         .overlay(UpdateNoticeGate())
+        .overlay(NewYearReview2026Gate())
         .overlay(LoginMilestoneReviewGate())
         .overlay(alignment: .bottom) {
             SharedLedgerNotificationOverlay()
