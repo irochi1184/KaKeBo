@@ -72,6 +72,7 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
+        .init(title: "固定費の合計をひと目で確認", message: "固定費の管理シートに有効な固定費の合計金額を表示するようになり、毎月の支出をすぐに把握できます。", symbol: "yensign.circle.fill", tint: .mint),
         .init(title: "バックアップの家計簿選択を改善", message: "個人用・共有家計簿ごとに作成／復元を選べる新しいシートを追加し、失敗時に気付きやすいよう堅牢性を高めました。", symbol: "arrow.triangle.2.circlepath", tint: .purple),
         .init(title: "カレンダー画面の下部表示を選択可能に", message: "カレンダーの下部に表示する内容を好みに合わせて切り替えられるようになりました。", symbol: "calendar.badge.plus", tint: .blue),
         .init(title: "取引一覧のフィルター結果をグラフ出力", message: "フィルターした結果をそのままグラフに出力できます。（無料プランは毎月3回まで）", symbol: "chart.bar.fill", tint: .orange),
