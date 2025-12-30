@@ -20,6 +20,7 @@ final class SharedLedgerStore: ObservableObject {
     @Published var lastError: Error?
 
     @Published var activeCopy: CopyState? = nil
+    @Published var shareJoinState: ShareJoinState? = nil
     @Published var globalToast: ToastState? = nil
     @Published var deletingLedgerIDs: Set<CKRecord.ID> = []
     
@@ -47,10 +48,36 @@ final class SharedLedgerStore: ObservableObject {
         let message: String
         let systemImage: String
     }
+
+    struct ShareJoinState: Identifiable, Equatable {
+        enum Phase {
+            case preparing
+            case accepting
+            case failed
+        }
+
+        let id = UUID()
+        let phase: Phase
+        let detail: String?
+
+        var title: String {
+            switch phase {
+            case .preparing:
+                return "共有家計簿の招待を確認中…"
+            case .accepting:
+                return "共有家計簿に参加中…"
+            case .failed:
+                return "共有家計簿に参加できませんでした"
+            }
+        }
+
+        var isFailed: Bool { phase == .failed }
+    }
     
     private var ledgerSourceMap: [CKRecord.ID: LedgerSource] = [:]
     private let defaults = UserDefaults.appGroup
     private var toastTask: Task<Void, Never>?
+    private var joinStateHideTask: Task<Void, Never>?
 
     init(container: CKContainer = .default()) {
         self.container = container
@@ -172,13 +199,38 @@ final class SharedLedgerStore: ObservableObject {
     
     // MARK: - Ledger
     
+    func handleIncomingShareURL(_ url: URL) async {
+        showJoinState(
+            phase: .preparing,
+            detail: "招待リンクを確認しています…"
+        )
+
+        do {
+            let metadata = try await container.shareMetadata(for: url)
+            await handleAcceptedShareMetadata(metadata)
+        } catch {
+            lastError = error
+            handleJoinFailure(error)
+        }
+    }
+
+    func handleAcceptedShareMetadata(_ metadata: CKShare.Metadata) async {
+        showJoinState(
+            phase: .accepting,
+            detail: "iCloud と同期しています…"
+        )
+        await acceptShare(metadata)
+    }
+
     func acceptShare(_ metadata: CKShare.Metadata) async {
         do {
             try await acceptShareMetadata(metadata)
             await reloadLedgers()
             globalToast = ToastState(message: "共有家計簿に参加しました。", systemImage: "person.2.fill")
+            hideJoinState(after: 1.0)
         } catch {
             lastError = error
+            handleJoinFailure(error)
             globalToast = ToastState(message: "共有家計簿の参加に失敗しました。", systemImage: "exclamationmark.triangle.fill")
             print("acceptShare error:", error)
         }
@@ -809,6 +861,51 @@ extension SharedLedgerStore {
                 // Cancelled
             }
         }
+    }
+
+    private func showJoinState(
+        phase: ShareJoinState.Phase,
+        detail: String? = nil
+    ) {
+        joinStateHideTask?.cancel()
+        withAnimation {
+            shareJoinState = ShareJoinState(
+                phase: phase,
+                detail: detail
+            )
+        }
+    }
+
+    private func hideJoinState(after seconds: Double) {
+        joinStateHideTask?.cancel()
+        joinStateHideTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            withAnimation {
+                shareJoinState = nil
+            }
+        }
+    }
+
+    private func handleJoinFailure(_ error: Error) {
+        let message = joinErrorDescription(for: error)
+        showJoinState(phase: .failed, detail: message)
+        hideJoinState(after: 3.0)
+    }
+
+    private func joinErrorDescription(for error: Error) -> String {
+        if let ckError = error as? CKError {
+            switch ckError.code {
+            case .notAuthenticated:
+                return "iCloud にサインインしてから、もう一度お試しください。"
+            case .networkUnavailable, .networkFailure:
+                return "通信状況を確認してから、もう一度開き直してください。"
+            case .unknownItem, .invalidArguments:
+                return "この招待は無効になった可能性があります。招待を送り直してもらってください。"
+            default:
+                break
+            }
+        }
+        return "参加手続きが完了しませんでした。時間をおいて再度お試しください。"
     }
     
     /// 指定した共有家計簿用の CKShare を用意して返す

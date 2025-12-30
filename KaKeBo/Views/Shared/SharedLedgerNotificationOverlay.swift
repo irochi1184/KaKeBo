@@ -12,6 +12,11 @@ struct SharedLedgerNotificationOverlay: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            if let joining = store.shareJoinState {
+                joinStateView(joining)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
             if let copy = store.activeCopy {
                 copyProgressView(copy: copy)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -27,6 +32,42 @@ struct SharedLedgerNotificationOverlay: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: store.activeCopy != nil)
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: store.globalToast)
+        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: store.shareJoinState)
+    }
+
+    @ViewBuilder
+    private func joinStateView(_ state: SharedLedgerStore.ShareJoinState) -> some View {
+        HStack(spacing: 12) {
+            if state.isFailed {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .font(.headline)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.circular)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(state.title)
+                    .font(.subheadline.weight(.semibold))
+                if let detail = state.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.systemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 6)
     }
 
     @ViewBuilder

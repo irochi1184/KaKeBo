@@ -41,21 +41,26 @@ struct KaKeBoApp: App {
                 .task {
 //                    debugAppGroupFiles()
                     await purchase.load()
+
+                    for metadata in AppDelegate.drainShareMetadatas() {
+                        await sharedLedgerStore.handleAcceptedShareMetadata(metadata)
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .cloudKitShareAccepted)) { notification in
-                    guard let metadata = notification.object as? CKShare.Metadata else { return }
                     Task {
-                        await sharedLedgerStore.acceptShare(metadata)
+                        let queued = AppDelegate.drainShareMetadatas()
+                        if queued.isEmpty, let metadata = notification.object as? CKShare.Metadata {
+                            await sharedLedgerStore.handleAcceptedShareMetadata(metadata)
+                        } else {
+                            for metadata in queued {
+                                await sharedLedgerStore.handleAcceptedShareMetadata(metadata)
+                            }
+                        }
                     }
                 }
                 .onOpenURL { url in
                     Task {
-                        do {
-                            let metadata = try await CKContainer.default().shareMetadata(for: url)
-                            await sharedLedgerStore.acceptShare(metadata)
-                        } catch {
-                            print("shareMetadata error:", error)
-                        }
+                        await sharedLedgerStore.handleIncomingShareURL(url)
                     }
                 }
             // 初回起動時のみ、ロック有効ならロック
