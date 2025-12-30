@@ -19,6 +19,7 @@ struct KaKeBoApp: App {
     @StateObject private var ledgerContext = LedgerContext()
     @StateObject private var lock = AppLockManager.shared
     @StateObject private var monthStartStore = MonthStartStore()
+    @StateObject private var appRoute = AppRoute()
     
     @Environment(\.scenePhase) private var scenePhase
     
@@ -37,6 +38,7 @@ struct KaKeBoApp: App {
                 .environmentObject(lock)
                 .environmentObject(ledgerContext)
                 .environmentObject(monthStartStore)
+                .environmentObject(appRoute)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
                 .task {
 //                    debugAppGroupFiles()
@@ -49,12 +51,14 @@ struct KaKeBoApp: App {
                     }
                 }
                 .onOpenURL { url in
-                    Task {
-                        do {
-                            let metadata = try await CKContainer.default().shareMetadata(for: url)
-                            await sharedLedgerStore.acceptShare(metadata)
-                        } catch {
-                            print("shareMetadata error:", error)
+                    if !appRoute.handle(url: url) {
+                        Task {
+                            do {
+                                let metadata = try await CKContainer.default().shareMetadata(for: url)
+                                await sharedLedgerStore.acceptShare(metadata)
+                            } catch {
+                                print("shareMetadata error:", error)
+                            }
                         }
                     }
                 }
