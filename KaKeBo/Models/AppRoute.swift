@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 /// アプリ全体のタブ選択やディープリンクを扱うルーター。
 final class AppRoute: ObservableObject {

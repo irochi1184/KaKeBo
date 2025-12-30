@@ -288,7 +288,7 @@ private func colorFromHex(_ hex: String) -> Color {
     return Color(red: r, green: g, blue: b)
 }
 
-private struct WSlice: Identifiable {
+struct WSlice: Identifiable {
     let id: UUID
     let name: String
     let value: Int
@@ -541,7 +541,7 @@ struct KaKeBoWidgetEntryView: View {
     }
 
     private var reorderedWeekdaySymbols: [String] {
-        var symbols = Calendar.current.shortStandaloneWeekdaySymbols
+        let symbols = Calendar.current.shortStandaloneWeekdaySymbols
         let first = Calendar.current.firstWeekday - 1
         if first > 0 {
             let head = symbols[first...]
@@ -562,7 +562,7 @@ struct KaKeBoWidgetEntryView: View {
                 HStack {
                     Text("\(number)")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(day.isCurrentMonth ? .primary : .secondary.opacity(0.55))
+                        .foregroundStyle(day.isCurrentMonth ? .primary : Color.secondary.opacity(0.55))
                     if isToday {
                         Spacer()
                         Circle()
