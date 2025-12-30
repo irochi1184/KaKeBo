@@ -9,6 +9,7 @@ import SwiftUI
 import UserNotifications
 import UIKit
 import UniformTypeIdentifiers
+import CloudKit
 
 struct SettingsView: View {
     @EnvironmentObject var store: DataStore
@@ -51,6 +52,13 @@ struct SettingsView: View {
     @State private var importReportText: String? = nil
     @State private var showImportDone = false
     @State private var showLockSheet = false
+    @State private var showBackupSheet = false
+    @State private var backupTarget: BackupTarget = .personal
+    @State private var backupMode: BackupMode = .export
+    @State private var pendingImportTarget: BackupTarget?
+    @State private var isProcessingBackup = false
+    @State private var exportFilename: String = "KaKeBo_backup_\(Self.todayString()).kakebo"
+    @State private var backupErrorMessage: String?
     
     struct KaKeBoBackupDocument: FileDocument {
         static var readableContentTypes: [UTType] = [.kakeboBackup, .json]
@@ -131,9 +139,13 @@ struct SettingsView: View {
                 
                 Form {
                     settingsSection(accent: accent)
+                    backupSection(accent: accent)
                     supportSection(accent: accent)
                 }
                 .scrollContentBackground(.hidden)
+                .safeAreaInset(edge: .bottom) {
+                    versionFooter
+                }
                 .onAppear {
                     loadTemplates()
                     let monthStart = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: Date()))!
@@ -253,6 +265,18 @@ struct SettingsView: View {
                         .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
                 }
+                // バックアップ操作
+                .sheet(isPresented: $showBackupSheet) {
+                    BackupOperationSheet(
+                        accent: accent,
+                        selection: $backupTarget,
+                        mode: $backupMode,
+                        isProcessing: $isProcessingBackup
+                    ) {
+                        proceedBackupFlow()
+                    }
+                    .environmentObject(sharedLedgerStore)
+                }
                 // ロック設定
                 .sheet(isPresented: $showLockSheet) {
                     NavigationStack {
@@ -277,7 +301,7 @@ struct SettingsView: View {
             isPresented: $showingExporter,
             document: exportDoc,
             contentType: .kakeboBackup,
-            defaultFilename: "KaKeBo_backup_\(Self.todayString()).kakebo"
+            defaultFilename: exportFilename
         ) { result in
             if case .success = result {
                 print("バックアップ保存完了")
@@ -293,12 +317,16 @@ struct SettingsView: View {
                 guard let url = urls.first else {
                     importReportText = "ファイルが選択されませんでした"
                     showImportDone = true
+                    pendingImportTarget = nil
                     return
                 }
-                handleImportedURL(url)
+                let target = pendingImportTarget ?? .personal
+                handleImportedURL(url, target: target)
+                pendingImportTarget = nil
             case .failure(let error):
                 importReportText = "ファイル選択に失敗: \(error.localizedDescription)"
                 showImportDone = true
+                pendingImportTarget = nil
             }
         }
         .alert("バックアップ復元", isPresented: $showImportDone) {
@@ -306,9 +334,17 @@ struct SettingsView: View {
         } message: {
             Text(importReportText ?? "")
         }
+        .alert("バックアップに失敗しました", isPresented: Binding(
+            get: { backupErrorMessage != nil },
+            set: { _ in backupErrorMessage = nil }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(backupErrorMessage ?? "")
+        }
     }
     
-    private func handleImportedURL(_ url: URL) {
+    private func handleImportedURL(_ url: URL, target: BackupTarget) {
         let needsSecurity = url.startAccessingSecurityScopedResource()
         defer { if needsSecurity { url.stopAccessingSecurityScopedResource() } }
         
@@ -317,24 +353,33 @@ struct SettingsView: View {
             
             Task(priority: .userInitiated) {
                 do {
-                    let report = try await MainActor.run { () -> DataStore.ImportReport in
-                        try store.importBackup(
-                            data: data,
-                            applyTheme: { restoredTheme in
-                                themeStore.theme = restoredTheme
-                            },
-                            applyMonthStartSettings: { restoredSettings in
-                                monthStartStore.settings = restoredSettings
-                            }
-                        )
+                    let report: DataStore.ImportReport
+                    switch target {
+                    case .personal:
+                        report = try await MainActor.run { () -> DataStore.ImportReport in
+                            try store.importBackup(
+                                data: data,
+                                applyTheme: { restoredTheme in
+                                    themeStore.theme = restoredTheme
+                                },
+                                applyMonthStartSettings: { restoredSettings in
+                                    monthStartStore.settings = restoredSettings
+                                }
+                            )
+                        }
+                    case .shared(let ledgerId):
+                        guard let ledger = sharedLedgerStore.ledgers.first(where: { $0.id == ledgerId }) else {
+                            throw NSError(domain: "KaKeBo", code: -1, userInfo: [NSLocalizedDescriptionKey: "対象の共有家計簿が見つかりませんでした。"])
+                        }
+                        report = try await sharedLedgerStore.importBackup(data: data, to: ledger)
                     }
                     await MainActor.run {
-                        importReportText = "復元完了：取込 \(report.inserted) 件 / 新規カテゴリ \(report.createdCategories) 件 / スキップ \(report.skipped) 件"
+                        importReportText = "復元完了（\(backupTargetName(for: target))）：取込 \(report.inserted) 件 / 新規カテゴリ \(report.createdCategories) 件 / スキップ \(report.skipped) 件"
                         showImportDone = true
                     }
                 } catch {
                     await MainActor.run {
-                        importReportText = "復元に失敗: \(error.localizedDescription)"
+                        importReportText = "復元に失敗（\(backupTargetName(for: target))）: \(error.localizedDescription)"
                         showImportDone = true
                     }
                 }
@@ -342,6 +387,46 @@ struct SettingsView: View {
         } catch {
             importReportText = "ファイル読み込みに失敗: \(error.localizedDescription)"
             showImportDone = true
+        }
+    }
+    
+    private func proceedBackupFlow() {
+        switch backupMode {
+        case .export:
+            startBackupExport(for: backupTarget)
+        case .restore:
+            pendingImportTarget = backupTarget
+            showImporter = true
+        }
+    }
+    
+    private func startBackupExport(for target: BackupTarget) {
+        isProcessingBackup = true
+        Task(priority: .userInitiated) {
+            do {
+                let data: Data
+                switch target {
+                case .personal:
+                    data = store.exportFullBackupJSON(theme: themeStore.theme)
+                case .shared(let ledgerId):
+                    guard let ledger = sharedLedgerStore.ledgers.first(where: { $0.id == ledgerId }) else {
+                        throw NSError(domain: "KaKeBo", code: -1, userInfo: [NSLocalizedDescriptionKey: "選択した共有家計簿が見つかりませんでした。"])
+                    }
+                    data = try await sharedLedgerStore.exportBackup(for: ledger)
+                }
+                await MainActor.run {
+                    exportDoc = KaKeBoBackupDocument(data: data)
+                    exportFilename = backupFilename(for: target)
+                    showingExporter = true
+                }
+            } catch {
+                await MainActor.run {
+                    backupErrorMessage = "バックアップ作成に失敗しました: \(error.localizedDescription)"
+                }
+            }
+            await MainActor.run {
+                isProcessingBackup = false
+            }
         }
     }
     
@@ -432,6 +517,27 @@ struct SettingsView: View {
     }
     
     @ViewBuilder
+    private func backupSection(accent: Color) -> some View {
+        Section {
+            SettingsRowButton(
+                title: "バックアップを作成・復元",
+                systemImage: "arrow.triangle.2.circlepath",
+                accent: accent,
+                trailingText: backupStatusText
+            ) {
+                showBackupSheet = true
+            }
+        } header: {
+            Text("バックアップを作成・復元")
+        } footer: {
+            Text("個人用または共有家計簿を選び、作成・復元を実行できます。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
+    }
+    
+    @ViewBuilder
     private func supportSection(accent: Color) -> some View {
         Section {
             SettingsRowButton(
@@ -474,24 +580,6 @@ struct SettingsView: View {
                 accent: accent,
                 trailingText: "Discord"
             ) { UIApplication.shared.open(discordURL) }
-            
-            SettingsRowButton(
-                title: "バックアップを作成",
-                systemImage: "arrow.down.doc",
-                accent: accent,
-                trailingText: ""
-            ) {
-                let data = store.exportFullBackupJSON(theme: themeStore.theme)
-                exportDoc = KaKeBoBackupDocument(data: data)
-                showingExporter = true
-            }
-            
-            SettingsRowButton(
-                title: "バックアップから復元",
-                systemImage: "arrow.up.doc",
-                accent: accent,
-                trailingText: ""
-            ) { showImporter = true }
         } header: {
             Text("サポート")
         }
@@ -558,7 +646,45 @@ struct SettingsView: View {
         return f.string(from: Date())
     }
     
+    private func backupFilename(for target: BackupTarget) -> String {
+        let baseName = backupTargetName(for: target)
+        let safeName = baseName.replacingOccurrences(of: "[^0-9A-Za-zぁ-んァ-ン一-龠_-]", with: "_", options: .regularExpression)
+        return "KaKeBo_\(safeName)_backup_\(Self.todayString()).kakebo"
+    }
+    
+    private var backupStatusText: String {
+        let actionText = backupMode == .export ? "作成" : "復元"
+        return "\(backupTargetName(for: backupTarget)) / \(actionText)"
+    }
+    
+    private func backupTargetName(for target: BackupTarget) -> String {
+        switch target {
+        case .personal:
+            return "個人用"
+        case .shared(let ledgerId):
+            return sharedLedgerStore.ledgers.first(where: { $0.id == ledgerId })?.name ?? "共有家計簿"
+        }
+    }
+    
     private func showLockSettingsSheet() { showLockSheet = true }
+
+    private var appVersionLabel: String {
+        let version = AppVersion.current
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+        return build.isEmpty ? "バージョン \(version)" : "バージョン \(version) (\(build))"
+    }
+
+    private var versionFooter: some View {
+        HStack {
+            Spacer()
+            Text(appVersionLabel)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .background(.thinMaterial)
+    }
 
     private var monthStartSummary: String {
         let s = monthStartStore.settings

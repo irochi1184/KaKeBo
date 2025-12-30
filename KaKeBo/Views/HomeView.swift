@@ -19,6 +19,7 @@ struct HomeView: View {
     @State private var showAdd = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var hSize
+    @State private var didSetInitialMonth = false
     
     // 最後に開いたモード／共有家計簿IDを保存
     @AppStorage("home.lastLedgerMode") private var lastLedgerModeRaw: String = "personal"
@@ -134,6 +135,10 @@ struct HomeView: View {
             store.applyFixedExpensesForCurrentMonth()
             if !monthStartOnboardingDone {
                 showMonthStartIntro = true
+            }
+            if !didSetInitialMonth {
+                selectedMonth = monthResolver.anchorMonth(containing: Date())
+                didSetInitialMonth = true
             }
         }
         .task {

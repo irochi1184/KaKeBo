@@ -72,12 +72,12 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
-        .init(title: "カレンダー画面の下部表示を選択可能に", message: "カレンダーの下部に表示する内容を好みに合わせて切り替えられるようになりました。", symbol: "calendar.badge.plus", tint: .blue),
-        .init(title: "取引一覧のフィルター結果をグラフ出力", message: "フィルターした結果をそのままグラフに出力できます。（無料プランは毎月3回まで）", symbol: "chart.bar.fill", tint: .orange),
-        .init(title: "共有家計簿の参加画面を微調整", message: "参加画面の案内や配置を調整し、スムーズに入れるようになりました。", symbol: "person.crop.circle.badge.checkmark", tint: .teal)
+        .init(title: "固定費の合計をひと目で確認", message: "固定費の管理シートに有効な固定費の合計金額を表示するようになり、毎月の支出をすぐに把握できます。", symbol: "yensign.circle.fill", tint: .mint),
+        .init(title: "バックアップの家計簿選択を改善", message: "個人用・共有家計簿ごとに作成／復元を選べる新しいシートを追加し、失敗時に気付きやすいよう堅牢性を高めました。", symbol: "arrow.triangle.2.circlepath", tint: .purple),
+        .init(title: "設定画面の下にバージョンを表示", message: "サポートへの連絡時などにすぐ確認できるよう、設定画面のいちばん下へ現在のバージョンをさりげなく記載しました。", symbol: "info.circle.fill", tint: .gray)
     ]
     /*
-     旧アップデート通知（2.1.0）
+     アップデート 2.1.0
      - 共有招待の参加を改善
      - 共有家計簿での削除・整理
      - 固定費へのタグ付け（プレミアム）
@@ -85,6 +85,10 @@ private struct UpdateNoticeContent: View {
      - テーマ設定の維持
      - Todo テンプレートの追加タイミングを調整
      - よく使う取引ショートカット
+     アップデート 2.1.1
+     - カレンダーの下部に表示する内容を好みに合わせて切り替えられるようになりました。
+     - フィルターした結果をそのままグラフに出力できます。（無料プランは毎月3回まで）
+     - 参加画面の案内や配置を調整し、スムーズに入れるようになりました。
      */
 
     let accent: Color

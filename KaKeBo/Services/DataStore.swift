@@ -314,7 +314,7 @@ extension DataStore {
                     date: due,
                     amount: t.amount,
                     type: .expense,
-                    memo: t.memo ?? t.title,
+                    memo: memoForFixedExpense(t),
                     categoryId: t.categoryId,
                     tags: t.tags
                 )
@@ -344,7 +344,7 @@ extension DataStore {
             date: due,
             amount: t.amount,
             type: .expense,
-            memo: t.memo ?? t.title,
+            memo: memoForFixedExpense(t),
             categoryId: t.categoryId,
             tags: t.tags
         )
@@ -367,6 +367,17 @@ extension DataStore {
         let data = try? JSONEncoder().encode(Array(posted))
         defaults.set(data, forKey: postedKey)
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    private func memoForFixedExpense(_ tpl: FixedExpenseTemplate) -> String {
+        let title = tpl.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let memo = tpl.memo?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let memo, !memo.isEmpty {
+            let parts = [title, memo].filter { !$0.isEmpty }
+            return parts.joined(separator: " / ")
+        }
+        return title
     }
     
     /// 31日対応（0=月末）
