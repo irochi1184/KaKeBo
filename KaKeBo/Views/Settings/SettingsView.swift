@@ -143,6 +143,9 @@ struct SettingsView: View {
                     supportSection(accent: accent)
                 }
                 .scrollContentBackground(.hidden)
+                .safeAreaInset(edge: .bottom) {
+                    versionFooter
+                }
                 .onAppear {
                     loadTemplates()
                     let monthStart = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: Date()))!
@@ -664,6 +667,24 @@ struct SettingsView: View {
     }
     
     private func showLockSettingsSheet() { showLockSheet = true }
+
+    private var appVersionLabel: String {
+        let version = AppVersion.current
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+        return build.isEmpty ? "バージョン \(version)" : "バージョン \(version) (\(build))"
+    }
+
+    private var versionFooter: some View {
+        HStack {
+            Spacer()
+            Text(appVersionLabel)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .background(.thinMaterial)
+    }
 
     private var monthStartSummary: String {
         let s = monthStartStore.settings
