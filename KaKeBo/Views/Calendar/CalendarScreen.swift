@@ -13,6 +13,7 @@ struct CalendarScreen: View {
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var ledgerContext: LedgerContext
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
+    @EnvironmentObject var appRoute: AppRoute
     @Environment(\.colorScheme) private var scheme
     public var cal: Calendar { .current }
     @StateObject private var keyboard = KeyboardHeightReader()
@@ -224,6 +225,7 @@ struct CalendarScreen: View {
                 if calendarBottomMode == .dayDetail {
                     selectedDay = cal.startOfDay(for: .now)
                 }
+                applyIncomingCalendarSelection()
             }
             .onChange(of: month) { _, newMonth in
                 todoStore.load(for: newMonth)
@@ -242,6 +244,9 @@ struct CalendarScreen: View {
             }
             .task(id: ledgerContext.selectedSharedLedgerId) {
                 await reloadSharedLedgerDataIfNeeded()
+            }
+            .onChange(of: appRoute.calendarSelection) { _, _ in
+                applyIncomingCalendarSelection()
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -364,6 +369,14 @@ struct CalendarScreen: View {
 
         await sharedLedgerStore.reloadCategories(for: ledger)
         await sharedLedgerStore.reloadTransactions(for: ledger)
+    }
+
+    private func applyIncomingCalendarSelection() {
+        guard let date = appRoute.consumeCalendarSelection() else { return }
+        let start = cal.startOfDay(for: date)
+        month = cal.date(from: cal.dateComponents([.year, .month], from: start)) ?? start
+        selectedDay = start
+        calendarBottomMode = .dayDetail
     }
 
 }
