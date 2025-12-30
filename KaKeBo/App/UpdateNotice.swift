@@ -76,7 +76,8 @@ private struct UpdateNoticeContent: View {
         .init(title: "バックアップの家計簿選択を改善", message: "個人用・共有家計簿ごとに作成／復元を選べる新しいシートを追加し、失敗時に気付きやすいよう堅牢性を高めました。", symbol: "arrow.triangle.2.circlepath", tint: .purple),
         .init(title: "カレンダー画面の下部表示を選択可能に", message: "カレンダーの下部に表示する内容を好みに合わせて切り替えられるようになりました。", symbol: "calendar.badge.plus", tint: .blue),
         .init(title: "取引一覧のフィルター結果をグラフ出力", message: "フィルターした結果をそのままグラフに出力できます。（無料プランは毎月3回まで）", symbol: "chart.bar.fill", tint: .orange),
-        .init(title: "共有家計簿の参加画面を微調整", message: "参加画面の案内や配置を調整し、スムーズに入れるようになりました。", symbol: "person.crop.circle.badge.checkmark", tint: .teal)
+        .init(title: "共有家計簿の参加画面を微調整", message: "参加画面の案内や配置を調整し、スムーズに入れるようになりました。", symbol: "person.crop.circle.badge.checkmark", tint: .teal),
+        .init(title: "設定画面の下にバージョンを表示", message: "問い合わせのときに迷わないよう、設定画面の一番下に今のバージョンをそっと載せました。", symbol: "info.circle.fill", tint: .gray)
     ]
     /*
      旧アップデート通知（2.1.0）
