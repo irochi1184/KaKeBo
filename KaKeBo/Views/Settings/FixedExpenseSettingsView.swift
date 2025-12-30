@@ -51,7 +51,24 @@ struct FixedExpenseSettingsView: View {
                         .padding(.top, 4)
                 }
             }
-            
+
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Label("固定費の合計", systemImage: "yensign.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text(yen(totalActiveAmount))
+                            .font(.headline.weight(.bold))
+                    }
+
+                    Text("有効にしている固定費\(activeTemplatesCount)件を合計しています。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
             Section {
                 if templates.isEmpty {
                     ContentUnavailableView(
@@ -204,6 +221,14 @@ struct FixedExpenseSettingsView: View {
     private var canAddMore: Bool {
         if purchase.isPremiumActive { return true }
         return templates.count < freeLimit
+    }
+
+    private var totalActiveAmount: Int {
+        templates.filter { $0.isActive }.map { $0.amount }.reduce(0, +)
+    }
+
+    private var activeTemplatesCount: Int {
+        templates.filter { $0.isActive }.count
     }
 
     // MARK: - Storage
