@@ -191,7 +191,7 @@ final class SharedLedgerStore: ObservableObject {
     }
 
     private func acceptShareMetadata(_ metadata: CKShare.Metadata) async throws {
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let operation = CKAcceptSharesOperation(shareMetadatas: [metadata])
             operation.qualityOfService = .userInitiated
             var firstError: Error?
