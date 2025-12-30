@@ -33,9 +33,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
     ) {
-        NotificationCenter.default.post(
-            name: .cloudKitShareAccepted,
-            object: cloudKitShareMetadata
-        )
+        CloudKitShareAcceptanceQueue.shared.enqueue(cloudKitShareMetadata)
     }
 }
