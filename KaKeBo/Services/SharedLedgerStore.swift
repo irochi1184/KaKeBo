@@ -174,29 +174,66 @@ final class SharedLedgerStore: ObservableObject {
     
     func acceptShare(_ metadata: CKShare.Metadata) async {
         do {
-            try await acceptShareMetadata(metadata)
+            let targetContainer = CKContainer(identifier: metadata.containerIdentifier)
+            try await acceptShareMetadata(metadata, container: targetContainer)
             await reloadLedgers()
             globalToast = ToastState(message: "共有家計簿に参加しました。", systemImage: "person.2.fill")
         } catch {
+            if let ckError = error as? CKError, isAlreadyParticipantError(ckError) {
+                await reloadLedgers()
+                globalToast = ToastState(message: "すでにこの共有家計簿に参加しています。", systemImage: "person.2.fill")
+                return
+            }
+
             lastError = error
             globalToast = ToastState(message: "共有家計簿の参加に失敗しました。", systemImage: "exclamationmark.triangle.fill")
             print("acceptShare error:", error)
         }
     }
 
-    private func acceptShareMetadata(_ metadata: CKShare.Metadata) async throws {
-        try await withCheckedThrowingContinuation { continuation in
+    private func acceptShareMetadata(
+        _ metadata: CKShare.Metadata,
+        container: CKContainer
+    ) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let operation = CKAcceptSharesOperation(shareMetadatas: [metadata])
             operation.qualityOfService = .userInitiated
+            var firstError: Error?
+            operation.perShareResultBlock = { _, result in
+                if case .failure(let error) = result, firstError == nil {
+                    firstError = error
+                }
+            }
             operation.acceptSharesResultBlock = { result in
                 switch result {
                 case .success:
-                    continuation.resume()
+                    if let error = firstError {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume()
+                    }
                 case .failure(let error):
                     continuation.resume(throwing: error)
                 }
             }
             container.add(operation)
+        }
+    }
+
+    private func isAlreadyParticipantError(_ error: CKError) -> Bool {
+        if error.code == .alreadyShared {
+            return true
+        }
+
+        guard error.code == .partialFailure,
+              let partials = error.userInfo[CKPartialErrorsByItemIDKey] as? [CKRecord.ID: Error]
+        else {
+            return false
+        }
+
+        return partials.values.contains {
+            guard let ckError = $0 as? CKError else { return false }
+            return ckError.code == .alreadyShared
         }
     }
 

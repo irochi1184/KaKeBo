@@ -41,13 +41,21 @@ struct KaKeBoApp: App {
                 .environmentObject(appRoute)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
                 .task {
+                    let pending = CloudKitShareAcceptanceQueue.shared.drain()
+                    for metadata in pending {
+                        await sharedLedgerStore.acceptShare(metadata)
+                    }
+                }
+                .task {
 //                    debugAppGroupFiles()
                     await purchase.load()
                 }
-                .onReceive(NotificationCenter.default.publisher(for: .cloudKitShareAccepted)) { notification in
-                    guard let metadata = notification.object as? CKShare.Metadata else { return }
+                .onReceive(NotificationCenter.default.publisher(for: .cloudKitShareAccepted)) { _ in
+                    let metadatas = CloudKitShareAcceptanceQueue.shared.drain()
                     Task {
-                        await sharedLedgerStore.acceptShare(metadata)
+                        for metadata in metadatas {
+                            await sharedLedgerStore.acceptShare(metadata)
+                        }
                     }
                 }
                 .onOpenURL { url in
@@ -55,7 +63,7 @@ struct KaKeBoApp: App {
                         Task {
                             do {
                                 let metadata = try await CKContainer.default().shareMetadata(for: url)
-                                await sharedLedgerStore.acceptShare(metadata)
+                                CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
                             } catch {
                                 print("shareMetadata error:", error)
                             }
