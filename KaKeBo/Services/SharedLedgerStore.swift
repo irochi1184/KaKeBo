@@ -174,7 +174,8 @@ final class SharedLedgerStore: ObservableObject {
     
     func acceptShare(_ metadata: CKShare.Metadata) async {
         do {
-            try await acceptShareMetadata(metadata)
+            let targetContainer = CKContainer(identifier: metadata.containerIdentifier)
+            try await acceptShareMetadata(metadata, container: targetContainer)
             await reloadLedgers()
             globalToast = ToastState(message: "共有家計簿に参加しました。", systemImage: "person.2.fill")
         } catch {
@@ -190,7 +191,10 @@ final class SharedLedgerStore: ObservableObject {
         }
     }
 
-    private func acceptShareMetadata(_ metadata: CKShare.Metadata) async throws {
+    private func acceptShareMetadata(
+        _ metadata: CKShare.Metadata,
+        container: CKContainer
+    ) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let operation = CKAcceptSharesOperation(shareMetadatas: [metadata])
             operation.qualityOfService = .userInitiated
