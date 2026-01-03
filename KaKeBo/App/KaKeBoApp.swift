@@ -58,14 +58,29 @@ struct KaKeBoApp: App {
                         }
                     }
                 }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    guard let url = activity.webpageURL else { return }
+                    print("ℹ️ [KaKeBoApp] continueUserActivity received: \(url.absoluteString)")
+                    Task {
+                        do {
+                            let metadata = try await CKContainer.default().shareMetadata(for: url)
+                            print("ℹ️ [KaKeBoApp] shareMetadata resolved (continueUserActivity): container=\(metadata.containerIdentifier), root=\(metadata.rootRecordID.recordName)")
+                            CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
+                        } catch {
+                            print("❌ [KaKeBoApp] shareMetadata error via continueUserActivity for url=\(url.absoluteString): \(error)")
+                        }
+                    }
+                }
                 .onOpenURL { url in
                     if !appRoute.handle(url: url) {
+                        print("ℹ️ [KaKeBoApp] onOpenURL received: \(url.absoluteString)")
                         Task {
                             do {
                                 let metadata = try await CKContainer.default().shareMetadata(for: url)
+                                print("ℹ️ [KaKeBoApp] shareMetadata resolved: container=\(metadata.containerIdentifier), root=\(metadata.rootRecordID.recordName)")
                                 CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
                             } catch {
-                                print("shareMetadata error:", error)
+                                print("❌ [KaKeBoApp] shareMetadata error for url=\(url.absoluteString): \(error)")
                             }
                         }
                     }
