@@ -72,6 +72,7 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
+        .init(title: "共有招待がうまくいかないときに再試行ボタンを表示", message: "招待リンクを開いたときの反応を詳しく記録し、失敗時はその場で再試行できるボタンを出すようにしました。アプリが起動するだけで進まないときの手がかりを残します。", symbol: "arrow.triangle.2.circlepath", tint: .orange),
         .init(title: "共有招待の参加がスムーズに", message: "招待リンクを開くだけで参加手続きが進み、すでに参加している場合もその場で分かるようになりました。", symbol: "person.2.badge.plus", tint: .indigo),
         .init(title: "大きいウィジェットでカレンダーを確認", message: "ホーム画面の最大サイズのウィジェットに当月カレンダーを表示できるようになり、日付を押すとその日の家計簿をすぐ開けます。", symbol: "calendar", tint: .blue),
         .init(title: "固定費の合計をひと目で確認", message: "固定費の管理シートに有効な固定費の合計金額を表示するようになり、毎月の支出をすぐに把握できます。", symbol: "yensign.circle.fill", tint: .mint),

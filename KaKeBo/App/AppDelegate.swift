@@ -33,6 +33,46 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
     ) {
+        print("ℹ️ [AppDelegate] userDidAcceptCloudKitShareWith container=\(cloudKitShareMetadata.containerIdentifier), root=\(cloudKitShareMetadata.rootRecordID.recordName)")
         CloudKitShareAcceptanceQueue.shared.enqueue(cloudKitShareMetadata)
+    }
+
+    // ユニバーサルリンク経由の共有招待（バックアップで .onOpenURL が呼ばれない環境に備えて冗長に受け取る）
+    func application(
+        _ application: UIApplication,
+        continue userActivity: NSUserActivity,
+        restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+    ) -> Bool {
+        guard let url = userActivity.webpageURL else { return false }
+        print("ℹ️ [AppDelegate] continueUserActivity: \(url.absoluteString)")
+        Task {
+            do {
+                let metadata = try await CKContainer.default().shareMetadata(for: url)
+                print("ℹ️ [AppDelegate] shareMetadata resolved (continueUserActivity): container=\(metadata.containerIdentifier), root=\(metadata.rootRecordID.recordName)")
+                CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
+            } catch {
+                print("❌ [AppDelegate] shareMetadata error via continueUserActivity for url=\(url.absoluteString): \(error)")
+            }
+        }
+        return true
+    }
+
+    // URLスキーム経由の共有招待（SwiftUIの .onOpenURL が拾えない場合のフォールバック）
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey : Any] = [:]
+    ) -> Bool {
+        print("ℹ️ [AppDelegate] application openURL: \(url.absoluteString)")
+        Task {
+            do {
+                let metadata = try await CKContainer.default().shareMetadata(for: url)
+                print("ℹ️ [AppDelegate] shareMetadata resolved (openURL): container=\(metadata.containerIdentifier), root=\(metadata.rootRecordID.recordName)")
+                CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
+            } catch {
+                print("❌ [AppDelegate] shareMetadata error via openURL for url=\(url.absoluteString): \(error)")
+            }
+        }
+        return true
     }
 }
