@@ -60,12 +60,14 @@ struct KaKeBoApp: App {
                 }
                 .onOpenURL { url in
                     if !appRoute.handle(url: url) {
+                        print("ℹ️ [KaKeBoApp] onOpenURL received: \(url.absoluteString)")
                         Task {
                             do {
                                 let metadata = try await CKContainer.default().shareMetadata(for: url)
+                                print("ℹ️ [KaKeBoApp] shareMetadata resolved: container=\(metadata.containerIdentifier), root=\(metadata.rootRecordID.recordName)")
                                 CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
                             } catch {
-                                print("shareMetadata error:", error)
+                                print("❌ [KaKeBoApp] shareMetadata error for url=\(url.absoluteString): \(error)")
                             }
                         }
                     }

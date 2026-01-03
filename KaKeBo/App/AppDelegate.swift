@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
     ) {
+        print("ℹ️ [AppDelegate] userDidAcceptCloudKitShareWith container=\(cloudKitShareMetadata.containerIdentifier), root=\(cloudKitShareMetadata.rootRecordID.recordName)")
         CloudKitShareAcceptanceQueue.shared.enqueue(cloudKitShareMetadata)
     }
 }
