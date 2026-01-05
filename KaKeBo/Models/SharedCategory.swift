@@ -61,6 +61,7 @@ extension SharedCategory {
     func makeRecord(existing: CKRecord? = nil) -> CKRecord {
         let record = existing ?? CKRecord(recordType: Self.recordType, recordID: id)
         let ledgerRef = CKRecord.Reference(recordID: ledgerId, action: .deleteSelf)
+        record.parent = CKRecord.Reference(recordID: ledgerId, action: .deleteSelf)
         
         record[FieldKey.ledgerRef] = ledgerRef
         record[FieldKey.name] = name as CKRecordValue
