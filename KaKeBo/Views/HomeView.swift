@@ -179,7 +179,7 @@ struct HomeView: View {
             let cats   = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
             let expenseSlices = sharedExpenseBreakdown(allTxs: allTxs, categories: cats)
             let incomeSlices  = sharedIncomeBreakdown(allTxs: allTxs, categories: cats)
-            let dailyPoints   = sharedDailySeries(allTxs: allTxs)
+            let dailyPoints   = sharedDailySeries(allTxs: allTxs, categories: cats)
             
             ScrollView {
                 VStack(spacing: 16) {
@@ -407,17 +407,41 @@ extension HomeView {
 
 
     // 棒グラフ：日別支出（選択月）
-    private var dailySeries: [DailyPoint] {
+    private struct DayCategoryKey: Hashable {
+        let date: Date
+        let categoryId: UUID
+    }
+
+    private struct SharedDayCategoryKey: Hashable {
+        let date: Date
+        let categoryKey: String
+    }
+
+    private var dailySeries: [DailyCategoryPoint] {
         let cal = Calendar.current
         let expenseTx = store.transactions.filter {
             $0.type == .expense && isInCurrentMonth($0.date)
         }
-        var dict: [Date: Int] = [:]
+        var dict: [DayCategoryKey: Int] = [:]
         for tx in expenseTx {
             let day = cal.startOfDay(for: tx.date)
-            dict[day, default: 0] += tx.amount
+            let key = DayCategoryKey(date: day, categoryId: tx.categoryId)
+            dict[key, default: 0] += tx.amount
         }
-        return dict.keys.sorted().map { day in DailyPoint(date: day, amount: dict[day] ?? 0) }
+        return dict.keys.sorted { lhs, rhs in
+            if lhs.date != rhs.date {
+                return lhs.date < rhs.date
+            }
+            return lhs.categoryId.uuidString < rhs.categoryId.uuidString
+        }.map { key in
+            let category = store.categories.first(where: { $0.id == key.categoryId })
+            return DailyCategoryPoint(
+                date: key.date,
+                amount: dict[key] ?? 0,
+                categoryName: category?.name ?? "未分類",
+                color: category?.color ?? .gray
+            )
+        }
     }
 
     private var allThisMonthTransactions: [Transaction] {
@@ -524,20 +548,38 @@ extension HomeView {
     }
     
     // MARK: - 共有家計簿：日別棒グラフ
-    private func sharedDailySeries(allTxs: [SharedTransaction]) -> [DailyPoint] {
+    private func sharedDailySeries(allTxs: [SharedTransaction], categories: [SharedCategory]) -> [DailyCategoryPoint] {
         let cal = Calendar.current
         let expenseTx = allTxs.filter {
             $0.type == .expense && isInCurrentMonth($0.date)
         }
         
-        var dict: [Date: Int] = [:]
+        var dict: [SharedDayCategoryKey: Int] = [:]
         for tx in expenseTx {
             let day = cal.startOfDay(for: tx.date)
-            dict[day, default: 0] += tx.amount
+            let key = tx.categoryId?.recordName ?? tx.categoryName
+            let categoryKey = SharedDayCategoryKey(date: day, categoryKey: key)
+            dict[categoryKey, default: 0] += tx.amount
         }
         
-        return dict.keys.sorted().map { day in
-            DailyPoint(date: day, amount: dict[day] ?? 0)
+        return dict.keys.sorted { lhs, rhs in
+            if lhs.date != rhs.date {
+                return lhs.date < rhs.date
+            }
+            return lhs.categoryKey < rhs.categoryKey
+        }.map { key in
+            let sharedCategory = categories.first { $0.id.recordName == key.categoryKey }
+                ?? categories.first { $0.name == key.categoryKey }
+            let fallbackHex = expenseTx.first { tx in
+                (tx.categoryId?.recordName ?? tx.categoryName) == key.categoryKey
+            }?.categoryColorHex
+            let color = Color.fromHex(sharedCategory?.colorHex ?? fallbackHex) ?? .gray
+            return DailyCategoryPoint(
+                date: key.date,
+                amount: dict[key] ?? 0,
+                categoryName: sharedCategory?.name ?? key.categoryKey,
+                color: color
+            )
         }
     }
     

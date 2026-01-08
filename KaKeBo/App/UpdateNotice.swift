@@ -72,6 +72,8 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
+        .init(title: "日別推移がカテゴリの色でひと目で分かる", message: "ホームの棒グラフがカテゴリごとの色で表示され、どの支出が多い日なのか見分けやすくなりました。", symbol: "chart.bar.fill", tint: .teal),
+        .init(title: "履歴のグラフが安定して表示される", message: "フィルター結果の棒グラフが最後まで正しく表示され、安心して確認できるようになりました。", symbol: "checkmark.circle.fill", tint: .blue),
         .init(title: "共有家計簿のデータつながりを整理", message: "カテゴリや取引が必ず共有ルートに結びつくようにそろえました。招待後の参加側でも同じ内容を受け取れるよう、裏側のつながりを整えています。", symbol: "link.badge.plus", tint: .green),
         .init(title: "共有招待がうまくいかないときに再試行ボタンを表示", message: "招待リンクを開いたときの反応を詳しく記録し、失敗時はその場で再試行できるボタンを出すようにしました。開くを押しても進まないときの手がかりを残します。", symbol: "arrow.triangle.2.circlepath", tint: .orange),
         .init(title: "共有招待の参加がスムーズに", message: "招待リンクを開くだけで参加手続きが進み、すでに参加している場合もその場で分かるようになりました。", symbol: "person.2.badge.plus", tint: .indigo),
