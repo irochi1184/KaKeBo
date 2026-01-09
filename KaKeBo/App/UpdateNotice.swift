@@ -79,6 +79,7 @@ private struct UpdateNoticeContent: View {
         .init(title: "共有招待の参加がスムーズに", message: "招待リンクを開くだけで参加手続きが進み、すでに参加している場合もその場で分かるようになりました。", symbol: "person.2.badge.plus", tint: .indigo),
         .init(title: "大きいウィジェットでカレンダーを確認", message: "ホーム画面の最大サイズのウィジェットに当月カレンダーを表示できるようになり、日付を押すとその日の家計簿をすぐ開けます。", symbol: "calendar", tint: .blue),
         .init(title: "固定費の合計をひと目で確認", message: "固定費の管理シートに有効な固定費の合計金額を表示するようになり、毎月の支出をすぐに把握できます。", symbol: "yensign.circle.fill", tint: .mint),
+        .init(title: "サンプルデータで復元を体験", message: "バックアップの復元を試せるように、約300件の記録が入ったサンプルCSVを用意しました。", symbol: "tray.and.arrow.down.fill", tint: .blue),
         .init(title: "バックアップの家計簿選択を改善", message: "個人用・共有家計簿ごとに作成／復元を選べる新しいシートを追加し、失敗時に気付きやすいよう堅牢性を高めました。", symbol: "arrow.triangle.2.circlepath", tint: .purple),
         .init(title: "設定画面の下にバージョンを表示", message: "サポートへの連絡時などにすぐ確認できるよう、設定画面のいちばん下へ現在のバージョンをさりげなく記載しました。", symbol: "info.circle.fill", tint: .gray)
     ]
