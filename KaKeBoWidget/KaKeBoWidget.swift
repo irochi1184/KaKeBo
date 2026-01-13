@@ -498,6 +498,8 @@ struct KaKeBoWidgetEntryView: View {
             }
         }
         .padding(10)
+        .scaleEffect(0.75, anchor: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
     
     // --- Added mediumLayout with donut chart ---
@@ -556,6 +558,8 @@ struct KaKeBoWidgetEntryView: View {
         let isToday = cal.isDateInToday(day.date)
         let number = cal.component(.day, from: day.date)
         let destination = deepLink(for: day.date)
+        let expenseText = day.expense > 0 ? "-\(dayAmountText(day.expense))" : nil
+        let incomeText = day.income > 0 ? "+\(dayAmountText(day.income))" : nil
 
         return Link(destination: destination) {
             VStack(alignment: .leading, spacing: 6) {
@@ -587,6 +591,29 @@ struct KaKeBoWidgetEntryView: View {
                             .frame(width: 10, height: 3)
                     }
                     Spacer(minLength: 0)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    if let expenseText {
+                        Text(expenseText)
+                            .font(.system(size: 6, weight: .semibold))
+                            .foregroundStyle(Color.red.opacity(0.9))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                    }
+                    if let incomeText {
+                        Text(incomeText)
+                            .font(.system(size: 6, weight: .semibold))
+                            .foregroundStyle(Color.green.opacity(0.9))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                    }
+                    if day.expense == 0 && day.income == 0 {
+                        Text("0")
+                            .font(.system(size: 6))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -653,11 +680,23 @@ struct KaKeBoWidgetEntryView: View {
         Self.currencyFormatter.string(from: NSNumber(value: n)) ?? "¥\(n)"
     }
     
+    private func dayAmountText(_ n: Int) -> String {
+        Self.dayAmountFormatter.string(from: NSNumber(value: n)) ?? "\(n)"
+    }
+    
     private static let currencyFormatter: NumberFormatter = {
         let f = NumberFormatter()
         f.locale = Locale(identifier: "ja_JP")
         f.numberStyle = .currency
         f.currencyCode = "JPY"
+        return f
+    }()
+    
+    private static let dayAmountFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.locale = Locale(identifier: "ja_JP")
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 0
         return f
     }()
 }
