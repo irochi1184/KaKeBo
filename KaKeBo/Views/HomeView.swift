@@ -573,7 +573,7 @@ extension HomeView {
             let fallbackHex = expenseTx.first { tx in
                 (tx.categoryId?.recordName ?? tx.categoryName) == key.categoryKey
             }?.categoryColorHex
-            let color = Color.fromHex(sharedCategory?.colorHex ?? fallbackHex) ?? .gray
+            let color = Color.fromHex((sharedCategory?.colorHex ?? fallbackHex)!) ?? .gray
             return DailyCategoryPoint(
                 date: key.date,
                 amount: dict[key] ?? 0,
