@@ -8,14 +8,18 @@
 import SwiftUI
 import Charts
 
-struct DailyPoint: Identifiable {
+struct DailyCategoryPoint: Identifiable {
     let date: Date
     let amount: Int
-    var id: Date { date }
+    let categoryName: String
+    let color: Color
+    var id: String {
+        "\(date.timeIntervalSinceReferenceDate)-\(categoryName)"
+    }
 }
 
 struct DailyBarChart: View {
-    let series: [DailyPoint]
+    let series: [DailyCategoryPoint]
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -23,12 +27,13 @@ struct DailyBarChart: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             
-            Chart(series) {
+            Chart(series) { point in
                 BarMark(
-                    x: .value("日", $0.date, unit: .day),
-                    y: .value("金額", $0.amount)
+                    x: .value("日", point.date, unit: .day),
+                    y: .value("金額", point.amount)
                 )
                 .cornerRadius(3)
+                .foregroundStyle(point.color)
             }
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day, count: 5)) { _ in

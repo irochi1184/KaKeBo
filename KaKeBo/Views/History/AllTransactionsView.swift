@@ -1306,8 +1306,8 @@ private struct FilteredChartsSheet: View {
         .sorted { $0.value > $1.value }
     }
 
-    private var dailySeries: [DailyCategoryPoint] {
-        var dict: [DailyCategoryKey: DailyCategoryPoint] = [:]
+    private var dailySeries: [FilteredDailyCategoryPoint] {
+        var dict: [DailyCategoryKey: FilteredDailyCategoryPoint] = [:]
         let calendar = Calendar.current
         let signed = usesSignedAmount
         for tx in transactions {
@@ -1322,7 +1322,7 @@ private struct FilteredChartsSheet: View {
                 point.amount += amount
                 dict[key] = point
             } else {
-                dict[key] = DailyCategoryPoint(
+                dict[key] = FilteredDailyCategoryPoint(
                     date: day,
                     amount: amount,
                     category: tx.title,
@@ -1359,7 +1359,7 @@ private struct DailyCategoryKey: Hashable {
     let isIncome: Bool
 }
 
-private struct DailyCategoryPoint: Identifiable {
+private struct FilteredDailyCategoryPoint: Identifiable {
     let date: Date
     var amount: Int
     let category: String
@@ -1369,7 +1369,7 @@ private struct DailyCategoryPoint: Identifiable {
 }
 
 private struct FilteredBarChart: View {
-    let series: [DailyCategoryPoint]
+    let series: [FilteredDailyCategoryPoint]
 
     private var colorMap: [String: Color] {
         var map: [String: Color] = [:]
