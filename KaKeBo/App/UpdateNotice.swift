@@ -72,6 +72,8 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
+        .init(title: "大きいウィジェットの内容が見やすく", message: "ホーム画面の最大サイズのウィジェットを縦方向に少し小さくし、見切れにくくなるよう整えました。", symbol: "rectangle.and.arrow.down.right.and.arrow.up.left", tint: .blue),
+        .init(title: "カレンダーに金額を数字で表示", message: "カレンダーの日ごとの金額をとても小さな文字でも数字で確認できるようにしました。", symbol: "textformat.123", tint: .green),
         .init(title: "日別推移がカテゴリの色でひと目で分かる", message: "ホームの棒グラフがカテゴリごとの色で表示され、どの支出が多い日なのか見分けやすくなりました。", symbol: "chart.bar.fill", tint: .teal),
         .init(title: "履歴のグラフが安定して表示される", message: "フィルター結果の棒グラフが最後まで正しく表示され、安心して確認できるようになりました。", symbol: "checkmark.circle.fill", tint: .blue),
         .init(title: "共有家計簿のデータつながりを整理", message: "カテゴリや取引が必ず共有ルートに結びつくようにそろえました。招待後の参加側でも同じ内容を受け取れるよう、裏側のつながりを整えています。", symbol: "link.badge.plus", tint: .green),
