@@ -462,43 +462,31 @@ struct KaKeBoWidgetEntryView: View {
     }
     
     private var largeLayout: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(monthTitle(entry.payload.calendar.month))
                         .font(.headline.weight(.semibold))
-                    Text("日付をタップすると、その日の家計簿を開きます。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text("今月の収支").font(.caption).foregroundStyle(.secondary)
-                    Text(currency(entry.payload.summary.balance))
-                        .font(.system(.title3, design: .rounded).weight(.bold))
-                        .foregroundStyle(entry.payload.summary.balance >= 0 ? .green : .red)
-                        .accessibilityLabel("今月の収支")
-                        .accessibilityValue(currency(entry.payload.summary.balance))
+                    HStack(spacing: 6) {
+                        pill(title: "支出", value: entry.payload.summary.expense, icon: "arrow.down.left.circle.fill", base: .red)
+                        pill(title: "収入", value: entry.payload.summary.income, icon: "arrow.up.right.circle.fill", base: .green)
+                    }
                 }
             }
 
             weekdayHeader
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 6) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 3) {
                 ForEach(entry.payload.calendar.days) { day in
                     dayCell(day)
                 }
             }
-
-            HStack(spacing: 8) {
-                pill(title: "支出", value: entry.payload.summary.expense, icon: "arrow.down.left.circle.fill", base: .red)
-                pill(title: "収入", value: entry.payload.summary.income, icon: "arrow.up.right.circle.fill", base: .green)
-            }
         }
-        .padding(10)
-        .scaleEffect(x: 1.0, y: 0.85, anchor: .center)
+        .padding(5)
+        .scaleEffect(x: 1.0, y: 1.0, anchor: .center)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
     
@@ -565,7 +553,7 @@ struct KaKeBoWidgetEntryView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("\(number)")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(day.isCurrentMonth ? .primary : Color.secondary.opacity(0.55))
                     if isToday {
                         Spacer()
@@ -574,40 +562,20 @@ struct KaKeBoWidgetEntryView: View {
                             .frame(width: 6, height: 6)
                     }
                 }
-                HStack(spacing: 3) {
-                    if day.income > 0 {
-                        Capsule()
-                            .fill(Color.green.opacity(0.85))
-                            .frame(width: 12, height: 4)
-                    }
-                    if day.expense == 0 && day.income == 0 {
-                        Capsule()
-                            .fill(Color.secondary.opacity(0.12))
-                            .frame(width: 10, height: 3)
-                    }
-                    Spacer(minLength: 0)
-                }
                 VStack(alignment: .leading, spacing: 2) {
                     if let expenseText {
                         Text(expenseText)
                             .font(.system(size: 6, weight: .semibold))
                             .foregroundStyle(Color.red.opacity(0.9))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.5)
+                            .minimumScaleFactor(0.8)
                     }
                     if let incomeText {
                         Text(incomeText)
                             .font(.system(size: 6, weight: .semibold))
                             .foregroundStyle(Color.green.opacity(0.9))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                    }
-                    if day.expense == 0 && day.income == 0 {
-                        Text("0")
-                            .font(.system(size: 6))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
+                            .minimumScaleFactor(0.8)
                     }
                 }
             }
@@ -629,9 +597,8 @@ struct KaKeBoWidgetEntryView: View {
 
     private func cellBackgroundColor(for day: WidgetCalendarDay, isToday: Bool) -> Color {
         if isToday { return Color.accentColor.opacity(0.18) }
-        if day.expense > 0 && day.income > 0 { return Color.secondary.opacity(0.14) }
-        if day.expense > 0 { return Color.red.opacity(0.10) }
-        if day.income > 0 { return Color.green.opacity(0.10) }
+        if day.expense > 0 && day.expense > day.income { return Color.red.opacity(0.10) }
+        if day.income > 0 && day.income > day.expense { return Color.green.opacity(0.10) }
         return Color.secondary.opacity(0.04)
     }
 
@@ -664,7 +631,7 @@ struct KaKeBoWidgetEntryView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(8)
+        .padding(6)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(base.opacity(0.12)))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
