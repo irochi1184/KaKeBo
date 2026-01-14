@@ -498,8 +498,8 @@ struct KaKeBoWidgetEntryView: View {
             }
         }
         .padding(10)
-        .scaleEffect(0.75, anchor: .topLeading)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .scaleEffect(x: 1.0, y: 0.85, anchor: .center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
     
     // --- Added mediumLayout with donut chart ---
@@ -565,7 +565,7 @@ struct KaKeBoWidgetEntryView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("\(number)")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(day.isCurrentMonth ? .primary : Color.secondary.opacity(0.55))
                     if isToday {
                         Spacer()
@@ -575,11 +575,6 @@ struct KaKeBoWidgetEntryView: View {
                     }
                 }
                 HStack(spacing: 3) {
-                    if day.expense > 0 {
-                        Capsule()
-                            .fill(Color.red.opacity(0.85))
-                            .frame(width: 12, height: 4)
-                    }
                     if day.income > 0 {
                         Capsule()
                             .fill(Color.green.opacity(0.85))
