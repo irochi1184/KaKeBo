@@ -69,7 +69,7 @@ struct KaKeBoApp: App {
                     Task {
                         do {
                             let metadata = try await CKContainer.default().shareMetadata(for: url)
-                            print("ℹ️ [KaKeBoApp] shareMetadata resolved (continueUserActivity): container=\(metadata.containerIdentifier), root=\(metadata.rootRecordID.recordName)")
+                            print("ℹ️ [KaKeBoApp] shareMetadata resolved (continueUserActivity): container=\(metadata.containerIdentifier)")
                             CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
                         } catch {
                             print("❌ [KaKeBoApp] shareMetadata error via continueUserActivity for url=\(url.absoluteString): \(error)")
@@ -82,7 +82,7 @@ struct KaKeBoApp: App {
                         Task {
                             do {
                                 let metadata = try await CKContainer.default().shareMetadata(for: url)
-                                print("ℹ️ [KaKeBoApp] shareMetadata resolved: container=\(metadata.containerIdentifier), root=\(metadata.rootRecordID.recordName)")
+                                print("ℹ️ [KaKeBoApp] shareMetadata resolved: container=\(metadata.containerIdentifier)")
                                 CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
                             } catch {
                                 print("❌ [KaKeBoApp] shareMetadata error for url=\(url.absoluteString): \(error)")

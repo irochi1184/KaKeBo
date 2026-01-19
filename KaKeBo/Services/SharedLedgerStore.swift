@@ -106,13 +106,10 @@ final class SharedLedgerStore: ObservableObject {
 
     private func ensureSharedZone() async throws {
         let zoneID = SharedLedger.zoneID
-        let shareableZone = makeShareableZone()
         do {
             let zones = try await db.recordZones(for: [zoneID])
-            if let existing = zones[zoneID] {
-                if !existing.capabilities.contains(.share) {
-                    _ = try await db.modifyRecordZones(saving: [shareableZone], deleting: [])
-                }
+            if let result = zones[zoneID],
+               case .success = result {
                 return
             }
         } catch {
@@ -121,13 +118,8 @@ final class SharedLedgerStore: ObservableObject {
             }
         }
 
-        _ = try await db.modifyRecordZones(saving: [shareableZone], deleting: [])
-    }
-
-    private func makeShareableZone() -> CKRecordZone {
-        let zone = CKRecordZone(zoneID: SharedLedger.zoneID)
-        zone.capabilities = [.share]
-        return zone
+        let zone = CKRecordZone(zoneID: zoneID)
+        _ = try await db.modifyRecordZones(saving: [zone], deleting: [])
     }
 
     private func configureSharingInfrastructure() async {
@@ -235,7 +227,7 @@ final class SharedLedgerStore: ObservableObject {
     func acceptShare(_ metadata: CKShare.Metadata) async {
         do {
             let targetContainer = CKContainer(identifier: metadata.containerIdentifier)
-            print("🔗 [SharedLedgerStore] Accepting share: container=\(metadata.containerIdentifier), root=\(metadata.rootRecordID.recordName)")
+            print("🔗 [SharedLedgerStore] Accepting share: container=\(metadata.containerIdentifier)")
             try await acceptShareMetadata(metadata, container: targetContainer)
             lastFailedShareMetadata = nil
             let reloadSucceeded = await reloadLedgers(logContext: "acceptShare success")
@@ -306,7 +298,7 @@ final class SharedLedgerStore: ObservableObject {
             operation.qualityOfService = .userInitiated
             var firstError: Error?
             operation.perShareResultBlock = { meta, result in
-                let prefix = "🔍 [SharedLedgerStore] perShareResult root=\(meta.rootRecordID.recordName)"
+                let prefix = "🔍 [SharedLedgerStore] perShareResult"
                 if case .failure(let error) = result, firstError == nil {
                     firstError = error
                     if let ckError = error as? CKError {
