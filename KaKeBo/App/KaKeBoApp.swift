@@ -58,6 +58,11 @@ struct KaKeBoApp: App {
                         }
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .cloudKitDatabaseChanged)) { _ in
+                    Task {
+                        await sharedLedgerStore.handleRemoteChange()
+                    }
+                }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     guard let url = activity.webpageURL else { return }
                     print("ℹ️ [KaKeBoApp] continueUserActivity received: \(url.absoluteString)")
@@ -113,6 +118,7 @@ struct KaKeBoApp: App {
 
 extension Notification.Name {
     static let cloudKitShareAccepted = Notification.Name("cloudKitShareAccepted")
+    static let cloudKitDatabaseChanged = Notification.Name("cloudKitDatabaseChanged")
 }
 
 /// background→active の時だけロックを復帰させるゲート
