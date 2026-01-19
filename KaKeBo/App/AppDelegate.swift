@@ -37,6 +37,23 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         CloudKitShareAcceptanceQueue.shared.enqueue(cloudKitShareMetadata)
     }
 
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable : Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        guard let notification = CKNotification(fromRemoteNotificationDictionary: userInfo),
+              let subscriptionID = notification.subscriptionID,
+              subscriptionID.hasPrefix("kakebo.sharedLedger.")
+        else {
+            completionHandler(.noData)
+            return
+        }
+
+        NotificationCenter.default.post(name: .cloudKitDatabaseChanged, object: notification)
+        completionHandler(.newData)
+    }
+
     // ユニバーサルリンク経由の共有招待（バックアップで .onOpenURL が呼ばれない環境に備えて冗長に受け取る）
     func application(
         _ application: UIApplication,

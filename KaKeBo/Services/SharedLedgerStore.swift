@@ -61,6 +61,8 @@ final class SharedLedgerStore: ObservableObject {
     private let defaults = UserDefaults.appGroup
     private var toastTask: Task<Void, Never>?
     private var lastFailedShareMetadata: CKShare.Metadata?
+    private let privateSubscriptionID = "kakebo.sharedLedger.privateChanges"
+    private let sharedSubscriptionID = "kakebo.sharedLedger.sharedChanges"
 
     init(container: CKContainer = .default()) {
         self.container = container
@@ -70,7 +72,7 @@ final class SharedLedgerStore: ObservableObject {
         defaults.migrateIfNeeded(keys: [lastOpenedLedgerKey])
 
         Task {
-            try? await self.ensureSharedZone()
+            await self.configureSharingInfrastructure()
         }
     }
 
@@ -103,8 +105,56 @@ final class SharedLedgerStore: ObservableObject {
     }
 
     private func ensureSharedZone() async throws {
+        let zoneID = SharedLedger.zoneID
+        let shareableZone = makeShareableZone()
+        do {
+            let zones = try await db.recordZones(for: [zoneID])
+            if let existing = zones[zoneID] {
+                if !existing.capabilities.contains(.share) {
+                    _ = try await db.modifyRecordZones(saving: [shareableZone], deleting: [])
+                }
+                return
+            }
+        } catch {
+            if let ckError = error as? CKError, ckError.code != .zoneNotFound {
+                throw error
+            }
+        }
+
+        _ = try await db.modifyRecordZones(saving: [shareableZone], deleting: [])
+    }
+
+    private func makeShareableZone() -> CKRecordZone {
         let zone = CKRecordZone(zoneID: SharedLedger.zoneID)
-        _ = try await db.modifyRecordZones(saving: [zone], deleting: [])
+        zone.capabilities = [.share]
+        return zone
+    }
+
+    private func configureSharingInfrastructure() async {
+        do {
+            try await ensureSharedZone()
+            try await ensureDatabaseSubscription(id: privateSubscriptionID, in: db)
+            try await ensureDatabaseSubscription(id: sharedSubscriptionID, in: sharedDB)
+        } catch {
+            print("❌ [SharedLedgerStore] configureSharingInfrastructure failed: \(error)")
+        }
+    }
+
+    private func ensureDatabaseSubscription(id: String, in database: CKDatabase) async throws {
+        do {
+            _ = try await database.subscription(for: id)
+            return
+        } catch {
+            if let ckError = error as? CKError, ckError.code != .unknownItem {
+                throw error
+            }
+        }
+
+        let subscription = CKDatabaseSubscription(subscriptionID: id)
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true
+        subscription.notificationInfo = info
+        _ = try await database.save(subscription)
     }
 
     private func queryRecords(
@@ -365,6 +415,27 @@ final class SharedLedgerStore: ObservableObject {
         }
     }
 
+    func handleRemoteChange() async {
+        let existing = ledgers
+        let reloadSucceeded = await reloadLedgers(logContext: "remoteChange")
+        let targets = reloadSucceeded ? ledgers : existing
+        await refreshCachedRecords(for: targets)
+    }
+
+    private func refreshCachedRecords(for ledgers: [SharedLedger]) async {
+        guard !ledgers.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { group in
+            for ledger in ledgers {
+                group.addTask { [weak self] in
+                    await self?.reloadCategories(for: ledger)
+                }
+                group.addTask { [weak self] in
+                    await self?.reloadTransactions(for: ledger)
+                }
+            }
+        }
+    }
+
     // MARK: - よく使う取引（共有家計簿）
     func loadFrequentTemplates(for ledger: SharedLedger) {
         let key = frequentTemplatesKey(for: ledger)
@@ -459,6 +530,7 @@ final class SharedLedgerStore: ObservableObject {
         defer { isLoading = false }
         
         do {
+            try await ensureSharedZone()
             let userId = try await currentUserId()
             let ledger = SharedLedger.new(
                 name: name,
@@ -960,6 +1032,7 @@ extension SharedLedgerStore {
     /// 指定した共有家計簿用の CKShare を用意して返す
     /// 既に share がある場合はそれを再利用、無ければ新規作成する
     func prepareShare(for ledger: SharedLedger) async throws -> SharePayload {
+        try await ensureSharedZone()
         // ① 常にサーバー側の最新 rootRecord を取得
         let rootRecord = try await db.record(for: ledger.id)
         
