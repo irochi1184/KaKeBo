@@ -33,8 +33,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
     ) {
-        print("ℹ️ [AppDelegate] userDidAcceptCloudKitShareWith container=\(cloudKitShareMetadata.containerIdentifier), root=\(cloudKitShareMetadata.rootRecordID.recordName)")
+        print("ℹ️ [AppDelegate] userDidAcceptCloudKitShareWith container=\(cloudKitShareMetadata.containerIdentifier)")
         CloudKitShareAcceptanceQueue.shared.enqueue(cloudKitShareMetadata)
+    }
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable : Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        guard let notification = CKNotification(fromRemoteNotificationDictionary: userInfo),
+              let subscriptionID = notification.subscriptionID,
+              subscriptionID.hasPrefix("kakebo.sharedLedger.")
+        else {
+            completionHandler(.noData)
+            return
+        }
+
+        NotificationCenter.default.post(name: .cloudKitDatabaseChanged, object: notification)
+        completionHandler(.newData)
     }
 
     // ユニバーサルリンク経由の共有招待（バックアップで .onOpenURL が呼ばれない環境に備えて冗長に受け取る）
@@ -48,7 +65,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         Task {
             do {
                 let metadata = try await CKContainer.default().shareMetadata(for: url)
-                print("ℹ️ [AppDelegate] shareMetadata resolved (continueUserActivity): container=\(metadata.containerIdentifier), root=\(metadata.rootRecordID.recordName)")
+                print("ℹ️ [AppDelegate] shareMetadata resolved (continueUserActivity): container=\(metadata.containerIdentifier)")
                 CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
             } catch {
                 print("❌ [AppDelegate] shareMetadata error via continueUserActivity for url=\(url.absoluteString): \(error)")
@@ -67,7 +84,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         Task {
             do {
                 let metadata = try await CKContainer.default().shareMetadata(for: url)
-                print("ℹ️ [AppDelegate] shareMetadata resolved (openURL): container=\(metadata.containerIdentifier), root=\(metadata.rootRecordID.recordName)")
+                print("ℹ️ [AppDelegate] shareMetadata resolved (openURL): container=\(metadata.containerIdentifier)")
                 CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
             } catch {
                 print("❌ [AppDelegate] shareMetadata error via openURL for url=\(url.absoluteString): \(error)")
