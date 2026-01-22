@@ -1006,8 +1006,17 @@ private struct FilterSheet: View {
                         get: { dateTo ?? Date() },
                         set: { newVal in dateTo = newVal }
                     )
-                    DatePicker("開始日", selection: fromBinding, displayedComponents: .date)
-                    DatePicker("終了日", selection: toBinding, displayedComponents: .date)
+                    HStack(spacing: 8) {
+                        DatePicker("", selection: fromBinding, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                        Text("～")
+                            .foregroundStyle(.secondary)
+                        DatePicker("", selection: toBinding, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                    }
+                    .environment(\.locale, Locale(identifier: "ja_JP"))
                     if dateFrom != nil || dateTo != nil {
                         Button("期間をクリア") { dateFrom = nil; dateTo = nil }
                             .font(.footnote)
@@ -1175,8 +1184,17 @@ private struct SharedFilterSheet: View {
                         get: { dateTo ?? Date() },
                         set: { newVal in dateTo = newVal }
                     )
-                    DatePicker("開始日", selection: fromBinding, displayedComponents: .date)
-                    DatePicker("終了日", selection: toBinding, displayedComponents: .date)
+                    HStack(spacing: 8) {
+                        DatePicker("", selection: fromBinding, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                        Text("～")
+                            .foregroundStyle(.secondary)
+                        DatePicker("", selection: toBinding, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                    }
+                    .environment(\.locale, Locale(identifier: "ja_JP"))
                     if dateFrom != nil || dateTo != nil {
                         Button("期間をクリア") { dateFrom = nil; dateTo = nil }
                             .font(.footnote)

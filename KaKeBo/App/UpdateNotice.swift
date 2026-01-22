@@ -72,6 +72,7 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
+        .init(title: "分析の期間が見やすく", message: "分析タブの期間表示が日本向けの形式になり、日付の間に「～」を入れて分かりやすくしました。", symbol: "calendar.badge.clock", tint: .blue),
         .init(title: "カレンダーに金額を数字で表示", message: "カレンダーの日ごとの金額をとても小さな文字でも数字で確認できるようにしました。", symbol: "textformat.123", tint: .green),
         .init(title: "日別推移がカテゴリの色でひと目で分かる", message: "ホームの棒グラフがカテゴリごとの色で表示され、どの支出が多い日なのか見分けやすくなりました。", symbol: "chart.bar.fill", tint: .teal),
         .init(title: "履歴のグラフが安定して表示される", message: "フィルター結果の棒グラフが最後まで正しく表示され、安心して確認できるようになりました。", symbol: "checkmark.circle.fill", tint: .blue),
