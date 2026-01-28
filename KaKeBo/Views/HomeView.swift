@@ -716,6 +716,7 @@ private struct TransactionRow: View {
 private struct TransactionListCard<RowID: Hashable>: View {
     let title: String
     let rows: [Row]
+    let emptyMessage: String
     let onEdit: ((RowID) -> Void)?
     let onDelete: ((RowID) -> Void)?
     
@@ -730,35 +731,53 @@ private struct TransactionListCard<RowID: Hashable>: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             
-            LazyVStack(spacing: 0) {
-                ForEach(rows) { row in
-                    Button {
-                        onEdit?(row.id)
-                    } label: {
-                        TransactionRow(row: row.content)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(.thinMaterial)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        if let onDelete {
-                            Button(role: .destructive) {
-                                onDelete(row.id)
+            Group {
+                if rows.isEmpty {
+                    Text(emptyMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                        .padding(.horizontal, 12)
+                        .background(.thinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(.secondary.opacity(0.12), lineWidth: 1)
+                        )
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(rows) { row in
+                            Button {
+                                onEdit?(row.id)
                             } label: {
-                                Label("削除", systemImage: "trash")
+                                TransactionRow(row: row.content)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(.thinMaterial)
                             }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                if let onDelete {
+                                    Button(role: .destructive) {
+                                        onDelete(row.id)
+                                    } label: {
+                                        Label("削除", systemImage: "trash")
+                                    }
+                                }
+                            }
+                            
+                            Divider().opacity(0.12)
                         }
                     }
-                    
-                    Divider().opacity(0.12)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(.secondary.opacity(0.12), lineWidth: 1)
+                    )
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(.secondary.opacity(0.12), lineWidth: 1)
-            )
         }
     }
 }
@@ -771,6 +790,7 @@ extension TransactionListCard where RowID == UUID {
         onDeleteIDs: @escaping ([UUID]) -> Void
     ) {
         self.title = "履歴"
+        self.emptyMessage = "この月の履歴がまだありません。"
         
         self.rows = transactions.map { tx in
             let cat = categories.first(where: { $0.id == tx.categoryId })
@@ -809,6 +829,7 @@ extension TransactionListCard where RowID == CKRecord.ID {
         onEdit: ((SharedTransaction) -> Void)? = nil
     ) {
         self.title = "共有家計簿の履歴"
+        self.emptyMessage = "この月の共有家計簿の履歴がまだありません。"
 
         self.rows = sharedTransactions.sorted(by: { $0.date > $1.date }).map { tx in
             let cat: SharedCategory? = {
