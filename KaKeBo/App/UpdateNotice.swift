@@ -72,6 +72,7 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
+        .init(title: "履歴がない月でも迷わない", message: "今月の履歴がまだないときは、画面内にやさしい案内が表示されるようになりました。", symbol: "list.bullet.below.rectangle", tint: .orange),
         .init(title: "カレンダーに金額を数字で表示", message: "カレンダーの日ごとの金額をとても小さな文字でも数字で確認できるようにしました。", symbol: "textformat.123", tint: .green),
         .init(title: "日別推移がカテゴリの色でひと目で分かる", message: "ホームの棒グラフがカテゴリごとの色で表示され、どの支出が多い日なのか見分けやすくなりました。", symbol: "chart.bar.fill", tint: .teal),
         .init(title: "履歴のグラフが安定して表示される", message: "フィルター結果の棒グラフが最後まで正しく表示され、安心して確認できるようになりました。", symbol: "checkmark.circle.fill", tint: .blue),
