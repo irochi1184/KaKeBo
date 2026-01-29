@@ -12,6 +12,7 @@ struct RootTabView: View {
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @EnvironmentObject var appRoute: AppRoute
+    @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.colorScheme) private var scheme
     @State private var showSettings = false
     
@@ -33,6 +34,7 @@ struct RootTabView: View {
                 .tabItem { Label("設定", systemImage: "gearshape.fill") }
                 .tag(AppRoute.Tab.settings)
         }
+        .toolbar(ledgerContext.isRestored ? .visible : .hidden, for: .tabBar)
         .overlay(TutorialGate())
         .overlay(UpdateNoticeGate())
         .overlay(NewYearReview2026Gate())
