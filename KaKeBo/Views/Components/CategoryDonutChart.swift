@@ -142,6 +142,9 @@ private struct DiffBadge: View {
     var useFlatStyle: Bool = false
     
     var body: some View {
+        let fillStyle: AnyShapeStyle = useFlatStyle
+            ? AnyShapeStyle(bg.opacity(0.12))
+            : AnyShapeStyle(bg.gradient.opacity(0.85))
         let percent: Double? = {
             switch mode {
             case .expense:
@@ -185,7 +188,7 @@ private struct DiffBadge: View {
         .padding(.vertical, 4).padding(.horizontal, 8)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(useFlatStyle ? bg.opacity(0.12) : bg.gradient.opacity(0.85))
+                .fill(fillStyle)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
