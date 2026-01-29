@@ -28,6 +28,15 @@ extension AppTheme.Preset {
     }
 }
 
+extension AppTheme.HomeCardStyle {
+    var title: String {
+        switch self {
+        case .luxe: return "立体感あり"
+        case .flat: return "シンプル"
+        }
+    }
+}
+
 struct RGBAColor: Codable, Equatable {
     var r: Double; var g: Double; var b: Double; var a: Double
     
@@ -50,6 +59,7 @@ struct RGBAColor: Codable, Equatable {
 struct AppTheme: Codable, Equatable {
     // アクセント
     enum Preset: String, Codable, CaseIterable { case `default`, green, red, orange, custom }
+    enum HomeCardStyle: String, Codable, CaseIterable { case luxe, flat }
     
     // 現在有効なプリセット（カスタム編集をしたら custom に）
     var activePreset: Preset = .default
@@ -68,6 +78,9 @@ struct AppTheme: Codable, Equatable {
     var prefersCustomKeypad: Bool = true
     var keypadIncomeRGBA: RGBAColor = .init(Color.green)
     var keypadExpenseRGBA: RGBAColor = .init(Color.red)
+
+    // ホームカード
+    var homeCardStyle: HomeCardStyle = .luxe
     
     mutating func apply(_ preset: Preset) {
         activePreset = preset

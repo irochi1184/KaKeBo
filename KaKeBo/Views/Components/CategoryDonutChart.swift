@@ -32,6 +32,7 @@ struct CategoryDonutChart: View {
     let previousTotal: Int
     var minShareToShowLabel: Double = 0.08
     var isExpense: Bool = true // 表示バッジの文言/色に反映
+    var useFlatStyle: Bool = false
     
     @Environment(\.colorScheme) private var scheme
     
@@ -57,7 +58,8 @@ struct CategoryDonutChart: View {
                     DiffBadge(
                         current: currentTotal,
                         previous: previousTotal,
-                        mode: isExpense ? .expense : .balance
+                        mode: isExpense ? .expense : .balance,
+                        useFlatStyle: useFlatStyle
                     )
                 }
                 
@@ -114,7 +116,7 @@ struct CategoryDonutChart: View {
                     }
                 }
             }
-//            .luxCard()
+//            .homeCard()
     }
     
     // MARK: - Helpers
@@ -137,6 +139,7 @@ private struct DiffBadge: View {
     let current: Int
     let previous: Int
     var mode: Mode = .expense            // ← 既定は “支出”
+    var useFlatStyle: Bool = false
     
     var body: some View {
         let percent: Double? = {
@@ -178,10 +181,16 @@ private struct DiffBadge: View {
             Text(text)
         }
         .font(.caption.weight(.semibold))
-        .foregroundStyle(.white)
+        .foregroundStyle(useFlatStyle ? bg : .white)
         .padding(.vertical, 4).padding(.horizontal, 8)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(bg.gradient.opacity(0.85)))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(.white.opacity(0.1), lineWidth: 1))
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(useFlatStyle ? bg.opacity(0.12) : bg.gradient.opacity(0.85))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(useFlatStyle ? bg.opacity(0.25) : .white.opacity(0.1), lineWidth: 1)
+        )
     }
 }
 
@@ -201,6 +210,7 @@ struct CategoryDonutPager: View {
     
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
+        let isFlat = themeStore.theme.homeCardStyle == .flat
         let pagerHeight = max(requiredHeight(forCount: expense.count),
                               requiredHeight(forCount: income.count))
         
@@ -217,7 +227,8 @@ struct CategoryDonutPager: View {
                             breakdown: expense,
                             currentTotal: expenseCurrentTotal,
                             previousTotal: expensePreviousTotal,
-                            isExpense: true
+                            isExpense: true,
+                            useFlatStyle: isFlat
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
@@ -229,7 +240,8 @@ struct CategoryDonutPager: View {
                             breakdown: income,
                             currentTotal: incomeCurrentTotal,
                             previousTotal: incomePreviousTotal,
-                            isExpense: false
+                            isExpense: false,
+                            useFlatStyle: isFlat
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
@@ -244,12 +256,18 @@ struct CategoryDonutPager: View {
                     Button {
                         withAnimation(.interactiveSpring()) { page = max(page - 1, 0) }
                     } label: {
-                        Image(systemName: "chevron.left.circle.fill")
+                        Image(systemName: isFlat ? "chevron.left" : "chevron.left.circle.fill")
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(accent)
                             .opacity(page == 0 ? 0.25 : 0.9)
                             .padding(4)
-                            .background(.ultraThinMaterial, in: Circle())
+                            .background(
+                                Group {
+                                    if !isFlat {
+                                        Circle().fill(.ultraThinMaterial)
+                                    }
+                                }
+                            )
                     }
                     .disabled(page == 0)
                     .accessibilityLabel("前のページ")
@@ -260,12 +278,18 @@ struct CategoryDonutPager: View {
                     Button {
                         withAnimation(.interactiveSpring()) { page = min(page + 1, 1) }
                     } label: {
-                        Image(systemName: "chevron.right.circle.fill")
+                        Image(systemName: isFlat ? "chevron.right" : "chevron.right.circle.fill")
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(accent)
                             .opacity(page == 1 ? 0.25 : 0.9)
                             .padding(4)
-                            .background(.ultraThinMaterial, in: Circle())
+                            .background(
+                                Group {
+                                    if !isFlat {
+                                        Circle().fill(.ultraThinMaterial)
+                                    }
+                                }
+                            )
                     }
                     .disabled(page == 1)
                     .accessibilityLabel("次のページ")
@@ -276,7 +300,7 @@ struct CategoryDonutPager: View {
                 .zIndex(10)
             }
             .frame(height: pagerHeight)   // ← 動的高さ
-            .luxCard()
+            .homeCard()
         }
     }
     
@@ -301,4 +325,3 @@ struct CategoryDonutPager: View {
         return CGFloat(rows) * rowHeight + CGFloat(max(0, rows-1)) * rowSpacing
     }
 }
-

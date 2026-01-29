@@ -189,7 +189,7 @@ struct HomeView: View {
                         expense: sharedMonthExpense(txs: allTxs),
                         balance: sharedMonthBalance(txs: allTxs)
                     )
-                    .luxCard()
+                    .homeCard()
                     .padding(.horizontal)
                     
                     // ② カテゴリ別 ドーナツグラフ
@@ -202,7 +202,7 @@ struct HomeView: View {
                             incomeCurrentTotal: sharedMonthIncome(txs: allTxs),
                             incomePreviousTotal: sharedPrevMonthIncome(allTxs: allTxs)
                         )
-                        .luxCard()
+                        .homeCard()
                         .padding(.horizontal)
                         .onTapGesture {
                             breakdownSheet = CategoryBreakdownSheetData(
@@ -217,7 +217,7 @@ struct HomeView: View {
                     // ③ 日別棒グラフ
                     if !dailyPoints.isEmpty {
                         DailyBarChart(series: dailyPoints)
-                            .luxCard()
+                            .homeCard()
                             .padding(.horizontal)
                     }
                     
@@ -231,7 +231,7 @@ struct HomeView: View {
                         categories: cats,
                         onEdit: { tx in editingSharedTx = tx }
                     )
-                    .luxCard()
+                    .homeCard()
                     .padding(.horizontal)
 
                     
@@ -279,7 +279,7 @@ struct HomeView: View {
                 expense: monthExpense,
                 balance: monthBalance
             )
-            .luxCard()
+            .homeCard()
             
         case .donut:
             CategoryDonutPager(
@@ -290,7 +290,7 @@ struct HomeView: View {
                 incomeCurrentTotal: monthIncome,
                 incomePreviousTotal: prevMonthIncome
             )
-            .luxCard()
+            .homeCard()
             .onTapGesture {
                 breakdownSheet = CategoryBreakdownSheetData(
                     title: monthTitle(selectedMonth),
@@ -302,7 +302,7 @@ struct HomeView: View {
 
         case .daily:
             DailyBarChart(series: dailySeries)
-                .luxCard()
+                .homeCard()
             
         case .transactions:
             TransactionListCard(
@@ -311,7 +311,7 @@ struct HomeView: View {
                 onEdit: { tx in editingTx = tx },
                 onDeleteIDs: { ids in store.deleteTransactions(with: ids) }
             )
-            .luxCard()
+            .homeCard()
         }
     }
     
