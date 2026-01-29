@@ -303,7 +303,6 @@ struct CategoryDonutPager: View {
                 .zIndex(10)
             }
             .frame(height: pagerHeight)   // ← 動的高さ
-            .homeCard()
         }
     }
     

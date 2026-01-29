@@ -34,15 +34,67 @@ struct HomeCard: ViewModifier {
             content.luxCard(corner: corner)
         case .flat:
             content
-                .padding(16)
+                .padding(.vertical, 12)
+                .padding(.leading, 36)
+                .padding(.trailing, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    RoundedRectangle(cornerRadius: corner, style: .continuous)
-                        .fill(scheme == .dark ? Color.white.opacity(0.05) : .white)
+                    NotebookPaperBackground(scheme: scheme)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: corner, style: .continuous)
-                        .stroke(scheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.06), lineWidth: 1)
+                    NotebookMarginLine(scheme: scheme)
                 )
+        }
+    }
+}
+
+private struct NotebookPaperBackground: View {
+    let scheme: ColorScheme
+    private var background: Color {
+        scheme == .dark ? Color.white.opacity(0.04) : Color(red: 0.99, green: 0.98, blue: 0.96)
+    }
+    private var lineColor: Color {
+        scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.07)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let height = proxy.size.height
+            let width = proxy.size.width
+            let spacing: CGFloat = 18
+
+            ZStack(alignment: .topLeading) {
+                Rectangle()
+                    .fill(background)
+
+                Path { path in
+                    var y: CGFloat = spacing
+                    while y < height {
+                        path.move(to: CGPoint(x: 0, y: y))
+                        path.addLine(to: CGPoint(x: width, y: y))
+                        y += spacing
+                    }
+                }
+                .stroke(lineColor, lineWidth: 1)
+            }
+        }
+    }
+}
+
+private struct NotebookMarginLine: View {
+    let scheme: ColorScheme
+    private var lineColor: Color {
+        scheme == .dark ? Color.red.opacity(0.35) : Color.red.opacity(0.25)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            Path { path in
+                let x: CGFloat = 18
+                path.move(to: CGPoint(x: x, y: 0))
+                path.addLine(to: CGPoint(x: x, y: proxy.size.height))
+            }
+            .stroke(lineColor, style: StrokeStyle(lineWidth: 1, dash: [4, 6]))
         }
     }
 }

@@ -12,7 +12,6 @@ struct MonthlyHeaderCard: View {
     let expense: Int
     let balance: Int
     @EnvironmentObject var themeStore: ThemeStore
-    @Environment(\.colorScheme) private var scheme
     
     var body: some View {
         let isFlat = themeStore.theme.homeCardStyle == .flat
@@ -34,7 +33,6 @@ struct MonthlyHeaderCard: View {
                     StatPill(title: "収入", value: income, icon: "arrow.up.right.circle.fill", base: .green.opacity(0.75), isFlat: isFlat)
                 }
             }
-            .homeCard()
         }
     }
     
