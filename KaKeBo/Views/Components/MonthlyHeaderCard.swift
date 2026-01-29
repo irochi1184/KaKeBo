@@ -11,8 +11,11 @@ struct MonthlyHeaderCard: View {
     let income: Int
     let expense: Int
     let balance: Int
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
     
     var body: some View {
+        let isFlat = themeStore.theme.homeCardStyle == .flat
         VStack(alignment: .leading, spacing: 6) {
             Text("今月の収支")
                 .font(.subheadline.weight(.semibold))
@@ -27,11 +30,11 @@ struct MonthlyHeaderCard: View {
                 }
                 
                 HStack(spacing: 12) {
-                    StatPill(title: "支出", value: expense, icon: "arrow.down.left.circle.fill", base: .red.opacity(0.75))
-                    StatPill(title: "収入", value: income, icon: "arrow.up.right.circle.fill", base: .green.opacity(0.75))
+                    StatPill(title: "支出", value: expense, icon: "arrow.down.left.circle.fill", base: .red.opacity(0.75), isFlat: isFlat)
+                    StatPill(title: "収入", value: income, icon: "arrow.up.right.circle.fill", base: .green.opacity(0.75), isFlat: isFlat)
                 }
             }
-            .luxCard()
+            .homeCard()
         }
     }
     
@@ -50,6 +53,8 @@ private struct StatPill: View {
     let value: Int
     let icon: String
     let base: Color
+    let isFlat: Bool
+    @Environment(\.colorScheme) private var scheme
     
     // ▼ iPhone SE など小型端末判定
     private var isSmallPhone: Bool {
@@ -64,6 +69,23 @@ private struct StatPill: View {
     private var iconScale: CGFloat { isSmallPhone ? 0.75 : 1.0 }
     
     var body: some View {
+        if isFlat {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(base.opacity(scheme == .dark ? 0.9 : 0.8))
+                Text(currency(value))
+                    .font(.headline.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(base)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .allowsTightening(true)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
+        } else {
         HStack(spacing: 10 * iconScale) {
             Image(systemName: icon)
                 .foregroundStyle(.white)
@@ -93,6 +115,7 @@ private struct StatPill: View {
             RoundedRectangle(cornerRadius: 12 * iconScale, style: .continuous)
                 .fill(base.opacity(0.12))
         )
+        }
     }
     
     private func currency(_ n: Int) -> String {

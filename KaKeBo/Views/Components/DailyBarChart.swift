@@ -54,7 +54,7 @@ struct DailyBarChart: View {
                 }
             }
             .frame(height: 220)
-            .luxCard()
+            .homeCard()
         }
     }
     

@@ -36,6 +36,18 @@ struct ThemeSettingsView: View {
                     }
                 )
             }
+
+            Section("ホームカード") {
+                Picker("カードデザイン", selection: Binding(
+                    get: { working.homeCardStyle },
+                    set: { newVal in var w = working; w.homeCardStyle = newVal; working = w }
+                )) {
+                    ForEach(AppTheme.HomeCardStyle.allCases, id: \.self) {
+                        Text($0.title).tag($0)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
             
             // === カスタム（プレミアム限定） ===
             Section("カスタム（プレミアム）") {
@@ -90,7 +102,8 @@ struct ThemeSettingsView: View {
                 let s = previewMode.colorScheme
                 HomePreview(
                     background: working.backgroundColor(for: s),
-                    accent: working.accentColor(for: s)
+                    accent: working.accentColor(for: s),
+                    cardStyle: working.homeCardStyle
                 )
                 .environment(\.colorScheme, s)
                 .frame(maxHeight: 160)
@@ -245,6 +258,7 @@ private struct LockedCustomSection: View {
 private struct HomePreview: View {
     var background: Color
     var accent: Color
+    var cardStyle: AppTheme.HomeCardStyle
     var body: some View {
         ZStack {
             Rectangle().fill(background)
@@ -254,18 +268,42 @@ private struct HomePreview: View {
                     Spacer()
                     Button("追加") { }.buttonStyle(.borderedProminent).tint(accent)
                 }.padding(.horizontal, 12)
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.thinMaterial)
-                    .overlay(
-                        VStack(spacing: 4) {
-                            Text("¥12,345").font(.title2.weight(.semibold))
-                            Text("今月の支出").font(.caption).foregroundStyle(.secondary)
-                        }
-                    )
-                    .frame(height: 90)
-                    .padding(.horizontal, 12)
+                VStack(spacing: 4) {
+                    Text("¥12,345").font(.title2.weight(.semibold))
+                    Text("今月の支出").font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .modifier(HomePreviewCardStyle(cardStyle: cardStyle))
+                .padding(.horizontal, 12)
             }
             .padding(.vertical, 10)
+        }
+    }
+}
+
+private struct HomePreviewCardStyle: ViewModifier {
+    let cardStyle: AppTheme.HomeCardStyle
+    @Environment(\.colorScheme) private var scheme
+    func body(content: Content) -> some View {
+        switch cardStyle {
+        case .luxe:
+            content
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(scheme == .dark ? Color.white.opacity(0.08) : .white.opacity(0.9))
+                        .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
+                )
+        case .flat:
+            content
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(scheme == .dark ? Color.white.opacity(0.05) : .white)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(scheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08), lineWidth: 1)
+                )
         }
     }
 }
