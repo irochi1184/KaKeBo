@@ -736,17 +736,13 @@ private struct TransactionListCard<RowID: Hashable>: View {
             Group {
                 if rows.isEmpty {
                     if isFlat {
-                        VStack(spacing: 8) {
+                        VStack(spacing: 6) {
                             Text(emptyMessage)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 18)
-                                .padding(.horizontal, 12)
-                            Rectangle()
-                                .fill(.secondary.opacity(0.18))
-                                .frame(height: 1)
                                 .padding(.horizontal, 12)
                         }
                     } else {
@@ -766,7 +762,7 @@ private struct TransactionListCard<RowID: Hashable>: View {
                     }
                 } else {
                     LazyVStack(spacing: 0) {
-                        ForEach(rows) { row in
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                             Button {
                                 onEdit?(row.id)
                             } label: {
@@ -775,10 +771,11 @@ private struct TransactionListCard<RowID: Hashable>: View {
                                     .padding(.vertical, 10)
                                     .background(isFlat ? .clear : .thinMaterial)
                                     .overlay(alignment: .bottom) {
-                                        if isFlat {
+                                        if isFlat && index < rows.count - 1 {
                                             Rectangle()
                                                 .fill(.secondary.opacity(0.18))
-                                                .frame(height: 1)
+                                                .frame(height: 0.5)
+                                                .padding(.horizontal, 16)
                                         }
                                     }
                             }
