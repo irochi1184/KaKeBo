@@ -142,9 +142,6 @@ private struct DiffBadge: View {
     var useFlatStyle: Bool = false
     
     var body: some View {
-        let fillStyle: AnyShapeStyle = useFlatStyle
-            ? AnyShapeStyle(bg.opacity(0.12))
-            : AnyShapeStyle(bg.gradient.opacity(0.85))
         let percent: Double? = {
             switch mode {
             case .expense:
@@ -178,6 +175,9 @@ private struct DiffBadge: View {
                 return ("先月比", .secondary, "minus")
             }
         }()
+        let fillStyle: AnyShapeStyle = useFlatStyle
+            ? AnyShapeStyle(bg.opacity(0.12))
+            : AnyShapeStyle(bg.gradient.opacity(0.85))
         
         HStack(spacing: 6) {
             Image(systemName: icon)
