@@ -733,77 +733,75 @@ private struct TransactionListCard<RowID: Hashable>: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             
-            Group {
-                if rows.isEmpty {
-                    if isFlat {
-                        VStack(spacing: 6) {
-                            Text(emptyMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 18)
-                                .padding(.horizontal, 12)
-                        }
-                    } else {
+            if rows.isEmpty {
+                if isFlat {
+                    VStack(spacing: 6) {
                         Text(emptyMessage)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 24)
+                            .padding(.vertical, 18)
                             .padding(.horizontal, 12)
-                            .background(.thinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(.secondary.opacity(0.12), lineWidth: 1)
-                            )
                     }
                 } else {
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                            Button {
-                                onEdit?(row.id)
-                            } label: {
-                                TransactionRow(row: row.content)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
-                                    .background(isFlat ? .clear : .thinMaterial)
-                                    .overlay(alignment: .bottom) {
-                                        if isFlat && index < rows.count - 1 {
-                                            Rectangle()
-                                                .fill(.secondary.opacity(0.18))
-                                                .frame(height: 0.5)
-                                                .padding(.horizontal, 16)
-                                        }
-                                    }
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                if let onDelete {
-                                    Button(role: .destructive) {
-                                        onDelete(row.id)
-                                    } label: {
-                                        Label("削除", systemImage: "trash")
+                    Text(emptyMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                        .padding(.horizontal, 12)
+                        .background(.thinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(.secondary.opacity(0.12), lineWidth: 1)
+                        )
+                }
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        Button {
+                            onEdit?(row.id)
+                        } label: {
+                            TransactionRow(row: row.content)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(isFlat ? .clear : .thinMaterial)
+                                .overlay(alignment: .bottom) {
+                                    if isFlat && index < rows.count - 1 {
+                                        Rectangle()
+                                            .fill(.secondary.opacity(0.18))
+                                            .frame(height: 0.5)
+                                            .padding(.horizontal, 16)
                                     }
                                 }
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            if let onDelete {
+                                Button(role: .destructive) {
+                                    onDelete(row.id)
+                                } label: {
+                                    Label("削除", systemImage: "trash")
+                                }
                             }
-                            if !isFlat {
-                                Divider().opacity(0.12)
-                            }
+                        }
+                        if !isFlat {
+                            Divider().opacity(0.12)
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(
-                        Group {
-                            if !isFlat {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(.secondary.opacity(0.12), lineWidth: 1)
-                            }
-                        }
-                    )
                 }
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    Group {
+                        if !isFlat {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(.secondary.opacity(0.12), lineWidth: 1)
+                        }
+                    }
+                )
             }
         }
     }

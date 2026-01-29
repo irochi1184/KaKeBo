@@ -72,6 +72,7 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
+        .init(title: "履歴の表示が安定しました", message: "履歴の一覧が見やすくなるよう、表示のゆらぎを抑えました。", symbol: "checkmark.seal", tint: .green),
         .init(title: "下線の位置と長さを整えました", message: "ノートの線が必要なところだけに入るように見直し、読みやすくすっきりした見た目にしました。", symbol: "line.horizontal.3.decrease", tint: .orange),
         .init(title: "履歴の線をノートの下線に整えました", message: "履歴の見た目を、必要なところだけ下線が入るシンプルな表示に整えました。書き込んでいく感覚がもっと出ます。", symbol: "line.horizontal.3", tint: .brown),
         .init(title: "ホームのカードをシンプルに切り替え", message: "テーマ設定から、ホーム画面のカードをフラットで素直な見た目に切り替えられるようになりました。色の差だけで収入と支出が分かります。", symbol: "square.on.square", tint: .pink),
