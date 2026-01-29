@@ -765,10 +765,10 @@ private struct TransactionListCard<RowID: Hashable>: View {
                         Button {
                             onEdit?(row.id)
                         } label: {
-                            TransactionRow(row: row.content)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background(isFlat ? .clear : .thinMaterial)
+                                TransactionRow(row: row.content)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(isFlat ? Color.clear : .thinMaterial)
                                 .overlay(alignment: .bottom) {
                                     if isFlat && index < rows.count - 1 {
                                         Rectangle()
