@@ -728,13 +728,9 @@ private struct TransactionListCard<RowID: Hashable>: View {
     
     var body: some View {
         let isFlat = themeStore.theme.homeCardStyle == .flat
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            
-            if rows.isEmpty {
-                if isFlat {
+        let emptyView: AnyView = {
+            if isFlat {
+                return AnyView(
                     VStack(spacing: 6) {
                         Text(emptyMessage)
                             .font(.footnote)
@@ -744,64 +740,79 @@ private struct TransactionListCard<RowID: Hashable>: View {
                             .padding(.vertical, 18)
                             .padding(.horizontal, 12)
                     }
-                } else {
-                    Text(emptyMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 24)
+                )
+            }
+            return AnyView(
+                Text(emptyMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                    .padding(.horizontal, 12)
+                    .background(.thinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(.secondary.opacity(0.12), lineWidth: 1)
+                    )
+            )
+        }()
+
+        let rowsView = LazyVStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                Button {
+                    onEdit?(row.id)
+                } label: {
+                    TransactionRow(row: row.content)
                         .padding(.horizontal, 12)
-                        .background(.thinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(.secondary.opacity(0.12), lineWidth: 1)
-                        )
-                }
-            } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        Button {
-                            onEdit?(row.id)
-                        } label: {
-                                TransactionRow(row: row.content)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
-                                    .background(isFlat ? Color.clear : .thinMaterial)
-                                .overlay(alignment: .bottom) {
-                                    if isFlat && index < rows.count - 1 {
-                                        Rectangle()
-                                            .fill(.secondary.opacity(0.18))
-                                            .frame(height: 0.5)
-                                            .padding(.horizontal, 16)
-                                    }
-                                }
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            if let onDelete {
-                                Button(role: .destructive) {
-                                    onDelete(row.id)
-                                } label: {
-                                    Label("削除", systemImage: "trash")
-                                }
+                        .padding(.vertical, 10)
+                        .background(isFlat ? Color.clear : .thinMaterial)
+                        .overlay(alignment: .bottom) {
+                            if isFlat && index < rows.count - 1 {
+                                Rectangle()
+                                    .fill(.secondary.opacity(0.18))
+                                    .frame(height: 0.5)
+                                    .padding(.horizontal, 16)
                             }
                         }
-                        if !isFlat {
-                            Divider().opacity(0.12)
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    if let onDelete {
+                        Button(role: .destructive) {
+                            onDelete(row.id)
+                        } label: {
+                            Label("削除", systemImage: "trash")
                         }
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    Group {
-                        if !isFlat {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(.secondary.opacity(0.12), lineWidth: 1)
-                        }
+                if !isFlat {
+                    Divider().opacity(0.12)
+                }
+            }
+        }
+
+        let listView = rowsView
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                Group {
+                    if !isFlat {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(.secondary.opacity(0.12), lineWidth: 1)
                     }
-                )
+                }
+            )
+
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            
+            if rows.isEmpty {
+                emptyView
+            } else {
+                listView
             }
         }
     }
