@@ -72,14 +72,8 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
-        .init(title: "準備中は下のボタンを非表示に", message: "起動直後の準備画面ではタブのボタンを隠し、表示がすっきり見えるようになりました。", symbol: "eye.slash.fill", tint: .blue),
-        .init(title: "カレンダーに金額を数字で表示", message: "カレンダーの日ごとの金額をとても小さな文字でも数字で確認できるようにしました。", symbol: "textformat.123", tint: .green),
+        .init(title: "ホームのカードをシンプルに切り替え", message: "テーマ設定から、ホーム画面のカードをフラットで素直な見た目に切り替えられるようになりました。色の差だけで収入と支出が分かります。", symbol: "square.on.square", tint: .pink),
         .init(title: "日別推移がカテゴリの色でひと目で分かる", message: "ホームの棒グラフがカテゴリごとの色で表示され、どの支出が多い日なのか見分けやすくなりました。", symbol: "chart.bar.fill", tint: .teal),
-        .init(title: "履歴のグラフが安定して表示される", message: "フィルター結果の棒グラフが最後まで正しく表示され、安心して確認できるようになりました。", symbol: "checkmark.circle.fill", tint: .blue),
-        .init(title: "共有家計簿のデータつながりを整理", message: "カテゴリや取引が必ず共有ルートに結びつくようにそろえました。招待後の参加側でも同じ内容を受け取れるよう、裏側のつながりを整えています。", symbol: "link.badge.plus", tint: .green),
-        .init(title: "共有家計簿の同期がすぐ反映される", message: "相手が追加した内容が、画面を開いたままでもすぐに反映されるようになりました。", symbol: "bolt.horizontal.circle.fill", tint: .blue),
-        .init(title: "共有招待がうまくいかないときに再試行ボタンを表示", message: "招待リンクを開いたときの反応を詳しく記録し、失敗時はその場で再試行できるボタンを出すようにしました。開くを押しても進まないときの手がかりを残します。", symbol: "arrow.triangle.2.circlepath", tint: .orange),
-        .init(title: "共有招待の参加がスムーズに", message: "招待リンクを開くだけで参加手続きが進み、すでに参加している場合もその場で分かるようになりました。", symbol: "person.2.badge.plus", tint: .indigo),
         .init(title: "大きいウィジェットでカレンダーを確認", message: "ホーム画面の最大サイズのウィジェットに当月カレンダーを表示できるようになり、日付を押すとその日の家計簿をすぐ開けます。", symbol: "calendar", tint: .blue),
         .init(title: "固定費の合計をひと目で確認", message: "固定費の管理シートに有効な固定費の合計金額を表示するようになり、毎月の支出をすぐに把握できます。", symbol: "yensign.circle.fill", tint: .mint),
         .init(title: "バックアップの家計簿選択を改善", message: "個人用・共有家計簿ごとに作成／復元を選べる新しいシートを追加し、失敗時に気付きやすいよう堅牢性を高めました。", symbol: "arrow.triangle.2.circlepath", tint: .purple),
