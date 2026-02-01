@@ -72,6 +72,7 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
+        .init(title: "背景の見た目を整えました", message: "履歴の行の背景が自然に見えるように整えました。", symbol: "rectangle.on.rectangle", tint: .teal),
         .init(title: "履歴の表示が軽くなりました", message: "履歴の一覧がスムーズに表示されるように整えました。", symbol: "speedometer", tint: .mint),
         .init(title: "背景の表示が安定しました", message: "履歴の行の背景が安定して表示されるように整えました。", symbol: "checkmark.circle", tint: .teal),
         .init(title: "履歴の表示が安定しました", message: "履歴の一覧が見やすくなるよう、表示のゆらぎを抑えました。", symbol: "checkmark.seal", tint: .green),

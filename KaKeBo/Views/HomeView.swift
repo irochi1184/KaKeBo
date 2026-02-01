@@ -767,7 +767,13 @@ private struct TransactionListCard<RowID: Hashable>: View {
                     TransactionRow(row: row.content)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
-                        .background(isFlat ? Color.clear : .thinMaterial)
+                        .background {
+                            if isFlat {
+                                Color.clear
+                            } else {
+                                Rectangle().fill(.thinMaterial)
+                            }
+                        }
                         .overlay(alignment: .bottom) {
                             if isFlat && index < rows.count - 1 {
                                 Rectangle()
