@@ -12,26 +12,33 @@ struct RootTabView: View {
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @EnvironmentObject var appRoute: AppRoute
+    @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.colorScheme) private var scheme
     @State private var showSettings = false
     
     var body: some View {
-        TabView(selection: tabSelection) {
-            HomeView()
-                .tabItem { Label("ホーム", systemImage: "house.fill") }
-                .tag(AppRoute.Tab.home)
-            CalendarScreen()
-                .tabItem { Label("カレンダー", systemImage: "calendar") }
-                .tag(AppRoute.Tab.calendar)
-            ReportsView()
-                .tabItem { Label("レポート", systemImage: "chart.pie.fill") }
-                .tag(AppRoute.Tab.reports)
-            AllTransactionsView()
-                .tabItem { Label("履歴", systemImage: "magnifyingglass") }
-                .tag(AppRoute.Tab.history)
-            SettingsView()
-                .tabItem { Label("設定", systemImage: "gearshape.fill") }
-                .tag(AppRoute.Tab.settings)
+        Group {
+            if ledgerContext.isRestored {
+                TabView(selection: tabSelection) {
+                    HomeView()
+                        .tabItem { Label("ホーム", systemImage: "house.fill") }
+                        .tag(AppRoute.Tab.home)
+                    CalendarScreen()
+                        .tabItem { Label("カレンダー", systemImage: "calendar") }
+                        .tag(AppRoute.Tab.calendar)
+                    ReportsView()
+                        .tabItem { Label("レポート", systemImage: "chart.pie.fill") }
+                        .tag(AppRoute.Tab.reports)
+                    AllTransactionsView()
+                        .tabItem { Label("履歴", systemImage: "magnifyingglass") }
+                        .tag(AppRoute.Tab.history)
+                    SettingsView()
+                        .tabItem { Label("設定", systemImage: "gearshape.fill") }
+                        .tag(AppRoute.Tab.settings)
+                }
+            } else {
+                LedgerLoadingView()
+            }
         }
         .overlay(TutorialGate())
         .overlay(UpdateNoticeGate())
