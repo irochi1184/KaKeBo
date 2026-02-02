@@ -40,6 +40,7 @@ struct RootTabView: View {
                 LedgerLoadingView()
             }
         }
+        .toolbar(ledgerContext.isRestored ? .visible : .hidden, for: .tabBar)
         .overlay(TutorialGate())
         .overlay(UpdateNoticeGate())
         .overlay(NewYearReview2026Gate())

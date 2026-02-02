@@ -189,7 +189,7 @@ struct HomeView: View {
                         expense: sharedMonthExpense(txs: allTxs),
                         balance: sharedMonthBalance(txs: allTxs)
                     )
-                    .luxCard()
+                    .homeCard()
                     .padding(.horizontal)
                     
                     // ② カテゴリ別 ドーナツグラフ
@@ -202,7 +202,7 @@ struct HomeView: View {
                             incomeCurrentTotal: sharedMonthIncome(txs: allTxs),
                             incomePreviousTotal: sharedPrevMonthIncome(allTxs: allTxs)
                         )
-                        .luxCard()
+                        .homeCard()
                         .padding(.horizontal)
                         .onTapGesture {
                             breakdownSheet = CategoryBreakdownSheetData(
@@ -217,7 +217,7 @@ struct HomeView: View {
                     // ③ 日別棒グラフ
                     if !dailyPoints.isEmpty {
                         DailyBarChart(series: dailyPoints)
-                            .luxCard()
+                            .homeCard()
                             .padding(.horizontal)
                     }
                     
@@ -231,7 +231,7 @@ struct HomeView: View {
                         categories: cats,
                         onEdit: { tx in editingSharedTx = tx }
                     )
-                    .luxCard()
+                    .homeCard()
                     .padding(.horizontal)
 
                     
@@ -279,7 +279,7 @@ struct HomeView: View {
                 expense: monthExpense,
                 balance: monthBalance
             )
-            .luxCard()
+            .homeCard()
             
         case .donut:
             CategoryDonutPager(
@@ -290,7 +290,7 @@ struct HomeView: View {
                 incomeCurrentTotal: monthIncome,
                 incomePreviousTotal: prevMonthIncome
             )
-            .luxCard()
+            .homeCard()
             .onTapGesture {
                 breakdownSheet = CategoryBreakdownSheetData(
                     title: monthTitle(selectedMonth),
@@ -302,7 +302,7 @@ struct HomeView: View {
 
         case .daily:
             DailyBarChart(series: dailySeries)
-                .luxCard()
+                .homeCard()
             
         case .transactions:
             TransactionListCard(
@@ -311,7 +311,7 @@ struct HomeView: View {
                 onEdit: { tx in editingTx = tx },
                 onDeleteIDs: { ids in store.deleteTransactions(with: ids) }
             )
-            .luxCard()
+            .homeCard()
         }
     }
     
@@ -716,8 +716,10 @@ private struct TransactionRow: View {
 private struct TransactionListCard<RowID: Hashable>: View {
     let title: String
     let rows: [Row]
+    let emptyMessage: String
     let onEdit: ((RowID) -> Void)?
     let onDelete: ((RowID) -> Void)?
+    @EnvironmentObject var themeStore: ThemeStore
     
     struct Row: Identifiable {
         let id: RowID
@@ -725,40 +727,99 @@ private struct TransactionListCard<RowID: Hashable>: View {
     }
     
     var body: some View {
+        let isFlat = themeStore.theme.homeCardStyle == .flat
+        let emptyView: AnyView = {
+            if isFlat {
+                return AnyView(
+                    VStack(spacing: 6) {
+                        Text(emptyMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                            .padding(.horizontal, 12)
+                    }
+                )
+            }
+            return AnyView(
+                Text(emptyMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                    .padding(.horizontal, 12)
+                    .background(.thinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(.secondary.opacity(0.12), lineWidth: 1)
+                    )
+            )
+        }()
+
+        let rowsView = LazyVStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                Button {
+                    onEdit?(row.id)
+                } label: {
+                    TransactionRow(row: row.content)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background {
+                            if isFlat {
+                                Color.clear
+                            } else {
+                                Rectangle().fill(.thinMaterial)
+                            }
+                        }
+                        .overlay(alignment: .bottom) {
+                            if isFlat && index < rows.count - 1 {
+                                Rectangle()
+                                    .fill(.secondary.opacity(0.18))
+                                    .frame(height: 0.5)
+                                    .padding(.horizontal, 16)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    if let onDelete {
+                        Button(role: .destructive) {
+                            onDelete(row.id)
+                        } label: {
+                            Label("削除", systemImage: "trash")
+                        }
+                    }
+                }
+                if !isFlat {
+                    Divider().opacity(0.12)
+                }
+            }
+        }
+
+        let listView = rowsView
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                Group {
+                    if !isFlat {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(.secondary.opacity(0.12), lineWidth: 1)
+                    }
+                }
+            )
+
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             
-            LazyVStack(spacing: 0) {
-                ForEach(rows) { row in
-                    Button {
-                        onEdit?(row.id)
-                    } label: {
-                        TransactionRow(row: row.content)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(.thinMaterial)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        if let onDelete {
-                            Button(role: .destructive) {
-                                onDelete(row.id)
-                            } label: {
-                                Label("削除", systemImage: "trash")
-                            }
-                        }
-                    }
-                    
-                    Divider().opacity(0.12)
-                }
+            if rows.isEmpty {
+                emptyView
+            } else {
+                listView
             }
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(.secondary.opacity(0.12), lineWidth: 1)
-            )
         }
     }
 }
@@ -771,6 +832,7 @@ extension TransactionListCard where RowID == UUID {
         onDeleteIDs: @escaping ([UUID]) -> Void
     ) {
         self.title = "履歴"
+        self.emptyMessage = "この月の履歴がまだありません。"
         
         self.rows = transactions.map { tx in
             let cat = categories.first(where: { $0.id == tx.categoryId })
@@ -809,6 +871,7 @@ extension TransactionListCard where RowID == CKRecord.ID {
         onEdit: ((SharedTransaction) -> Void)? = nil
     ) {
         self.title = "共有家計簿の履歴"
+        self.emptyMessage = "この月の共有家計簿の履歴がまだありません。"
 
         self.rows = sharedTransactions.sorted(by: { $0.date > $1.date }).map { tx in
             let cat: SharedCategory? = {
