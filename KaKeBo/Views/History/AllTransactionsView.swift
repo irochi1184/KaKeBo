@@ -87,48 +87,42 @@ struct AllTransactionsView: View {
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
         NavigationStack {
-            Group {
-                if ledgerContext.isRestored {
-                    VStack(spacing: 0) {
-                        // 検索バー + フィルタを横並び
-                        HStack(alignment: .center, spacing: 12) {
-                            LedgerModePicker(style: .circleIcon)
-                                .tint(accent)
-                                .padding(.leading, 4)
+            VStack(spacing: 0) {
+                // 検索バー + フィルタを横並び
+                HStack(alignment: .center, spacing: 12) {
+                    LedgerModePicker(style: .circleIcon)
+                        .tint(accent)
+                        .padding(.leading, 4)
 
-                            SearchHeader(
-                                text: $searchText,
-                                isFiltering: isFiltering,
-                                accent: accent,
-                                onTapFilter: { showFilter = true },
-                                onClear: resetFilters
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .padding(.horizontal)
-                        .padding(.bottom, 6)
-
-                        // サマリー
-                        SummaryBar(
-                            totalIncome: filteredIncomeTotal,
-                            totalExpense: filteredExpenseTotal,
-                            count: displayed.count,
-                            accent: accent
-                        )
-                        .padding(.horizontal)
-                        .padding(.bottom, 6)
-
-                        if isFiltering, !displayed.isEmpty {
-                            filterChartAction
-                                .padding(.horizontal)
-                                .padding(.bottom, 8)
-                        }
-
-                        contentList
-                    }
-                } else {
-                    LedgerLoadingView()
+                    SearchHeader(
+                        text: $searchText,
+                        isFiltering: isFiltering,
+                        accent: accent,
+                        onTapFilter: { showFilter = true },
+                        onClear: resetFilters
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .padding(.horizontal)
+                .padding(.bottom, 6)
+
+                // サマリー
+                SummaryBar(
+                    totalIncome: filteredIncomeTotal,
+                    totalExpense: filteredExpenseTotal,
+                    count: displayed.count,
+                    accent: accent
+                )
+                .padding(.horizontal)
+                .padding(.bottom, 6)
+
+                if isFiltering, !displayed.isEmpty {
+                    filterChartAction
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
+                }
+
+                contentList
             }
             .background(themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
@@ -177,7 +171,6 @@ struct AllTransactionsView: View {
                     .presentationDetents([.large])
             }
         }
-        .task { await ledgerContext.restoreIfNeeded(sharedLedgerStore: sharedLedgerStore) }
         .task(id: ledgerContext.selectedSharedLedgerId) { await reloadSharedLedgerDataIfNeeded() }
         .onAppear { syncChartUsageMonth() }
         .onChange(of: displayed.count) { _, _ in

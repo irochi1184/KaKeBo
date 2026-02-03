@@ -76,7 +76,7 @@ final class LedgerContext: ObservableObject {
     
     // MARK: - Restore on launch
     
-    /// HomeView の .task {} から「一度だけ」呼ぶ
+    /// 起動時に「一度だけ」呼ぶ
     func restoreIfNeeded(sharedLedgerStore: SharedLedgerStore) async {
         guard !isRestored else { return }
         

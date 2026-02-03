@@ -56,16 +56,11 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if ledgerContext.isRestored {
-                    switch ledgerContext.mode {
-                    case .personal:
-                        personalContent
-                    case .shared:
-                        sharedContent
-                    }
-                } else {
-                    // ローディング画面
-                    LedgerLoadingView()
+                switch ledgerContext.mode {
+                case .personal:
+                    personalContent
+                case .shared:
+                    sharedContent
                 }
             }
             .background(
@@ -73,34 +68,32 @@ struct HomeView: View {
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if ledgerContext.isRestored {
-                    ToolbarItem(placement: .topBarLeading) {
-                        LedgerModePicker()
+                ToolbarItem(placement: .topBarLeading) {
+                    LedgerModePicker()
+                }
+                ToolbarItem(placement: .principal) {
+                    YearMonthHeader(
+                        month: $selectedMonth,
+                        title: monthTitleForToolbar(selectedMonth, compact: hSize == .compact),
+                        accent: themeStore.theme.accentColor(for: scheme)
+                    )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .allowsTightening(true)
+                    .layoutPriority(1)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    let accent = themeStore.theme.accentColor(for: scheme)
+                    Button {
+                        showAdd = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(accent)
                     }
-                    ToolbarItem(placement: .principal) {
-                        YearMonthHeader(
-                            month: $selectedMonth,
-                            title: monthTitleForToolbar(selectedMonth, compact: hSize == .compact),
-                            accent: themeStore.theme.accentColor(for: scheme)
-                        )
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .allowsTightening(true)
-                        .layoutPriority(1)
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        let accent = themeStore.theme.accentColor(for: scheme)
-                        Button {
-                            showAdd = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(accent)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(accent.opacity(0.2))
-                        .accessibilityLabel("新規追加")
-                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent.opacity(0.2))
+                    .accessibilityLabel("新規追加")
                 }
             }
             // 個人用と共有用は AddTransactionView で判断
@@ -140,10 +133,6 @@ struct HomeView: View {
                 selectedMonth = monthResolver.anchorMonth(containing: Date())
                 didSetInitialMonth = true
             }
-        }
-        .task {
-            //   LedgerContext に任せる
-            await ledgerContext.restoreIfNeeded(sharedLedgerStore: sharedLedgerStore)
         }
     }
     

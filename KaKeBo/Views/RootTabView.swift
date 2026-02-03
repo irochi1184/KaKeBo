@@ -15,32 +15,39 @@ struct RootTabView: View {
     @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.colorScheme) private var scheme
     @State private var showSettings = false
+    @State private var showLaunchScreen = true
+
+    private let launchScreenMinDuration: UInt64 = 600_000_000
     
     var body: some View {
-        Group {
-            if ledgerContext.isRestored {
-                TabView(selection: tabSelection) {
-                    HomeView()
-                        .tabItem { Label("ホーム", systemImage: "house.fill") }
-                        .tag(AppRoute.Tab.home)
-                    CalendarScreen()
-                        .tabItem { Label("カレンダー", systemImage: "calendar") }
-                        .tag(AppRoute.Tab.calendar)
-                    ReportsView()
-                        .tabItem { Label("レポート", systemImage: "chart.pie.fill") }
-                        .tag(AppRoute.Tab.reports)
-                    AllTransactionsView()
-                        .tabItem { Label("履歴", systemImage: "magnifyingglass") }
-                        .tag(AppRoute.Tab.history)
-                    SettingsView()
-                        .tabItem { Label("設定", systemImage: "gearshape.fill") }
-                        .tag(AppRoute.Tab.settings)
-                }
-            } else {
+        ZStack {
+            TabView(selection: tabSelection) {
+                HomeView()
+                    .tabItem { Label("ホーム", systemImage: "house.fill") }
+                    .tag(AppRoute.Tab.home)
+                CalendarScreen()
+                    .tabItem { Label("カレンダー", systemImage: "calendar") }
+                    .tag(AppRoute.Tab.calendar)
+                ReportsView()
+                    .tabItem { Label("レポート", systemImage: "chart.pie.fill") }
+                    .tag(AppRoute.Tab.reports)
+                AllTransactionsView()
+                    .tabItem { Label("履歴", systemImage: "magnifyingglass") }
+                    .tag(AppRoute.Tab.history)
+                SettingsView()
+                    .tabItem { Label("設定", systemImage: "gearshape.fill") }
+                    .tag(AppRoute.Tab.settings)
+            }
+            .opacity(showLaunchScreen ? 0 : 1)
+            .allowsHitTesting(!showLaunchScreen)
+
+            if showLaunchScreen {
                 LedgerLoadingView()
+                    .transition(.opacity)
             }
         }
-        .toolbar(ledgerContext.isRestored ? .visible : .hidden, for: .tabBar)
+        .task { await startLaunchSequence() }
+        .toolbar(showLaunchScreen ? .hidden : .visible, for: .tabBar)
         .overlay(TutorialGate())
         .overlay(UpdateNoticeGate())
         .overlay(NewYearReview2026Gate())
@@ -58,5 +65,26 @@ struct RootTabView: View {
             get: { appRoute.tab },
             set: { appRoute.tab = $0 }
         )
+    }
+
+    private func startLaunchSequence() async {
+        if ledgerContext.isRestored {
+            showLaunchScreen = false
+            return
+        }
+
+        async let restoreTask: Void = ledgerContext.restoreIfNeeded(sharedLedgerStore: sharedLedgerStore)
+
+        do {
+            try await Task.sleep(nanoseconds: launchScreenMinDuration)
+        } catch {
+            // ignore cancellation
+        }
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            showLaunchScreen = false
+        }
+
+        _ = await restoreTask
     }
 }

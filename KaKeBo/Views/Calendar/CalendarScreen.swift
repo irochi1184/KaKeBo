@@ -150,10 +150,8 @@ struct CalendarScreen: View {
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if ledgerContext.isRestored {
-                    ToolbarItem(placement: .topBarLeading) {
-                        LedgerModePicker()
-                    }
+                ToolbarItem(placement: .topBarLeading) {
+                    LedgerModePicker()
                 }
                 ToolbarItem(placement: .principal) {
                     YearMonthHeader(

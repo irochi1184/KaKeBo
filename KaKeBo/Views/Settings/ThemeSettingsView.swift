@@ -37,17 +37,18 @@ struct ThemeSettingsView: View {
                 )
             }
 
-            Section("ホームカード") {
-                Picker("カードデザイン", selection: Binding(
-                    get: { working.homeCardStyle },
-                    set: { newVal in var w = working; w.homeCardStyle = newVal; working = w }
-                )) {
-                    ForEach(AppTheme.HomeCardStyle.allCases, id: \.self) {
-                        Text($0.title).tag($0)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
+            // TODO: デザイン追加
+//            Section("ホームカード") {
+//                Picker("カードデザイン", selection: Binding(
+//                    get: { working.homeCardStyle },
+//                    set: { newVal in var w = working; w.homeCardStyle = newVal; working = w }
+//                )) {
+//                    ForEach(AppTheme.HomeCardStyle.allCases, id: \.self) {
+//                        Text($0.title).tag($0)
+//                    }
+//                }
+//                .pickerStyle(.segmented)
+//            }
             
             // === カスタム（プレミアム限定） ===
             Section("カスタム（プレミアム）") {

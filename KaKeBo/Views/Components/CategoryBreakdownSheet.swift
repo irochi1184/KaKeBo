@@ -37,7 +37,7 @@ struct CategoryBreakdownSheet: View {
                         )
                         .frame(maxWidth: .infinity, alignment: .center)
                     }
-                    .cardBackground(scheme)
+                    .homeCard()
 
                     if breakdown.isEmpty {
                         VStack(spacing: 8) {
@@ -50,7 +50,7 @@ struct CategoryBreakdownSheet: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 32)
-                        .cardBackground(scheme)
+                        .homeCard()
                     } else {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("カテゴリ別内訳")
@@ -97,7 +97,7 @@ struct CategoryBreakdownSheet: View {
                             }
                             .padding(.top, 2)
                         }
-                        .cardBackground(scheme)
+                        .homeCard()
                     }
                 }
                 .padding(.horizontal)
