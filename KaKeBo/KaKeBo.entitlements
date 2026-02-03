@@ -6,7 +6,7 @@
 	<string>development</string>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
-		<string>iCloud.com.irochiTech.KaKeBo</string>
+		<string>iCloud.com.irochi.KaKeBo</string>
 	</array>
 	<key>com.apple.developer.icloud-extended-share-access</key>
 	<array/>

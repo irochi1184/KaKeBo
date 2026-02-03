@@ -54,9 +54,7 @@ struct ReportsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if ledgerContext.isRestored {
-                        LedgerModePicker()
-                    }
+                    LedgerModePicker()
                 }
                 ToolbarItem(placement: .principal) {
                         YearPicker(
@@ -127,7 +125,7 @@ struct ReportsView: View {
             savingsRate: yearSavingsRate,
             avgExpense: avgExpensePerMonth
         )
-        .luxCard()
+        .homeCard()
         .padding(.horizontal)
     }
 
@@ -153,7 +151,8 @@ struct ReportsView: View {
             )
             .frame(height: 240)
         }
-        .cardBackground(scheme)
+        .homeCard()
+        .padding(.horizontal)
     }
 
     @ViewBuilder
@@ -221,7 +220,8 @@ struct ReportsView: View {
             }
             .padding(.top, 2)
         }
-        .cardBackground(scheme)
+        .homeCard()
+        .padding(.horizontal)
     }
 
     private var highlightsSection: some View {
@@ -237,7 +237,8 @@ struct ReportsView: View {
                 YoYRow(yoy: y2y)
             }
         }
-        .cardBackground(scheme)
+        .homeCard()
+        .padding(.horizontal)
         .padding(.bottom, 24)
     }
 }
@@ -560,20 +561,6 @@ private struct KPIYoY: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 12).fill(.thinMaterial))
-    }
-}
-
-// MARK: - Style helper
-extension View {
-    func cardBackground(_ scheme: ColorScheme) -> some View {
-        self
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(scheme == .dark ? Color.white.opacity(0.06) : .white)
-                    .shadow(color: .black.opacity(scheme == .dark ? 0.4 : 0.06), radius: 12, y: 6)
-            )
-            .padding(.horizontal)
     }
 }
 

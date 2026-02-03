@@ -4,6 +4,17 @@
 <dict>
 	<key>CKSharingSupported</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.irochi.kakebo</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>kakebo</string>
+			</array>
+		</dict>
+	</array>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>

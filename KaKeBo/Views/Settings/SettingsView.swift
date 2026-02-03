@@ -51,6 +51,8 @@ struct SettingsView: View {
     @State private var showingExporter = false
     @State private var importReportText: String? = nil
     @State private var showImportDone = false
+    @State private var showExportDone = false
+    @State private var exportDoneMessage: String = "バックアップ作成が完了しました。"
     @State private var showLockSheet = false
     @State private var showBackupSheet = false
     @State private var backupTarget: BackupTarget = .personal
@@ -128,32 +130,33 @@ struct SettingsView: View {
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
         NavigationStack {
-            VStack(spacing: 0) {
-                if !pm.isPremiumActive {
-                    PremiumBanner(accent: accent) { showPaywall = true }
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                        .padding(.bottom, 8)
-                        .background(themeStore.theme.backgroundColor(for: scheme).opacity(0.7))
-                }
-                
-                Form {
-                    settingsSection(accent: accent)
-                    backupSection(accent: accent)
-                    supportSection(accent: accent)
-                }
-                .scrollContentBackground(.hidden)
-                .safeAreaInset(edge: .bottom) {
-                    versionFooter
-                }
-                .onAppear {
-                    loadTemplates()
-                    let monthStart = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: Date()))!
-                    todoStore.load(for: monthStart)
-                }
-                .onChange(of: templates) { _, _ in saveTemplates() }
-                .sheet(item: $sheet) { s in
-                    switch s {
+            ZStack {
+                VStack(spacing: 0) {
+                    if !pm.isPremiumActive {
+                        PremiumBanner(accent: accent) { showPaywall = true }
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                            .padding(.bottom, 8)
+                            .background(themeStore.theme.backgroundColor(for: scheme).opacity(0.7))
+                    }
+                    
+                    Form {
+                        settingsSection(accent: accent)
+                        backupSection(accent: accent)
+                        supportSection(accent: accent)
+                    }
+                    .scrollContentBackground(.hidden)
+                    .safeAreaInset(edge: .bottom) {
+                        versionFooter
+                    }
+                    .onAppear {
+                        loadTemplates()
+                        let monthStart = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: Date()))!
+                        todoStore.load(for: monthStart)
+                    }
+                    .onChange(of: templates) { _, _ in saveTemplates() }
+                    .sheet(item: $sheet) { s in
+                        switch s {
                     case .reminders:
                         NavigationStack {
                             ReminderSettingsView()
@@ -287,8 +290,13 @@ struct SettingsView: View {
                     }
                     .presentationDetents([.large, .medium])
                     .presentationDragIndicator(.visible)
+                    }
+                    .background(themeStore.theme.backgroundColor(for: scheme))
                 }
-                .background(themeStore.theme.backgroundColor(for: scheme))
+                
+                if isProcessingBackup {
+                    backupProcessingOverlay
+                }
             }
         }
         .alert("通知が許可されていません", isPresented: $showNotifAlert) {
@@ -303,8 +311,16 @@ struct SettingsView: View {
             contentType: .kakeboBackup,
             defaultFilename: exportFilename
         ) { result in
-            if case .success = result {
-                print("バックアップ保存完了")
+            switch result {
+            case .success(let url):
+                let filename = url.lastPathComponent
+                exportDoneMessage = filename.isEmpty ? "バックアップ作成が完了しました。" : "バックアップ作成が完了しました。\n保存先: \(filename)"
+                showExportDone = true
+            case .failure(let error):
+                let cocoaError = error as? CocoaError
+                if cocoaError?.code != .userCancelled {
+                    backupErrorMessage = "バックアップ保存に失敗しました: \(error.localizedDescription)"
+                }
             }
         }
         .fileImporter(
@@ -334,6 +350,11 @@ struct SettingsView: View {
         } message: {
             Text(importReportText ?? "")
         }
+        .alert("バックアップ作成", isPresented: $showExportDone) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(exportDoneMessage)
+        }
         .alert("バックアップに失敗しました", isPresented: Binding(
             get: { backupErrorMessage != nil },
             set: { _ in backupErrorMessage = nil }
@@ -345,48 +366,49 @@ struct SettingsView: View {
     }
     
     private func handleImportedURL(_ url: URL, target: BackupTarget) {
-        let needsSecurity = url.startAccessingSecurityScopedResource()
-        defer { if needsSecurity { url.stopAccessingSecurityScopedResource() } }
-        
-        do {
-            let data = try Data(contentsOf: url)
-            
-            Task(priority: .userInitiated) {
-                do {
-                    let report: DataStore.ImportReport
-                    switch target {
-                    case .personal:
-                        report = try await MainActor.run { () -> DataStore.ImportReport in
-                            try store.importBackup(
-                                data: data,
-                                applyTheme: { restoredTheme in
-                                    themeStore.theme = restoredTheme
-                                },
-                                applyMonthStartSettings: { restoredSettings in
-                                    monthStartStore.settings = restoredSettings
-                                }
-                            )
-                        }
-                    case .shared(let ledgerId):
-                        guard let ledger = sharedLedgerStore.ledgers.first(where: { $0.id == ledgerId }) else {
-                            throw NSError(domain: "KaKeBo", code: -1, userInfo: [NSLocalizedDescriptionKey: "対象の共有家計簿が見つかりませんでした。"])
-                        }
-                        report = try await sharedLedgerStore.importBackup(data: data, to: ledger)
-                    }
-                    await MainActor.run {
-                        importReportText = "復元完了（\(backupTargetName(for: target))）：取込 \(report.inserted) 件 / 新規カテゴリ \(report.createdCategories) 件 / スキップ \(report.skipped) 件"
-                        showImportDone = true
-                    }
-                } catch {
-                    await MainActor.run {
-                        importReportText = "復元に失敗（\(backupTargetName(for: target))）: \(error.localizedDescription)"
-                        showImportDone = true
-                    }
+        Task(priority: .userInitiated) {
+            await MainActor.run { isProcessingBackup = true }
+            let needsSecurity = url.startAccessingSecurityScopedResource()
+            defer {
+                if needsSecurity {
+                    url.stopAccessingSecurityScopedResource()
                 }
             }
-        } catch {
-            importReportText = "ファイル読み込みに失敗: \(error.localizedDescription)"
-            showImportDone = true
+            
+            do {
+                let data = try Data(contentsOf: url)
+                let report: DataStore.ImportReport
+                switch target {
+                case .personal:
+                    report = try await MainActor.run { () -> DataStore.ImportReport in
+                        try store.importBackup(
+                            data: data,
+                            applyTheme: { restoredTheme in
+                                themeStore.theme = restoredTheme
+                            },
+                            applyMonthStartSettings: { restoredSettings in
+                                monthStartStore.settings = restoredSettings
+                            }
+                        )
+                    }
+                case .shared(let ledgerId):
+                    guard let ledger = sharedLedgerStore.ledgers.first(where: { $0.id == ledgerId }) else {
+                        throw NSError(domain: "KaKeBo", code: -1, userInfo: [NSLocalizedDescriptionKey: "対象の共有家計簿が見つかりませんでした。"])
+                    }
+                    report = try await sharedLedgerStore.importBackup(data: data, to: ledger)
+                }
+                await MainActor.run {
+                    importReportText = "復元完了（\(backupTargetName(for: target))）：取込 \(report.inserted) 件 / 新規カテゴリ \(report.createdCategories) 件 / スキップ \(report.skipped) 件"
+                    showImportDone = true
+                    isProcessingBackup = false
+                }
+            } catch {
+                await MainActor.run {
+                    importReportText = "復元に失敗（\(backupTargetName(for: target))）: \(error.localizedDescription)"
+                    showImportDone = true
+                    isProcessingBackup = false
+                }
+            }
         }
     }
     
@@ -427,6 +449,32 @@ struct SettingsView: View {
             await MainActor.run {
                 isProcessingBackup = false
             }
+        }
+    }
+
+    private var backupProcessingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .ignoresSafeArea()
+            VStack(spacing: 12) {
+                ProgressView()
+                Text(backupProcessingText)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        }
+        .transition(.opacity)
+    }
+
+    private var backupProcessingText: String {
+        switch backupMode {
+        case .export:
+            return "バックアップを作成中…"
+        case .restore:
+            return "復元中…"
         }
     }
     

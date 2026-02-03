@@ -46,11 +46,23 @@ final class SharedLedgerStore: ObservableObject {
         let id = UUID()
         let message: String
         let systemImage: String
+        let actionTitle: String?
+        let action: (() -> Void)?
+
+        static func == (lhs: ToastState, rhs: ToastState) -> Bool {
+            lhs.id == rhs.id &&
+            lhs.message == rhs.message &&
+            lhs.systemImage == rhs.systemImage &&
+            lhs.actionTitle == rhs.actionTitle
+        }
     }
     
     private var ledgerSourceMap: [CKRecord.ID: LedgerSource] = [:]
     private let defaults = UserDefaults.appGroup
     private var toastTask: Task<Void, Never>?
+    private var lastFailedShareMetadata: CKShare.Metadata?
+    private let privateSubscriptionID = "kakebo.sharedLedger.privateChanges"
+    private let sharedSubscriptionID = "kakebo.sharedLedger.sharedChanges"
 
     init(container: CKContainer = .default()) {
         self.container = container
@@ -60,7 +72,7 @@ final class SharedLedgerStore: ObservableObject {
         defaults.migrateIfNeeded(keys: [lastOpenedLedgerKey])
 
         Task {
-            try? await self.ensureSharedZone()
+            await self.configureSharingInfrastructure()
         }
     }
 
@@ -93,8 +105,48 @@ final class SharedLedgerStore: ObservableObject {
     }
 
     private func ensureSharedZone() async throws {
-        let zone = CKRecordZone(zoneID: SharedLedger.zoneID)
+        let zoneID = SharedLedger.zoneID
+        do {
+            let zones = try await db.recordZones(for: [zoneID])
+            if let result = zones[zoneID],
+               case .success = result {
+                return
+            }
+        } catch {
+            if let ckError = error as? CKError, ckError.code != .zoneNotFound {
+                throw error
+            }
+        }
+
+        let zone = CKRecordZone(zoneID: zoneID)
         _ = try await db.modifyRecordZones(saving: [zone], deleting: [])
+    }
+
+    private func configureSharingInfrastructure() async {
+        do {
+            try await ensureSharedZone()
+            try await ensureDatabaseSubscription(id: privateSubscriptionID, in: db)
+            try await ensureDatabaseSubscription(id: sharedSubscriptionID, in: sharedDB)
+        } catch {
+            print("❌ [SharedLedgerStore] configureSharingInfrastructure failed: \(error)")
+        }
+    }
+
+    private func ensureDatabaseSubscription(id: String, in database: CKDatabase) async throws {
+        do {
+            _ = try await database.subscription(for: id)
+            return
+        } catch {
+            if let ckError = error as? CKError, ckError.code != .unknownItem {
+                throw error
+            }
+        }
+
+        let subscription = CKDatabaseSubscription(subscriptionID: id)
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true
+        subscription.notificationInfo = info
+        _ = try await database.save(subscription)
     }
 
     private func queryRecords(
@@ -174,25 +226,105 @@ final class SharedLedgerStore: ObservableObject {
     
     func acceptShare(_ metadata: CKShare.Metadata) async {
         do {
-            try await acceptShareMetadata(metadata)
-            await reloadLedgers()
-            globalToast = ToastState(message: "共有家計簿に参加しました。", systemImage: "person.2.fill")
+            let targetContainer = CKContainer(identifier: metadata.containerIdentifier)
+            print("🔗 [SharedLedgerStore] Accepting share: container=\(metadata.containerIdentifier)")
+            try await acceptShareMetadata(metadata, container: targetContainer)
+            lastFailedShareMetadata = nil
+            let reloadSucceeded = await reloadLedgers(logContext: "acceptShare success")
+            if reloadSucceeded {
+                globalToast = ToastState(
+                    message: "共有家計簿に参加しました。",
+                    systemImage: "person.2.fill",
+                    actionTitle: nil,
+                    action: nil
+                )
+            } else {
+                globalToast = ToastState(
+                    message: "参加は完了しましたが一覧の更新に失敗しました。再度お試しください。",
+                    systemImage: "exclamationmark.triangle.fill",
+                    actionTitle: "再読み込み",
+                    action: { [weak self] in
+                        Task { await self?.reloadLedgers(logContext: "acceptShare retry reload") }
+                    }
+                )
+            }
         } catch {
+            if let ckError = error as? CKError, isAlreadyParticipantError(ckError) {
+                let reloadSucceeded = await reloadLedgers(logContext: "acceptShare alreadyParticipant")
+                if reloadSucceeded {
+                    globalToast = ToastState(
+                        message: "すでにこの共有家計簿に参加しています。",
+                        systemImage: "person.2.fill",
+                        actionTitle: nil,
+                        action: nil
+                    )
+                } else {
+                    globalToast = ToastState(
+                        message: "参加済みですが一覧の更新に失敗しました。再度お試しください。",
+                        systemImage: "exclamationmark.triangle.fill",
+                        actionTitle: "再読み込み",
+                        action: { [weak self] in
+                            Task { await self?.reloadLedgers(logContext: "acceptShare alreadyParticipant retry reload") }
+                        }
+                    )
+                }
+                return
+            }
+
+            lastFailedShareMetadata = metadata
             lastError = error
-            globalToast = ToastState(message: "共有家計簿の参加に失敗しました。", systemImage: "exclamationmark.triangle.fill")
-            print("acceptShare error:", error)
+            let retryable = isRetryableShareError(error)
+            let actionTitle = retryable ? "再試行" : nil
+            let action: (() -> Void)? = retryable ? { [weak self] in
+                guard let self else { return }
+                Task { await self.acceptShare(metadata) }
+            } : nil
+            globalToast = ToastState(
+                message: "共有家計簿の参加に失敗しました。",
+                systemImage: "exclamationmark.triangle.fill",
+                actionTitle: actionTitle,
+                action: action
+            )
+            print("❌ [SharedLedgerStore] acceptShare error: \(error)")
         }
     }
 
-    private func acceptShareMetadata(_ metadata: CKShare.Metadata) async throws {
-        try await withCheckedThrowingContinuation { continuation in
+    private func acceptShareMetadata(
+        _ metadata: CKShare.Metadata,
+        container: CKContainer
+    ) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let operation = CKAcceptSharesOperation(shareMetadatas: [metadata])
             operation.qualityOfService = .userInitiated
+            var firstError: Error?
+            operation.perShareResultBlock = { meta, result in
+                let prefix = "🔍 [SharedLedgerStore] perShareResult"
+                if case .failure(let error) = result, firstError == nil {
+                    firstError = error
+                    if let ckError = error as? CKError {
+                        print("\(prefix) failed code=\(ckError.code.rawValue), userInfo=\(ckError.userInfo)")
+                    } else {
+                        print("\(prefix) failed error=\(error)")
+                    }
+                } else if case .success = result {
+                    print("\(prefix) succeeded")
+                }
+            }
             operation.acceptSharesResultBlock = { result in
                 switch result {
                 case .success:
-                    continuation.resume()
+                    print("✅ [SharedLedgerStore] acceptSharesResult succeeded")
+                    if let error = firstError {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume()
+                    }
                 case .failure(let error):
+                    if let ckError = error as? CKError {
+                        print("❌ [SharedLedgerStore] acceptSharesResult failed code=\(ckError.code.rawValue), userInfo=\(ckError.userInfo)")
+                    } else {
+                        print("❌ [SharedLedgerStore] acceptSharesResult failed error=\(error)")
+                    }
                     continuation.resume(throwing: error)
                 }
             }
@@ -200,27 +332,99 @@ final class SharedLedgerStore: ObservableObject {
         }
     }
 
-    func reloadLedgers() async {
+    private func isAlreadyParticipantError(_ error: CKError) -> Bool {
+        if error.code == .alreadyShared {
+            return true
+        }
+
+        guard error.code == .partialFailure,
+              let partials = error.userInfo[CKPartialErrorsByItemIDKey] as? [CKRecord.ID: Error]
+        else {
+            return false
+        }
+
+        return partials.values.contains {
+            guard let ckError = $0 as? CKError else { return false }
+            return ckError.code == .alreadyShared
+        }
+    }
+
+    private func isRetryableShareError(_ error: Error) -> Bool {
+        guard let ckError = error as? CKError else { return false }
+        switch ckError.code {
+        case .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy, .limitExceeded, .resultsTruncated:
+            return true
+        default:
+            return false
+        }
+    }
+
+    @discardableResult
+    func reloadLedgers(logContext: String? = nil) async -> Bool {
         isLoading = true
         defer { isLoading = false }
         
+        let contextPrefix = logContext.map { "[SharedLedgerStore] reloadLedgers(\($0))" } ?? "[SharedLedgerStore] reloadLedgers"
+        print("ℹ️ \(contextPrefix) start")
+
         do {
             let userId = try await currentUserId()
             
             // ① 自分が owner の Ledger（privateDB）
-            let owned = try await fetchOwnedLedgers(for: userId)
+            let owned: [SharedLedger]
+            do {
+                owned = try await fetchOwnedLedgers(for: userId)
+                print("✅ \(contextPrefix) owned count=\(owned.count)")
+            } catch {
+                print("❌ \(contextPrefix) owned fetch failed: \(error)")
+                throw error
+            }
             let ownedIDs = Set(owned.map(\.id))
             
             // ② 自分に共有されている Ledger（sharedDB）
-            let shared = try await fetchSharedLedgers(excluding: ownedIDs)
+            let shared: [SharedLedger]
+            do {
+                shared = try await fetchSharedLedgers(excluding: ownedIDs)
+                print("✅ \(contextPrefix) shared count=\(shared.count)")
+            } catch {
+                print("❌ \(contextPrefix) shared fetch failed: \(error)")
+                throw error
+            }
             
             // ③ マージして createdAt でソート
             let all = (owned + shared).sorted(by: { $0.createdAt < $1.createdAt })
             self.ledgers = all
+            print("ℹ️ \(contextPrefix) merged total=\(all.count)")
+            if shared.isEmpty {
+                print("⚠️ \(contextPrefix) shared list is empty")
+            }
+            return true
             
         } catch {
             self.lastError = error
-            print("reloadLedgers error:", error)
+            print("❌ \(contextPrefix) error:", error)
+            return false
+        }
+    }
+
+    func handleRemoteChange() async {
+        let existing = ledgers
+        let reloadSucceeded = await reloadLedgers(logContext: "remoteChange")
+        let targets = reloadSucceeded ? ledgers : existing
+        await refreshCachedRecords(for: targets)
+    }
+
+    private func refreshCachedRecords(for ledgers: [SharedLedger]) async {
+        guard !ledgers.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { group in
+            for ledger in ledgers {
+                group.addTask { [weak self] in
+                    await self?.reloadCategories(for: ledger)
+                }
+                group.addTask { [weak self] in
+                    await self?.reloadTransactions(for: ledger)
+                }
+            }
         }
     }
 
@@ -318,6 +522,7 @@ final class SharedLedgerStore: ObservableObject {
         defer { isLoading = false }
         
         do {
+            try await ensureSharedZone()
             let userId = try await currentUserId()
             let ledger = SharedLedger.new(
                 name: name,
@@ -796,7 +1001,12 @@ extension SharedLedgerStore {
         toastTask?.cancel()
 
         withAnimation {
-            globalToast = ToastState(message: message, systemImage: systemImage)
+            globalToast = ToastState(
+                message: message,
+                systemImage: systemImage,
+                actionTitle: nil,
+                action: nil
+            )
         }
 
         toastTask = Task { @MainActor in
@@ -814,6 +1024,7 @@ extension SharedLedgerStore {
     /// 指定した共有家計簿用の CKShare を用意して返す
     /// 既に share がある場合はそれを再利用、無ければ新規作成する
     func prepareShare(for ledger: SharedLedger) async throws -> SharePayload {
+        try await ensureSharedZone()
         // ① 常にサーバー側の最新 rootRecord を取得
         let rootRecord = try await db.record(for: ledger.id)
         

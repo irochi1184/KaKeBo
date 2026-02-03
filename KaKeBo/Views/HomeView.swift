@@ -56,16 +56,11 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if ledgerContext.isRestored {
-                    switch ledgerContext.mode {
-                    case .personal:
-                        personalContent
-                    case .shared:
-                        sharedContent
-                    }
-                } else {
-                    // ローディング画面
-                    LedgerLoadingView()
+                switch ledgerContext.mode {
+                case .personal:
+                    personalContent
+                case .shared:
+                    sharedContent
                 }
             }
             .background(
@@ -73,34 +68,32 @@ struct HomeView: View {
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if ledgerContext.isRestored {
-                    ToolbarItem(placement: .topBarLeading) {
-                        LedgerModePicker()
+                ToolbarItem(placement: .topBarLeading) {
+                    LedgerModePicker()
+                }
+                ToolbarItem(placement: .principal) {
+                    YearMonthHeader(
+                        month: $selectedMonth,
+                        title: monthTitleForToolbar(selectedMonth, compact: hSize == .compact),
+                        accent: themeStore.theme.accentColor(for: scheme)
+                    )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .allowsTightening(true)
+                    .layoutPriority(1)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    let accent = themeStore.theme.accentColor(for: scheme)
+                    Button {
+                        showAdd = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(accent)
                     }
-                    ToolbarItem(placement: .principal) {
-                        YearMonthHeader(
-                            month: $selectedMonth,
-                            title: monthTitleForToolbar(selectedMonth, compact: hSize == .compact),
-                            accent: themeStore.theme.accentColor(for: scheme)
-                        )
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .allowsTightening(true)
-                        .layoutPriority(1)
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        let accent = themeStore.theme.accentColor(for: scheme)
-                        Button {
-                            showAdd = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(accent)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(accent.opacity(0.2))
-                        .accessibilityLabel("新規追加")
-                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent.opacity(0.2))
+                    .accessibilityLabel("新規追加")
                 }
             }
             // 個人用と共有用は AddTransactionView で判断
@@ -141,10 +134,6 @@ struct HomeView: View {
                 didSetInitialMonth = true
             }
         }
-        .task {
-            //   LedgerContext に任せる
-            await ledgerContext.restoreIfNeeded(sharedLedgerStore: sharedLedgerStore)
-        }
     }
     
     @ViewBuilder
@@ -179,7 +168,7 @@ struct HomeView: View {
             let cats   = sharedLedgerStore.categoriesByLedger[ledger.id] ?? []
             let expenseSlices = sharedExpenseBreakdown(allTxs: allTxs, categories: cats)
             let incomeSlices  = sharedIncomeBreakdown(allTxs: allTxs, categories: cats)
-            let dailyPoints   = sharedDailySeries(allTxs: allTxs)
+            let dailyPoints   = sharedDailySeries(allTxs: allTxs, categories: cats)
             
             ScrollView {
                 VStack(spacing: 16) {
@@ -189,7 +178,7 @@ struct HomeView: View {
                         expense: sharedMonthExpense(txs: allTxs),
                         balance: sharedMonthBalance(txs: allTxs)
                     )
-                    .luxCard()
+                    .homeCard()
                     .padding(.horizontal)
                     
                     // ② カテゴリ別 ドーナツグラフ
@@ -202,7 +191,7 @@ struct HomeView: View {
                             incomeCurrentTotal: sharedMonthIncome(txs: allTxs),
                             incomePreviousTotal: sharedPrevMonthIncome(allTxs: allTxs)
                         )
-                        .luxCard()
+                        .homeCard()
                         .padding(.horizontal)
                         .onTapGesture {
                             breakdownSheet = CategoryBreakdownSheetData(
@@ -217,7 +206,7 @@ struct HomeView: View {
                     // ③ 日別棒グラフ
                     if !dailyPoints.isEmpty {
                         DailyBarChart(series: dailyPoints)
-                            .luxCard()
+                            .homeCard()
                             .padding(.horizontal)
                     }
                     
@@ -231,7 +220,7 @@ struct HomeView: View {
                         categories: cats,
                         onEdit: { tx in editingSharedTx = tx }
                     )
-                    .luxCard()
+                    .homeCard()
                     .padding(.horizontal)
 
                     
@@ -279,7 +268,7 @@ struct HomeView: View {
                 expense: monthExpense,
                 balance: monthBalance
             )
-            .luxCard()
+            .homeCard()
             
         case .donut:
             CategoryDonutPager(
@@ -290,7 +279,7 @@ struct HomeView: View {
                 incomeCurrentTotal: monthIncome,
                 incomePreviousTotal: prevMonthIncome
             )
-            .luxCard()
+            .homeCard()
             .onTapGesture {
                 breakdownSheet = CategoryBreakdownSheetData(
                     title: monthTitle(selectedMonth),
@@ -302,7 +291,7 @@ struct HomeView: View {
 
         case .daily:
             DailyBarChart(series: dailySeries)
-                .luxCard()
+                .homeCard()
             
         case .transactions:
             TransactionListCard(
@@ -311,7 +300,7 @@ struct HomeView: View {
                 onEdit: { tx in editingTx = tx },
                 onDeleteIDs: { ids in store.deleteTransactions(with: ids) }
             )
-            .luxCard()
+            .homeCard()
         }
     }
     
@@ -407,17 +396,41 @@ extension HomeView {
 
 
     // 棒グラフ：日別支出（選択月）
-    private var dailySeries: [DailyPoint] {
+    private struct DayCategoryKey: Hashable {
+        let date: Date
+        let categoryId: UUID
+    }
+
+    private struct SharedDayCategoryKey: Hashable {
+        let date: Date
+        let categoryKey: String
+    }
+
+    private var dailySeries: [DailyCategoryPoint] {
         let cal = Calendar.current
         let expenseTx = store.transactions.filter {
             $0.type == .expense && isInCurrentMonth($0.date)
         }
-        var dict: [Date: Int] = [:]
+        var dict: [DayCategoryKey: Int] = [:]
         for tx in expenseTx {
             let day = cal.startOfDay(for: tx.date)
-            dict[day, default: 0] += tx.amount
+            let key = DayCategoryKey(date: day, categoryId: tx.categoryId)
+            dict[key, default: 0] += tx.amount
         }
-        return dict.keys.sorted().map { day in DailyPoint(date: day, amount: dict[day] ?? 0) }
+        return dict.keys.sorted { lhs, rhs in
+            if lhs.date != rhs.date {
+                return lhs.date < rhs.date
+            }
+            return lhs.categoryId.uuidString < rhs.categoryId.uuidString
+        }.map { key in
+            let category = store.categories.first(where: { $0.id == key.categoryId })
+            return DailyCategoryPoint(
+                date: key.date,
+                amount: dict[key] ?? 0,
+                categoryName: category?.name ?? "未分類",
+                color: category?.color ?? .gray
+            )
+        }
     }
 
     private var allThisMonthTransactions: [Transaction] {
@@ -524,20 +537,38 @@ extension HomeView {
     }
     
     // MARK: - 共有家計簿：日別棒グラフ
-    private func sharedDailySeries(allTxs: [SharedTransaction]) -> [DailyPoint] {
+    private func sharedDailySeries(allTxs: [SharedTransaction], categories: [SharedCategory]) -> [DailyCategoryPoint] {
         let cal = Calendar.current
         let expenseTx = allTxs.filter {
             $0.type == .expense && isInCurrentMonth($0.date)
         }
         
-        var dict: [Date: Int] = [:]
+        var dict: [SharedDayCategoryKey: Int] = [:]
         for tx in expenseTx {
             let day = cal.startOfDay(for: tx.date)
-            dict[day, default: 0] += tx.amount
+            let key = tx.categoryId?.recordName ?? tx.categoryName
+            let categoryKey = SharedDayCategoryKey(date: day, categoryKey: key)
+            dict[categoryKey, default: 0] += tx.amount
         }
         
-        return dict.keys.sorted().map { day in
-            DailyPoint(date: day, amount: dict[day] ?? 0)
+        return dict.keys.sorted { lhs, rhs in
+            if lhs.date != rhs.date {
+                return lhs.date < rhs.date
+            }
+            return lhs.categoryKey < rhs.categoryKey
+        }.map { key in
+            let sharedCategory = categories.first { $0.id.recordName == key.categoryKey }
+                ?? categories.first { $0.name == key.categoryKey }
+            let fallbackHex = expenseTx.first { tx in
+                (tx.categoryId?.recordName ?? tx.categoryName) == key.categoryKey
+            }?.categoryColorHex
+            let color = Color.fromHex((sharedCategory?.colorHex ?? fallbackHex)!) ?? .gray
+            return DailyCategoryPoint(
+                date: key.date,
+                amount: dict[key] ?? 0,
+                categoryName: sharedCategory?.name ?? key.categoryKey,
+                color: color
+            )
         }
     }
     
@@ -674,8 +705,10 @@ private struct TransactionRow: View {
 private struct TransactionListCard<RowID: Hashable>: View {
     let title: String
     let rows: [Row]
+    let emptyMessage: String
     let onEdit: ((RowID) -> Void)?
     let onDelete: ((RowID) -> Void)?
+    @EnvironmentObject var themeStore: ThemeStore
     
     struct Row: Identifiable {
         let id: RowID
@@ -683,40 +716,99 @@ private struct TransactionListCard<RowID: Hashable>: View {
     }
     
     var body: some View {
+        let isFlat = themeStore.theme.homeCardStyle == .flat
+        let emptyView: AnyView = {
+            if isFlat {
+                return AnyView(
+                    VStack(spacing: 6) {
+                        Text(emptyMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                            .padding(.horizontal, 12)
+                    }
+                )
+            }
+            return AnyView(
+                Text(emptyMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                    .padding(.horizontal, 12)
+                    .background(.thinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(.secondary.opacity(0.12), lineWidth: 1)
+                    )
+            )
+        }()
+
+        let rowsView = LazyVStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                Button {
+                    onEdit?(row.id)
+                } label: {
+                    TransactionRow(row: row.content)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background {
+                            if isFlat {
+                                Color.clear
+                            } else {
+                                Rectangle().fill(.thinMaterial)
+                            }
+                        }
+                        .overlay(alignment: .bottom) {
+                            if isFlat && index < rows.count - 1 {
+                                Rectangle()
+                                    .fill(.secondary.opacity(0.18))
+                                    .frame(height: 0.5)
+                                    .padding(.horizontal, 16)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    if let onDelete {
+                        Button(role: .destructive) {
+                            onDelete(row.id)
+                        } label: {
+                            Label("削除", systemImage: "trash")
+                        }
+                    }
+                }
+                if !isFlat {
+                    Divider().opacity(0.12)
+                }
+            }
+        }
+
+        let listView = rowsView
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                Group {
+                    if !isFlat {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(.secondary.opacity(0.12), lineWidth: 1)
+                    }
+                }
+            )
+
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             
-            LazyVStack(spacing: 0) {
-                ForEach(rows) { row in
-                    Button {
-                        onEdit?(row.id)
-                    } label: {
-                        TransactionRow(row: row.content)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(.thinMaterial)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        if let onDelete {
-                            Button(role: .destructive) {
-                                onDelete(row.id)
-                            } label: {
-                                Label("削除", systemImage: "trash")
-                            }
-                        }
-                    }
-                    
-                    Divider().opacity(0.12)
-                }
+            if rows.isEmpty {
+                emptyView
+            } else {
+                listView
             }
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(.secondary.opacity(0.12), lineWidth: 1)
-            )
         }
     }
 }
@@ -729,6 +821,7 @@ extension TransactionListCard where RowID == UUID {
         onDeleteIDs: @escaping ([UUID]) -> Void
     ) {
         self.title = "履歴"
+        self.emptyMessage = "この月の履歴がまだありません。"
         
         self.rows = transactions.map { tx in
             let cat = categories.first(where: { $0.id == tx.categoryId })
@@ -767,6 +860,7 @@ extension TransactionListCard where RowID == CKRecord.ID {
         onEdit: ((SharedTransaction) -> Void)? = nil
     ) {
         self.title = "共有家計簿の履歴"
+        self.emptyMessage = "この月の共有家計簿の履歴がまだありません。"
 
         self.rows = sharedTransactions.sorted(by: { $0.date > $1.date }).map { tx in
             let cat: SharedCategory? = {

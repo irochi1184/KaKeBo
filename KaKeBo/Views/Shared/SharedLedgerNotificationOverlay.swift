@@ -62,9 +62,19 @@ struct SharedLedgerNotificationOverlay: View {
         HStack(spacing: 12) {
             Image(systemName: toast.systemImage)
                 .foregroundStyle(.green)
-            Text(toast.message)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(toast.message)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                if let actionTitle = toast.actionTitle, let action = toast.action {
+                    Button(actionTitle) {
+                        action()
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .buttonStyle(.borderedProminent)
+                }
+            }
             Spacer()
         }
         .padding(14)

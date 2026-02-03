@@ -19,6 +19,7 @@ struct KaKeBoApp: App {
     @StateObject private var ledgerContext = LedgerContext()
     @StateObject private var lock = AppLockManager.shared
     @StateObject private var monthStartStore = MonthStartStore()
+    @StateObject private var appRoute = AppRoute()
     
     @Environment(\.scenePhase) private var scenePhase
     
@@ -37,24 +38,55 @@ struct KaKeBoApp: App {
                 .environmentObject(lock)
                 .environmentObject(ledgerContext)
                 .environmentObject(monthStartStore)
+                .environmentObject(appRoute)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
+                .task {
+                    let pending = CloudKitShareAcceptanceQueue.shared.drain()
+                    for metadata in pending {
+                        await sharedLedgerStore.acceptShare(metadata)
+                    }
+                }
                 .task {
 //                    debugAppGroupFiles()
                     await purchase.load()
                 }
-                .onReceive(NotificationCenter.default.publisher(for: .cloudKitShareAccepted)) { notification in
-                    guard let metadata = notification.object as? CKShare.Metadata else { return }
+                .onReceive(NotificationCenter.default.publisher(for: .cloudKitShareAccepted)) { _ in
+                    let metadatas = CloudKitShareAcceptanceQueue.shared.drain()
                     Task {
-                        await sharedLedgerStore.acceptShare(metadata)
+                        for metadata in metadatas {
+                            await sharedLedgerStore.acceptShare(metadata)
+                        }
                     }
                 }
-                .onOpenURL { url in
+                .onReceive(NotificationCenter.default.publisher(for: .cloudKitDatabaseChanged)) { _ in
+                    Task {
+                        await sharedLedgerStore.handleRemoteChange()
+                    }
+                }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    guard let url = activity.webpageURL else { return }
+                    print("ℹ️ [KaKeBoApp] continueUserActivity received: \(url.absoluteString)")
                     Task {
                         do {
                             let metadata = try await CKContainer.default().shareMetadata(for: url)
-                            await sharedLedgerStore.acceptShare(metadata)
+                            print("ℹ️ [KaKeBoApp] shareMetadata resolved (continueUserActivity): container=\(metadata.containerIdentifier)")
+                            CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
                         } catch {
-                            print("shareMetadata error:", error)
+                            print("❌ [KaKeBoApp] shareMetadata error via continueUserActivity for url=\(url.absoluteString): \(error)")
+                        }
+                    }
+                }
+                .onOpenURL { url in
+                    if !appRoute.handle(url: url) {
+                        print("ℹ️ [KaKeBoApp] onOpenURL received: \(url.absoluteString)")
+                        Task {
+                            do {
+                                let metadata = try await CKContainer.default().shareMetadata(for: url)
+                                print("ℹ️ [KaKeBoApp] shareMetadata resolved: container=\(metadata.containerIdentifier)")
+                                CloudKitShareAcceptanceQueue.shared.enqueue(metadata)
+                            } catch {
+                                print("❌ [KaKeBoApp] shareMetadata error for url=\(url.absoluteString): \(error)")
+                            }
                         }
                     }
                 }
@@ -86,6 +118,7 @@ struct KaKeBoApp: App {
 
 extension Notification.Name {
     static let cloudKitShareAccepted = Notification.Name("cloudKitShareAccepted")
+    static let cloudKitDatabaseChanged = Notification.Name("cloudKitDatabaseChanged")
 }
 
 /// background→active の時だけロックを復帰させるゲート
