@@ -10,6 +10,8 @@ import SwiftUI
 /// 2026年の初回起動時に一度だけ表示するレビュー導線
 struct NewYearReview2026Gate: View {
     @AppStorage("engagement.newYear2026Review.shown", store: .appGroup) private var hasShown = false
+    @AppStorage("engagement.lastActiveYear", store: .appGroup) private var lastActiveYear = 0
+    @AppStorage("app.installedVersion") private var installedVersion = ""
     @State private var isPresented = false
 
     @EnvironmentObject var themeStore: ThemeStore
@@ -37,9 +39,17 @@ struct NewYearReview2026Gate: View {
     }
 
     private func evaluateAndMaybeShow() {
-        guard !hasShown else { return }
         let year = calendar.component(.year, from: Date())
+        let previousActiveYear = lastActiveYear
+        if lastActiveYear != year {
+            lastActiveYear = year
+        }
+
+        guard !hasShown else { return }
         guard year == 2026 else { return }
+        guard previousActiveYear == 2025 else { return }
+        guard !installedVersion.isEmpty else { return }
+        guard installedVersion != AppVersion.current else { return }
 
         hasShown = true
         isPresented = true
