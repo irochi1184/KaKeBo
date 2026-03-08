@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CloudKit
+import UIKit
 
 struct SharedLedgerListScreen: View {
     @EnvironmentObject var store: SharedLedgerStore
@@ -22,6 +23,7 @@ struct SharedLedgerListScreen: View {
     @State private var showShareError = false
     @State private var deleteErrorMessage: String? = nil
     @State private var showDeleteError = false
+    @State private var showJoinByLinkSheet = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -54,6 +56,10 @@ struct SharedLedgerListScreen: View {
                 payload: payload,
                 ledger: shareTargetLedger
             )
+        }
+        .sheet(isPresented: $showJoinByLinkSheet) {
+            JoinSharedLedgerByLinkSheet()
+                .environmentObject(store)
         }
         .confirmationDialog(
             "この共有家計簿を削除しますか？",
@@ -144,6 +150,14 @@ struct SharedLedgerListScreen: View {
             Text("複数人で一緒に使う家計簿をまとめて管理できます。カップル用、家族用、旅行用など、目的ごとに分けておくと便利です。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            Button {
+                showJoinByLinkSheet = true
+            } label: {
+                Label("招待リンクで参加", systemImage: "link.badge.plus")
+                    .font(.footnote.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
         }
         .padding(16)
         .background(
@@ -503,6 +517,87 @@ private struct ShareInvitationSheet: View {
         }
     }
 }
+
+
+private struct JoinSharedLedgerByLinkSheet: View {
+    @EnvironmentObject var store: SharedLedgerStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var invitationURLText: String = ""
+    @State private var isSubmitting = false
+    @State private var validationMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("招待リンクを貼り付け") {
+                    TextField("https://www.icloud.com/share/...", text: $invitationURLText, axis: .vertical)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.URL)
+
+                    Button("クリップボードから貼り付け") {
+                        invitationURLText = UIPasteboard.general.string ?? ""
+                    }
+                }
+
+                Section("うまく開けないとき") {
+                    Text("LINEなどのアプリ内ブラウザでリンクを開くと、参加画面まで進めない場合があります。Safariでリンクを開くか、リンクをコピーしてこの画面から参加してください。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let message = validationMessage {
+                    Section {
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("招待リンクで参加")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        submit()
+                    } label: {
+                        if isSubmitting {
+                            ProgressView()
+                        } else {
+                            Text("参加")
+                        }
+                    }
+                    .disabled(isSubmitting)
+                }
+            }
+        }
+    }
+
+    private func submit() {
+        let trimmed = invitationURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              let host = url.host,
+              host.contains("icloud.com")
+        else {
+            validationMessage = "有効なiCloud共有リンクを入力してください。"
+            return
+        }
+
+        validationMessage = nil
+        isSubmitting = true
+        Task {
+            let didJoin = await store.acceptShareURL(url)
+            await MainActor.run {
+                isSubmitting = false
+                if didJoin {
+                    dismiss()
+                }
+            }
+        }
+    }
+}
+
 
 private extension Color {
     static var tertiaryLabel: Color {

@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import CloudKit
+import Combine
 
 @main
 struct KaKeBoApp: App {
@@ -62,6 +63,11 @@ struct KaKeBoApp: App {
                     Task {
                         await sharedLedgerStore.handleRemoteChange()
                     }
+                }
+                .onReceive(sharedLedgerStore.$lastAcceptedLedgerID.compactMap { $0 }) { ledgerID in
+                    ledgerContext.setShared(id: ledgerID)
+                    print("✅ [KaKeBoApp] switched to accepted shared ledger id=\(ledgerID.recordName)")
+                    sharedLedgerStore.lastAcceptedLedgerID = nil
                 }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     guard let url = activity.webpageURL else { return }
