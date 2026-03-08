@@ -226,6 +226,25 @@ final class SharedLedgerStore: ObservableObject {
     
     // MARK: - Ledger
     
+
+    func acceptShareURL(_ url: URL) async {
+        print("ℹ️ [SharedLedgerStore] acceptShareURL start url=\(url.absoluteString)")
+        do {
+            let metadata = try await CKContainer.default().shareMetadata(for: url)
+            print("ℹ️ [SharedLedgerStore] shareMetadata resolved via URL container=\(metadata.containerIdentifier), shareID=\(metadata.share.recordID.recordName)")
+            await acceptShare(metadata)
+        } catch {
+            lastError = error
+            globalToast = ToastState(
+                message: "リンクの読み込みに失敗しました。Safariでリンクを開くか、リンク全体をコピーしてもう一度お試しください。",
+                systemImage: "exclamationmark.triangle.fill",
+                actionTitle: nil,
+                action: nil
+            )
+            print("❌ [SharedLedgerStore] acceptShareURL error url=\(url.absoluteString), error=\(error)")
+        }
+    }
+
     func acceptShare(_ metadata: CKShare.Metadata) async {
         isAcceptingShare = true
         defer { isAcceptingShare = false }

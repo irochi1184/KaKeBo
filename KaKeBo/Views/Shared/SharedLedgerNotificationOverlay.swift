@@ -84,7 +84,7 @@ struct SharedLedgerNotificationOverlay: View {
     private func toastView(_ toast: SharedLedgerStore.ToastState) -> some View {
         HStack(spacing: 12) {
             Image(systemName: toast.systemImage)
-                .foregroundStyle(.green)
+                .foregroundStyle(toast.systemImage.contains("triangle") ? .orange : .green)
             VStack(alignment: .leading, spacing: 6) {
                 Text(toast.message)
                     .font(.subheadline.weight(.semibold))
