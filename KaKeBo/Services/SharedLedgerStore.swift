@@ -21,6 +21,8 @@ final class SharedLedgerStore: ObservableObject {
 
     @Published var activeCopy: CopyState? = nil
     @Published var globalToast: ToastState? = nil
+    @Published var isAcceptingShare = false
+    @Published var lastAcceptedLedgerID: CKRecord.ID?
     @Published var deletingLedgerIDs: Set<CKRecord.ID> = []
     
     private let container: CKContainer
@@ -224,13 +226,44 @@ final class SharedLedgerStore: ObservableObject {
     
     // MARK: - Ledger
     
+
+    func acceptShareURL(_ url: URL) async {
+        print("ℹ️ [SharedLedgerStore] acceptShareURL start url=\(url.absoluteString)")
+        do {
+            let metadata = try await CKContainer.default().shareMetadata(for: url)
+            print("ℹ️ [SharedLedgerStore] shareMetadata resolved via URL container=\(metadata.containerIdentifier), shareID=\(metadata.share.recordID.recordName)")
+            await acceptShare(metadata)
+        } catch {
+            lastError = error
+            globalToast = ToastState(
+                message: "リンクの読み込みに失敗しました。Safariでリンクを開くか、リンク全体をコピーしてもう一度お試しください。",
+                systemImage: "exclamationmark.triangle.fill",
+                actionTitle: nil,
+                action: nil
+            )
+            print("❌ [SharedLedgerStore] acceptShareURL error url=\(url.absoluteString), error=\(error)")
+        }
+    }
+
     func acceptShare(_ metadata: CKShare.Metadata) async {
+        isAcceptingShare = true
+        defer { isAcceptingShare = false }
+
+        let shareID = metadata.share.recordID.recordName
+        print("ℹ️ [SharedLedgerStore] acceptShare start container=\(metadata.containerIdentifier), shareID=\(shareID)")
+        let beforeLedgerIDs = Set(ledgers.map(\.id))
+
         do {
             let targetContainer = CKContainer(identifier: metadata.containerIdentifier)
-            print("🔗 [SharedLedgerStore] Accepting share: container=\(metadata.containerIdentifier)")
+            print("🔗 [SharedLedgerStore] Accepting share: container=\(metadata.containerIdentifier), shareID=\(shareID)")
             try await acceptShareMetadata(metadata, container: targetContainer)
             lastFailedShareMetadata = nil
             let reloadSucceeded = await reloadLedgers(logContext: "acceptShare success")
+            if let addedLedger = ledgers.first(where: { !beforeLedgerIDs.contains($0.id) }) {
+                lastAcceptedLedgerID = addedLedger.id
+                rememberLastOpened(ledger: addedLedger)
+                print("✅ [SharedLedgerStore] accepted ledger detected id=\(addedLedger.id.recordName)")
+            }
             if reloadSucceeded {
                 globalToast = ToastState(
                     message: "共有家計簿に参加しました。",
@@ -274,18 +307,19 @@ final class SharedLedgerStore: ObservableObject {
             lastFailedShareMetadata = metadata
             lastError = error
             let retryable = isRetryableShareError(error)
+            let friendlyMessage = shareAcceptanceErrorMessage(for: error)
             let actionTitle = retryable ? "再試行" : nil
             let action: (() -> Void)? = retryable ? { [weak self] in
                 guard let self else { return }
                 Task { await self.acceptShare(metadata) }
             } : nil
             globalToast = ToastState(
-                message: "共有家計簿の参加に失敗しました。",
+                message: friendlyMessage,
                 systemImage: "exclamationmark.triangle.fill",
                 actionTitle: actionTitle,
                 action: action
             )
-            print("❌ [SharedLedgerStore] acceptShare error: \(error)")
+            print("❌ [SharedLedgerStore] acceptShare error container=\(metadata.containerIdentifier), shareID=\(shareID), error=\(error)")
         }
     }
 
@@ -302,12 +336,12 @@ final class SharedLedgerStore: ObservableObject {
                 if case .failure(let error) = result, firstError == nil {
                     firstError = error
                     if let ckError = error as? CKError {
-                        print("\(prefix) failed code=\(ckError.code.rawValue), userInfo=\(ckError.userInfo)")
+                        print("\(prefix) failed container=\(meta.containerIdentifier), shareID=\(meta.share.recordID.recordName), code=\(ckError.code.rawValue), userInfo=\(ckError.userInfo)")
                     } else {
-                        print("\(prefix) failed error=\(error)")
+                        print("\(prefix) failed container=\(meta.containerIdentifier), shareID=\(meta.share.recordID.recordName), error=\(error)")
                     }
                 } else if case .success = result {
-                    print("\(prefix) succeeded")
+                    print("\(prefix) succeeded container=\(meta.containerIdentifier), shareID=\(meta.share.recordID.recordName)")
                 }
             }
             operation.acceptSharesResultBlock = { result in
@@ -356,6 +390,25 @@ final class SharedLedgerStore: ObservableObject {
             return true
         default:
             return false
+        }
+    }
+
+    private func shareAcceptanceErrorMessage(for error: Error) -> String {
+        guard let ckError = error as? CKError else {
+            return "共有家計簿の参加に失敗しました。時間をおいて再度お試しください。"
+        }
+
+        switch ckError.code {
+        case .notAuthenticated:
+            return "iCloudにサインインしてから、もう一度お試しください。"
+        case .permissionFailure:
+            return "この共有家計簿に参加する権限がありません。共有リンクの再発行を依頼してください。"
+        case .unknownItem:
+            return "共有リンクの有効期限が切れているか、すでに無効になっています。新しいリンクをお試しください。"
+        case .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited:
+            return "通信が不安定なため参加できませんでした。接続状況を確認して再度お試しください。"
+        default:
+            return "共有家計簿の参加に失敗しました。LINEなどのアプリ内ブラウザで開いた場合は、Safariで開き直してお試しください。"
         }
     }
 
