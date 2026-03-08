@@ -587,10 +587,12 @@ private struct JoinSharedLedgerByLinkSheet: View {
         validationMessage = nil
         isSubmitting = true
         Task {
-            await store.acceptShareURL(url)
+            let didJoin = await store.acceptShareURL(url)
             await MainActor.run {
                 isSubmitting = false
-                dismiss()
+                if didJoin {
+                    dismiss()
+                }
             }
         }
     }

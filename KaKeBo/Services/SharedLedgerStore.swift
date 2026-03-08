@@ -227,12 +227,14 @@ final class SharedLedgerStore: ObservableObject {
     // MARK: - Ledger
     
 
-    func acceptShareURL(_ url: URL) async {
+    @discardableResult
+    func acceptShareURL(_ url: URL) async -> Bool {
         print("ℹ️ [SharedLedgerStore] acceptShareURL start url=\(url.absoluteString)")
         do {
             let metadata = try await CKContainer.default().shareMetadata(for: url)
             print("ℹ️ [SharedLedgerStore] shareMetadata resolved via URL container=\(metadata.containerIdentifier), shareID=\(metadata.share.recordID.recordName)")
             await acceptShare(metadata)
+            return lastError == nil
         } catch {
             lastError = error
             globalToast = ToastState(
@@ -242,6 +244,7 @@ final class SharedLedgerStore: ObservableObject {
                 action: nil
             )
             print("❌ [SharedLedgerStore] acceptShareURL error url=\(url.absoluteString), error=\(error)")
+            return false
         }
     }
 
@@ -258,6 +261,7 @@ final class SharedLedgerStore: ObservableObject {
             print("🔗 [SharedLedgerStore] Accepting share: container=\(metadata.containerIdentifier), shareID=\(shareID)")
             try await acceptShareMetadata(metadata, container: targetContainer)
             lastFailedShareMetadata = nil
+            lastError = nil
             let reloadSucceeded = await reloadLedgers(logContext: "acceptShare success")
             if let addedLedger = ledgers.first(where: { !beforeLedgerIDs.contains($0.id) }) {
                 lastAcceptedLedgerID = addedLedger.id
@@ -284,6 +288,7 @@ final class SharedLedgerStore: ObservableObject {
         } catch {
             if let ckError = error as? CKError, isAlreadyParticipantError(ckError) {
                 let reloadSucceeded = await reloadLedgers(logContext: "acceptShare alreadyParticipant")
+                lastError = nil
                 if reloadSucceeded {
                     globalToast = ToastState(
                         message: "すでにこの共有家計簿に参加しています。",
@@ -308,8 +313,9 @@ final class SharedLedgerStore: ObservableObject {
             lastError = error
             let retryable = isRetryableShareError(error)
             let friendlyMessage = shareAcceptanceErrorMessage(for: error)
-            let actionTitle = retryable ? "再試行" : nil
-            let action: (() -> Void)? = retryable ? { [weak self] in
+            let canRetryImmediately = canRetryImmediately(for: error)
+            let actionTitle = retryable && canRetryImmediately ? "再試行" : nil
+            let action: (() -> Void)? = retryable && canRetryImmediately ? { [weak self] in
                 guard let self else { return }
                 Task { await self.acceptShare(metadata) }
             } : nil
@@ -319,7 +325,12 @@ final class SharedLedgerStore: ObservableObject {
                 actionTitle: actionTitle,
                 action: action
             )
-            print("❌ [SharedLedgerStore] acceptShare error container=\(metadata.containerIdentifier), shareID=\(shareID), error=\(error)")
+            if let ckError = error as? CKError,
+               let retryAfter = retryAfterSeconds(from: ckError) {
+                print("❌ [SharedLedgerStore] acceptShare error container=\(metadata.containerIdentifier), shareID=\(shareID), retryAfter=\(retryAfter), error=\(error)")
+            } else {
+                print("❌ [SharedLedgerStore] acceptShare error container=\(metadata.containerIdentifier), shareID=\(shareID), error=\(error)")
+            }
         }
     }
 
@@ -386,11 +397,40 @@ final class SharedLedgerStore: ObservableObject {
     private func isRetryableShareError(_ error: Error) -> Bool {
         guard let ckError = error as? CKError else { return false }
         switch ckError.code {
-        case .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy, .limitExceeded, .resultsTruncated:
+        case .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy, .limitExceeded, .resultsTruncated, .quotaExceeded:
             return true
         default:
             return false
         }
+    }
+
+    private func canRetryImmediately(for error: Error) -> Bool {
+        guard let ckError = error as? CKError else { return true }
+        if ckError.code == .quotaExceeded { return false }
+        if ckError.code == .requestRateLimited,
+           retryAfterSeconds(from: ckError) != nil {
+            return false
+        }
+        return true
+    }
+
+    private func retryAfterSeconds(from ckError: CKError) -> TimeInterval? {
+        if let seconds = ckError.userInfo[CKErrorRetryAfterKey] as? TimeInterval {
+            return seconds
+        }
+        if let seconds = ckError.userInfo[CKErrorRetryAfterKey] as? NSNumber {
+            return seconds.doubleValue
+        }
+        return nil
+    }
+
+    private func formattedRetryText(seconds: TimeInterval) -> String {
+        let rounded = max(1, Int(seconds.rounded()))
+        if rounded < 60 {
+            return "\(rounded)秒"
+        }
+        let minutes = Int(ceil(Double(rounded) / 60.0))
+        return "\(minutes)分"
     }
 
     private func shareAcceptanceErrorMessage(for error: Error) -> String {
@@ -405,8 +445,18 @@ final class SharedLedgerStore: ObservableObject {
             return "この共有家計簿に参加する権限がありません。共有リンクの再発行を依頼してください。"
         case .unknownItem:
             return "共有リンクの有効期限が切れているか、すでに無効になっています。新しいリンクをお試しください。"
-        case .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited:
+        case .networkUnavailable, .networkFailure, .serviceUnavailable:
             return "通信が不安定なため参加できませんでした。接続状況を確認して再度お試しください。"
+        case .requestRateLimited:
+            if let retryAfter = retryAfterSeconds(from: ckError) {
+                return "アクセスが集中しています。約\(formattedRetryText(seconds: retryAfter))後にもう一度お試しください。"
+            }
+            return "アクセスが集中しています。しばらく待ってからもう一度お試しください。"
+        case .quotaExceeded:
+            if let retryAfter = retryAfterSeconds(from: ckError) {
+                return "現在、iCloud側の処理待ちが発生しています。約\(formattedRetryText(seconds: retryAfter))後にもう一度お試しください。"
+            }
+            return "現在、iCloud側の処理待ちが発生しています。しばらく待ってからもう一度お試しください。"
         default:
             return "共有家計簿の参加に失敗しました。LINEなどのアプリ内ブラウザで開いた場合は、Safariで開き直してお試しください。"
         }
