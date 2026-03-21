@@ -72,6 +72,7 @@ final class SharedLedgerStore: ObservableObject {
     private var lastFailedShareMetadata: CKShare.Metadata?
     private var shareAcceptanceRetryTasks: [String: Task<Void, Never>] = [:]
     private var shareAcceptanceRetryCounts: [String: Int] = [:]
+    private let maxShareAcceptanceRetryCount = 6
     private let privateSubscriptionID = "kakebo.sharedLedger.privateChanges"
     private let sharedSubscriptionID = "kakebo.sharedLedger.sharedChanges"
 
@@ -374,6 +375,8 @@ final class SharedLedgerStore: ObservableObject {
                     metadata: metadata,
                     retryAfter: retryAfterSeconds(from: ckError)
                 )
+                lastError = nil
+                return
             }
 
             lastFailedShareMetadata = metadata
@@ -512,8 +515,14 @@ final class SharedLedgerStore: ObservableObject {
     ) {
         let shareID = metadata.share.recordID.recordName
         let attempts = shareAcceptanceRetryCounts[shareID] ?? 0
-        guard attempts < 2 else {
-            print("⚠️ [SharedLedgerStore] skip auto-retry shareID=\(shareID) reason=maxAttempts")
+        guard attempts < maxShareAcceptanceRetryCount else {
+            print("⚠️ [SharedLedgerStore] skip auto-retry shareID=\(shareID) reason=maxAttempts(\(maxShareAcceptanceRetryCount))")
+            globalToast = ToastState(
+                message: "参加処理が完了できませんでした。招待した人のiCloud空き容量を確認してから、もう一度お試しください。",
+                systemImage: "externaldrive.fill.badge.exclamationmark",
+                actionTitle: nil,
+                action: nil
+            )
             return
         }
 
@@ -524,7 +533,7 @@ final class SharedLedgerStore: ObservableObject {
         print("ℹ️ [SharedLedgerStore] schedule auto-retry shareID=\(shareID), attempt=\(attempts + 1), delay=\(delay)s")
 
         globalToast = ToastState(
-            message: "参加処理が混み合っています。約\(formattedRetryText(seconds: TimeInterval(delay)))後に自動で再試行します。",
+            message: "参加処理に時間がかかっています。約\(formattedRetryText(seconds: TimeInterval(delay)))後に自動で再試行します。招待した人のiCloud空き容量が不足していると完了しない場合があります。",
             systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90",
             actionTitle: nil,
             action: nil
@@ -607,9 +616,9 @@ final class SharedLedgerStore: ObservableObject {
             return "アクセスが集中しています。しばらく待ってからもう一度お試しください。"
         case .quotaExceeded:
             if let retryAfter = retryAfterSeconds(from: ckError) {
-                return "現在、iCloud側の処理待ちが発生しています。約\(formattedRetryText(seconds: retryAfter))後にもう一度お試しください。"
+                return "現在、iCloud側の処理待ちが発生しています。約\(formattedRetryText(seconds: retryAfter))後にもう一度お試しください。招待した人のiCloud空き容量不足でも失敗することがあります。"
             }
-            return "現在、iCloud側の処理待ちが発生しています。しばらく待ってからもう一度お試しください。"
+            return "現在、iCloud側の処理待ちが発生しています。しばらく待ってからもう一度お試しください。招待した人のiCloud空き容量不足でも失敗することがあります。"
         default:
             return "共有家計簿の参加に失敗しました。LINEなどのアプリ内ブラウザで開いた場合は、Safariで開き直してお試しください。"
         }
