@@ -83,9 +83,10 @@ struct AddTransactionView: View {
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
-    private var contentBottomPadding: CGFloat {
-        guard prefersCustomKeypad && showCustomKeypad else { return 0 }
-        return max(0, keypadHeight - keypadLift) + 16 + safeBottomInset
+    private var keypadBackdropColor: Color {
+        scheme == .dark
+        ? Color(red: 0.08, green: 0.08, blue: 0.09)
+        : Color(white: 0.98)
     }
     private var prefersCustomKeypad: Bool { themeStore.theme.prefersCustomKeypad }
     private var keypadColor: Color { themeStore.theme.keypadColor(isIncome: type == .income) }
@@ -117,12 +118,12 @@ struct AddTransactionView: View {
     @ViewBuilder
     private func addCustomKeypad<Content: View>(to view: Content, usesCustomKeypad: Bool) -> some View {
         view
-            .overlay(alignment: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 if usesCustomKeypad && showCustomKeypad {
                     ZStack(alignment: .bottom) {
                         Rectangle()
-                            .fill(themeStore.theme.backgroundColor(for: scheme))
-                            .frame(height: max(safeBottomInset + 100, keypadHeight + safeBottomInset + keypadLift + 24))
+                            .fill(keypadBackdropColor)
+                            .frame(height: safeBottomInset + keypadLift + 24)
                             .ignoresSafeArea(edges: .bottom)
 
                         NumericKeypad(
