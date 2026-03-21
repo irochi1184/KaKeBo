@@ -360,9 +360,10 @@ struct FixedExpenseEditorView: View {
     }
     
     private var gradientBG: LinearGradient {
+        let isBusiness = themeStore.theme.visualStyle == .business
         let colors: [Color] = (scheme == .dark)
-        ? [Color.black, Color(white: 0.12)]
-        : [Color(white: 0.98), Color(white: 0.94)]
+        ? [Color.black, isBusiness ? Color.black : Color(white: 0.12)]
+        : [Color(white: 0.98), isBusiness ? Color(white: 0.98) : Color(white: 0.94)]
         return LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom)
     }
     

@@ -12,10 +12,12 @@ struct MonthlyHeaderCard: View {
     let expense: Int
     let balance: Int
     @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     @Environment(\.colorScheme) private var scheme
     
     var body: some View {
-        let isFlat = themeStore.theme.homeCardStyle == .flat
+        let isFlat = themeStore.theme.visualStyle == .business
         VStack(alignment: .leading, spacing: 6) {
             Text("今月の収支")
                 .font(.subheadline.weight(.semibold))
@@ -25,13 +27,13 @@ struct MonthlyHeaderCard: View {
                     Spacer()
                     Text(currency(balance))
                         .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                        .foregroundStyle(balance >= 0 ? Color.green : Color.red)
+                        .foregroundStyle(balance >= 0 ? incomeColor : expenseColor)
                         .contentTransition(.numericText()) // iOS17+
                 }
                 
                 HStack(spacing: 12) {
-                    StatPill(title: "支出", value: expense, icon: "arrow.down.left.circle.fill", base: .red.opacity(0.75), isFlat: isFlat)
-                    StatPill(title: "収入", value: income, icon: "arrow.up.right.circle.fill", base: .green.opacity(0.75), isFlat: isFlat)
+                    StatPill(title: "支出", value: expense, icon: "arrow.down.left.circle.fill", base: expenseColor.opacity(0.75), isFlat: isFlat)
+                    StatPill(title: "収入", value: income, icon: "arrow.up.right.circle.fill", base: incomeColor.opacity(0.75), isFlat: isFlat)
                 }
             }
             .homeCard()

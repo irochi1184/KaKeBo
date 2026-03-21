@@ -38,17 +38,21 @@ struct ThemeSettingsView: View {
             }
 
             // TODO: デザイン追加
-//            Section("ホームカード") {
-//                Picker("カードデザイン", selection: Binding(
-//                    get: { working.homeCardStyle },
-//                    set: { newVal in var w = working; w.homeCardStyle = newVal; working = w }
-//                )) {
-//                    ForEach(AppTheme.HomeCardStyle.allCases, id: \.self) {
-//                        Text($0.title).tag($0)
-//                    }
-//                }
-//                .pickerStyle(.segmented)
-//            }
+            Section("画面デザイン") {
+                Picker("デザイン", selection: Binding(
+                    get: { working.visualStyle },
+                    set: { newVal in var w = working; w.visualStyle = newVal; working = w }
+                )) {
+                    ForEach(AppTheme.VisualStyle.allCases, id: \.self) {
+                        Text($0.title).tag($0)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text("「フラット」を選ぶと、全体の見た目が平坦で枠線中心の表示になります。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             
             // === カスタム（プレミアム限定） ===
             Section("カスタム（プレミアム）") {
@@ -93,6 +97,25 @@ struct ThemeSettingsView: View {
                 }
             }
 
+            Section("収支カラー") {
+                ColorPicker(
+                    "収入カラー",
+                    selection: Binding(
+                        get: { working.incomeRGBA.swiftUIColor },
+                        set: { c in var w = working; w.incomeRGBA = .init(c); w.markAsCustom(); working = w }
+                    ),
+                    supportsOpacity: false
+                )
+                ColorPicker(
+                    "支出カラー",
+                    selection: Binding(
+                        get: { working.expenseRGBA.swiftUIColor },
+                        set: { c in var w = working; w.expenseRGBA = .init(c); w.markAsCustom(); working = w }
+                    ),
+                    supportsOpacity: false
+                )
+            }
+
             // === プレビュー ===
             Section("プレビュー") {
                 Picker("表示モード", selection: $previewMode) {
@@ -104,7 +127,8 @@ struct ThemeSettingsView: View {
                 HomePreview(
                     background: working.backgroundColor(for: s),
                     accent: working.accentColor(for: s),
-                    cardStyle: working.homeCardStyle
+                    cardStyle: working.homeCardStyle,
+                    visualStyle: working.visualStyle
                 )
                 .environment(\.colorScheme, s)
                 .frame(maxHeight: 160)
@@ -260,6 +284,7 @@ private struct HomePreview: View {
     var background: Color
     var accent: Color
     var cardStyle: AppTheme.HomeCardStyle
+    var visualStyle: AppTheme.VisualStyle
     var body: some View {
         ZStack {
             Rectangle().fill(background)
@@ -275,36 +300,59 @@ private struct HomePreview: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
-                .modifier(HomePreviewCardStyle(cardStyle: cardStyle))
+                .modifier(HomePreviewCardStyle(cardStyle: cardStyle, visualStyle: visualStyle))
                 .padding(.horizontal, 12)
             }
             .padding(.vertical, 10)
         }
+        .fontDesign(visualStyle == .business ? .default : .rounded)
     }
 }
 
 private struct HomePreviewCardStyle: ViewModifier {
     let cardStyle: AppTheme.HomeCardStyle
+    let visualStyle: AppTheme.VisualStyle
     @Environment(\.colorScheme) private var scheme
+    @ViewBuilder
     func body(content: Content) -> some View {
-        switch cardStyle {
-        case .luxe:
-            content
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(scheme == .dark ? Color.white.opacity(0.08) : .white.opacity(0.9))
-                        .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
-                )
-        case .flat:
+        if visualStyle == .business {
             content
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(scheme == .dark ? Color.white.opacity(0.05) : .white)
+                        .fill(scheme == .dark ? Color.white.opacity(0.04) : .white)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(scheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08), lineWidth: 1)
+                        .stroke(scheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.10), lineWidth: 1)
                 )
+        } else {
+            switch cardStyle {
+            case .luxe:
+                content
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(scheme == .dark ? Color.white.opacity(0.08) : .white.opacity(0.9))
+                            .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
+                    )
+            case .flat:
+                content
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(scheme == .dark ? Color.white.opacity(0.05) : .white)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(scheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08), lineWidth: 1)
+                    )
+            }
         }
+    }
+}
+
+#Preview("テーマ設定") {
+    NavigationStack {
+        ThemeSettingsView()
+            .environmentObject(ThemeStore())
+            .environmentObject(PurchaseManager())
     }
 }

@@ -8,41 +8,69 @@
 import SwiftUI
 
 struct LuxCard: ViewModifier {
-//    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.appVisualStyle) private var visualStyle
     @Environment(\.colorScheme) private var scheme
     var corner: CGFloat = 16
     func body(content: Content) -> some View {
-//        let accent = themeStore.theme.accentColor(for: scheme)
-        content
+        let isBusiness = visualStyle == .business
+        let fillColor = scheme == .dark ? Color.white.opacity(isBusiness ? 0.03 : 0.06) : .white
+        let strokeColor = scheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.10)
+
+        return content
             .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: corner)
-                    .fill(scheme == .dark ? Color.white.opacity(0.06) : .white)
-                    .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.06), radius: 10, y: 5)
+                RoundedRectangle(cornerRadius: isBusiness ? 10 : corner, style: .continuous)
+                    .fill(fillColor)
+            )
+            .overlay {
+                if isBusiness {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(strokeColor, lineWidth: 1)
+                }
+            }
+            .shadow(
+                color: .black.opacity(isBusiness ? 0 : (scheme == .dark ? 0.35 : 0.06)),
+                radius: isBusiness ? 0 : 10,
+                y: isBusiness ? 0 : 5
             )
     }
 }
 
 struct HomeCard: ViewModifier {
-    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.appVisualStyle) private var visualStyle
+    @Environment(\.appHomeCardStyle) private var homeCardStyle
     @Environment(\.colorScheme) private var scheme
     var corner: CGFloat = 16
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        switch themeStore.theme.homeCardStyle {
-        case .luxe:
-            content.luxCard(corner: corner)
-        case .flat:
+        if visualStyle == .business {
             content
                 .padding(16)
                 .background(
-                    RoundedRectangle(cornerRadius: corner, style: .continuous)
-                        .fill(scheme == .dark ? Color.white.opacity(0.05) : .white)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(scheme == .dark ? Color.white.opacity(0.03) : .white)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: corner, style: .continuous)
-                        .stroke(scheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.06), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(scheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.10), lineWidth: 1)
                 )
+        } else {
+            switch homeCardStyle {
+            case .luxe:
+                content.luxCard(corner: corner)
+            case .flat:
+                content
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: corner, style: .continuous)
+                            .fill(scheme == .dark ? Color.white.opacity(0.05) : .white)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: corner, style: .continuous)
+                            .stroke(scheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.06), lineWidth: 1)
+                    )
+            }
         }
     }
 }
