@@ -63,6 +63,7 @@ struct SharedLedgerListScreen: View {
                 payload: payload,
                 ledger: shareTargetLedger
             )
+            .environmentObject(store)
         }
         .sheet(isPresented: $showJoinByLinkSheet) {
             JoinSharedLedgerByLinkSheet()
@@ -435,6 +436,7 @@ struct SharedLedgerListScreen: View {
 // MARK: - 招待シート
 
 private struct ShareInvitationSheet: View {
+    @EnvironmentObject var store: SharedLedgerStore
     let payload: SharedLedgerStore.SharePayload
     let ledger: SharedLedger?
 
@@ -478,6 +480,19 @@ private struct ShareInvitationSheet: View {
                             container: CKContainer.default()
                         )
                         .frame(maxWidth: .infinity)
+
+                        Button {
+                            guard let shareURL = payload.share.url else { return }
+                            UIPasteboard.general.string = shareURL.absoluteString
+                            store.showToast(message: "リンクをコピーしました")
+                        } label: {
+                            Label("リンクをコピー", systemImage: "doc.on.doc")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(payload.share.url == nil)
 //                        .padding(12)
 //                        .background(
 //                            RoundedRectangle(cornerRadius: 16, style: .continuous)
