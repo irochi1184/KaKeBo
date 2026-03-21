@@ -57,6 +57,9 @@ struct RootTabView: View {
                 .environmentObject(sharedLedgerStore)
                 .allowsHitTesting(false)
         }
+        .environment(\.appVisualStyle, themeStore.theme.visualStyle)
+        .environment(\.appHomeCardStyle, themeStore.theme.homeCardStyle)
+        .fontDesign(themeStore.theme.visualStyle == .business ? .default : .rounded)
         .tint(themeStore.theme.accentColor(for: scheme))
     }
 
