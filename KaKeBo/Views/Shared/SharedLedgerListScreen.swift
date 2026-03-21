@@ -36,6 +36,13 @@ struct SharedLedgerListScreen: View {
                 sharingLoadingView
                     .padding(.horizontal, 20)
             }
+
+            if store.isLoading && !store.ledgers.isEmpty {
+                LoadingOverlayView(
+                    title: "読み込み中",
+                    message: "共有家計簿の最新情報を更新しています…"
+                )
+            }
         }
         .task {
             await store.reloadLedgers()
@@ -162,6 +169,15 @@ struct SharedLedgerListScreen: View {
             Text("複数人で一緒に使う家計簿をまとめて管理できます。カップル用、家族用、旅行用など、目的ごとに分けておくと便利です。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "icloud")
+                    .font(.footnote)
+                    .foregroundStyle(.blue)
+                Text("共有家計簿の作成や招待リンクの発行には、iCloudの空き容量が必要です。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Button {
                 showJoinByLinkSheet = true
@@ -440,6 +456,7 @@ private struct ShareInvitationSheet: View {
                         VStack(alignment: .leading, spacing: 10) {
                             infoRow(icon: "person.crop.circle.badge.plus", text: "受け取った相手が共有メンバーとして参加できます")
                             infoRow(icon: "lock.open.display", text: "参加すると最新の収支やカテゴリがリアルタイムに同期されます")
+                            infoRow(icon: "icloud", text: "共有の準備には、iCloudの空き容量が必要です")
                             infoRow(icon: "hand.tap", text: "招待を取り消したい場合は、メンバー管理からいつでも解除できます")
                         }
                         .padding(14)
@@ -611,6 +628,14 @@ private struct JoinSharedLedgerByLinkSheet: View {
                 }
             }
         }
+        .overlay {
+            if isSubmitting {
+                LoadingOverlayView(
+                    title: "読み込み中",
+                    message: "招待リンクを確認しています…"
+                )
+            }
+        }
     }
 
     private func submit() {
@@ -641,5 +666,47 @@ private struct JoinSharedLedgerByLinkSheet: View {
 private extension Color {
     static var tertiaryLabel: Color {
         Color(UIColor.tertiaryLabel)
+    }
+}
+
+
+struct LoadingOverlayView: View {
+    let title: String
+    var message: String?
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.18)
+                .ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(.accentColor)
+
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                if let message {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(.systemBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            )
+            .padding(.horizontal, 36)
+        }
+        .transition(.opacity)
     }
 }
