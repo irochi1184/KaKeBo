@@ -83,6 +83,13 @@ struct AddTransactionView: View {
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
+    // 参照が残っている環境でもビルドが通るよう互換プロパティを維持
+    private var contentBottomPadding: CGFloat { 0 }
+    private var keypadBackdropColor: Color {
+        scheme == .dark
+        ? Color(red: 0.08, green: 0.08, blue: 0.09)
+        : Color(white: 0.98)
+    }
     private var prefersCustomKeypad: Bool { themeStore.theme.prefersCustomKeypad }
     private var keypadColor: Color { themeStore.theme.keypadColor(isIncome: type == .income) }
 
@@ -113,9 +120,14 @@ struct AddTransactionView: View {
     @ViewBuilder
     private func addCustomKeypad<Content: View>(to view: Content, usesCustomKeypad: Bool) -> some View {
         view
-            .safeAreaInset(edge: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 if usesCustomKeypad && showCustomKeypad {
-                    ZStack {
+                    ZStack(alignment: .bottom) {
+                        Rectangle()
+                            .fill(keypadBackdropColor)
+                            .frame(height: safeBottomInset + keypadLift + 24)
+                            .ignoresSafeArea(edges: .bottom)
+
                         NumericKeypad(
                             amount: $amount,
                             maxDigits: 9,
@@ -127,8 +139,8 @@ struct AddTransactionView: View {
                             onHeightChange: { h in keypadHeight = h }
                         )
                         .padding(.bottom, safeBottomInset)
+                        .offset(y: -keypadLift)
                     }
-                    .offset(y: -keypadLift)
                 }
             }
             .overlay(alignment: .bottomTrailing) {
@@ -376,7 +388,7 @@ struct AddTransactionView: View {
                         .presentationDragIndicator(.visible)
                 }
                 
-                Spacer(minLength: showCustomKeypad ? (isSmallPhone ? 20 : 60) : 0)
+                Spacer(minLength: 0)
             }
             .padding(.top, 12)
             .padding(.horizontal)
