@@ -36,7 +36,7 @@ struct PremiumPaywallView: View {
                         Text("KaKeBo プレミアム")
                             .font(.title2.weight(.bold))
                         
-                        Text("カテゴリ上限の解放、テーマの自由設定、通知の拡張、固定費テンプレート強化など、すべての機能を解放。")
+                        Text("カテゴリ・固定費・タグの上限解放に加え、収支カラーや通知設定までまとめてご利用いただけます。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -90,7 +90,7 @@ struct PremiumPaywallView: View {
             FeatureCard(
                 icon: "paintpalette.fill",
                 title: "テーマを自由にカスタム",
-                subtitle: "アクセント色・背景色、ライト/ダーク時での見え方まで細かく調整可能。ブランドカラーやお好みの配色で自分だけの家計簿に。",
+                subtitle: "アクセント色・背景色に加えて、収入/支出の表示カラーや電卓カラーも自由に変更できます。",
                 accent: accent
             )
             FeatureCard(
@@ -102,7 +102,7 @@ struct PremiumPaywallView: View {
             FeatureCard(
                 icon: "calendar.badge.clock",
                 title: "固定費をさらに強化",
-                subtitle: "無料プランは5件まで。6件目以降の固定費テンプレートの登録・運用が可能に。自動計上で漏れゼロへ。",
+                subtitle: "無料プランは5件まで。6件目以降の固定費テンプレートを登録できるので、毎月の入力漏れを防げます。",
                 accent: accent
             )
             FeatureCard(
@@ -129,7 +129,7 @@ struct PremiumPaywallView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
             
-            TrialBanner(text: "今なら1週間無料でサブスクをお試しいただけます")
+            TrialBanner(text: planBannerText)
                 .transition(.opacity.combined(with: .move(edge: .top)))
                 .padding(.bottom, 2)
             
@@ -154,7 +154,7 @@ struct PremiumPaywallView: View {
                 }
             }
             
-            Text("こちらは一度購入いただくと永久的に全ての機能をご利用いただけます。")
+            Text(planFootnoteText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
@@ -190,6 +190,36 @@ struct PremiumPaywallView: View {
                 Image(systemName: "xmark")
                     .font(.subheadline.weight(.semibold))
             }
+        }
+    }
+
+    private var planBannerText: String {
+        let hasSubscription = pm.products.contains { $0.type == .autoRenewable }
+        let hasLifetime = pm.products.contains { $0.type == .nonConsumable }
+        switch (hasSubscription, hasLifetime) {
+        case (true, true):
+            return "月額・年額・買い切りから、使い方に合うプランを選べます"
+        case (true, false):
+            return "月額・年額プランから、使い方に合うプランを選べます"
+        case (false, true):
+            return "買い切りプランなら、一度の購入で継続してご利用いただけます"
+        default:
+            return "ご利用プランを選択して、プレミアム機能をご利用いただけます"
+        }
+    }
+
+    private var planFootnoteText: String {
+        let hasSubscription = pm.products.contains { $0.type == .autoRenewable }
+        let hasLifetime = pm.products.contains { $0.type == .nonConsumable }
+        switch (hasSubscription, hasLifetime) {
+        case (true, true):
+            return "サブスクリプションと買い切りの両方をご用意しています。購入前に表示価格と利用条件をご確認ください。"
+        case (true, false):
+            return "サブスクリプションプランです。更新タイミングや解約方法は「サブスクリプションを管理」から確認できます。"
+        case (false, true):
+            return "買い切りプランです。価格は購入画面に表示されます。"
+        default:
+            return "価格と利用条件は購入ボタンの表示内容をご確認ください。"
         }
     }
 }
