@@ -83,6 +83,8 @@ struct AddTransactionView: View {
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
+    // 参照が残っている環境でもビルドが通るよう互換プロパティを維持
+    private var contentBottomPadding: CGFloat { 0 }
     private var keypadBackdropColor: Color {
         scheme == .dark
         ? Color(red: 0.08, green: 0.08, blue: 0.09)
