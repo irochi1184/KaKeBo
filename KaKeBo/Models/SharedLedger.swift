@@ -72,7 +72,7 @@ extension SharedLedger {
         let now = Date()
         return SharedLedger(
             id: CKRecord.ID(
-                recordName: UUID().uuidString,
+                recordName: "ledger_\(UUID().uuidString)",
                 zoneID: Self.zoneID
             ),
             name: name,
