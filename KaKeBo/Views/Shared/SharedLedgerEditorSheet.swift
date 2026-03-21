@@ -25,6 +25,7 @@ struct SharedLedgerEditorSheet: View {
     // 新規作成時のコピーオプション
     @State private var copyPersonalCategories = true
     @State private var copyPersonalTransactions = false
+    @State private var isSaving = false
     
     // 候補アイコン（必要に応じて増やしてOK）
     private static let symbolCandidates: [String] = [
@@ -64,6 +65,14 @@ struct SharedLedgerEditorSheet: View {
                 Section("カラー") {
                     colorPickerSection
                 }
+
+                Section("iCloudについて") {
+                    Label("共有家計簿の作成・共有にはiCloudが必要です", systemImage: "icloud")
+                        .font(.subheadline.weight(.semibold))
+                    Text("iCloudの空き容量が不足していると、共有の作成や招待リンクの発行に失敗する場合があります。事前に容量をご確認ください。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 if ledger == nil {
                     Section("個人用家計簿からコピー") {
                         Toggle("カテゴリをコピーする", isOn: $copyPersonalCategories)
@@ -84,43 +93,61 @@ struct SharedLedgerEditorSheet: View {
                     Button("キャンセル") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(ledger == nil ? "作成" : "保存") {
+                    Button {
                         Task {
-                            let trimmedName = name.trimmingCharacters(in: .whitespaces)
-                            guard !trimmedName.isEmpty else { return }
-                            
-                            let hex = Self.hex(from: color)
-                            
-                            if let ledger {
-                                await store.updateLedger(
-                                    ledger,
-                                    name: trimmedName,
-                                    icon: icon,
-                                    colorHex: hex
-                                )
-                            } else {
-                                // 新規作成モード
-                                if let newLedger = await store.createLedger(
-                                    name: trimmedName,
-                                    icon: icon,
-                                    colorHex: hex
-                                ) {
-                                    // ここで「裏でコピー開始」するだけ
-                                    store.startInitialCopy(
-                                        from: dataStore,
-                                        to: newLedger,
-                                        copyCategories: copyPersonalCategories,
-                                        copyTransactions: copyPersonalTransactions
-                                    )
-                                }
-                            }
-                            dismiss()
+                            await saveLedger()
+                        }
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Text(ledger == nil ? "作成" : "保存")
                         }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
                 }
             }
         }
+        .overlay {
+            if isSaving {
+                LoadingOverlayView(
+                    title: "読み込み中",
+                    message: ledger == nil ? "共有家計簿を作成しています…" : "共有家計簿を保存しています…"
+                )
+            }
+        }
+    }
+
+    private func saveLedger() async {
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty else { return }
+
+        isSaving = true
+        defer { isSaving = false }
+
+        let hex = Self.hex(from: color)
+
+        if let ledger {
+            await store.updateLedger(
+                ledger,
+                name: trimmedName,
+                icon: icon,
+                colorHex: hex
+            )
+        } else if let newLedger = await store.createLedger(
+            name: trimmedName,
+            icon: icon,
+            colorHex: hex
+        ) {
+            store.startInitialCopy(
+                from: dataStore,
+                to: newLedger,
+                copyCategories: copyPersonalCategories,
+                copyTransactions: copyPersonalTransactions
+            )
+        }
+
+        dismiss()
     }
     
     // MARK: - アイコン選択 UI
