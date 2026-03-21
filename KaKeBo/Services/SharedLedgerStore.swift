@@ -70,6 +70,8 @@ final class SharedLedgerStore: ObservableObject {
     private let defaults = UserDefaults.appGroup
     private var toastTask: Task<Void, Never>?
     private var lastFailedShareMetadata: CKShare.Metadata?
+    private var shareAcceptanceRetryTasks: [String: Task<Void, Never>] = [:]
+    private var shareAcceptanceRetryCounts: [String: Int] = [:]
     private let privateSubscriptionID = "kakebo.sharedLedger.privateChanges"
     private let sharedSubscriptionID = "kakebo.sharedLedger.sharedChanges"
 
@@ -287,6 +289,7 @@ final class SharedLedgerStore: ObservableObject {
             try await acceptShareMetadata(metadata, container: targetContainer)
             lastFailedShareMetadata = nil
             lastError = nil
+            clearShareAcceptanceRetryState(shareID: shareID)
             let reloadSucceeded = await reloadLedgers(logContext: "acceptShare success")
             if reloadSucceeded {
                 await refreshCachedRecords(for: ledgers)
@@ -325,6 +328,7 @@ final class SharedLedgerStore: ObservableObject {
             }
         } catch {
             if let ckError = error as? CKError, isAlreadyParticipantError(ckError) {
+                clearShareAcceptanceRetryState(shareID: shareID)
                 let reloadSucceeded = await reloadLedgers(logContext: "acceptShare alreadyParticipant")
                 if reloadSucceeded {
                     await refreshCachedRecords(for: ledgers)
@@ -357,6 +361,7 @@ final class SharedLedgerStore: ObservableObject {
                 )
                 if recovered {
                     lastError = nil
+                    clearShareAcceptanceRetryState(shareID: shareID)
                     globalToast = ToastState(
                         message: "共有家計簿の同期に時間がかかっています。しばらくしてから内容が表示されます。",
                         systemImage: "clock.badge.exclamationmark",
@@ -365,6 +370,10 @@ final class SharedLedgerStore: ObservableObject {
                     )
                     return
                 }
+                scheduleShareAcceptanceRetryIfNeeded(
+                    metadata: metadata,
+                    retryAfter: retryAfterSeconds(from: ckError)
+                )
             }
 
             lastFailedShareMetadata = metadata
@@ -427,16 +436,20 @@ final class SharedLedgerStore: ObservableObject {
                 case .success:
                     print("✅ [SharedLedgerStore] acceptSharesResult succeeded")
                     if !perShareErrors.isEmpty {
-                        let hasQuotaExceeded = perShareErrors.values.contains {
-                            guard let ckError = $0 as? CKError else { return false }
-                            return ckError.code == .quotaExceeded
-                        }
-                        if hasQuotaExceeded {
+                        let quotaError = perShareErrors.values
+                            .compactMap { $0 as? CKError }
+                            .first(where: { $0.code == .quotaExceeded })
+                        if let quotaError {
                             print("⚠️ [SharedLedgerStore] acceptSharesResult succeeded with perShare quotaExceeded. continue as success and reload from shared DB.")
+                            continuation.resume(throwing: quotaError)
                         } else {
                             print("⚠️ [SharedLedgerStore] acceptSharesResult succeeded with perShare errors. continue as success and rely on reload.")
+                            if let firstError = perShareErrors.values.first {
+                                continuation.resume(throwing: firstError)
+                            } else {
+                                continuation.resume()
+                            }
                         }
-                        continuation.resume()
                     } else {
                         continuation.resume()
                     }
@@ -491,6 +504,47 @@ final class SharedLedgerStore: ObservableObject {
             return true
         }
         return false
+    }
+
+    private func scheduleShareAcceptanceRetryIfNeeded(
+        metadata: CKShare.Metadata,
+        retryAfter: TimeInterval?
+    ) {
+        let shareID = metadata.share.recordID.recordName
+        let attempts = shareAcceptanceRetryCounts[shareID] ?? 0
+        guard attempts < 2 else {
+            print("⚠️ [SharedLedgerStore] skip auto-retry shareID=\(shareID) reason=maxAttempts")
+            return
+        }
+
+        shareAcceptanceRetryTasks[shareID]?.cancel()
+        shareAcceptanceRetryCounts[shareID] = attempts + 1
+
+        let delay = max(30, Int((retryAfter ?? 120).rounded()))
+        print("ℹ️ [SharedLedgerStore] schedule auto-retry shareID=\(shareID), attempt=\(attempts + 1), delay=\(delay)s")
+
+        globalToast = ToastState(
+            message: "参加処理が混み合っています。約\(formattedRetryText(seconds: TimeInterval(delay)))後に自動で再試行します。",
+            systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90",
+            actionTitle: nil,
+            action: nil
+        )
+
+        shareAcceptanceRetryTasks[shareID] = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await self?.acceptShare(metadata)
+        }
+    }
+
+    private func clearShareAcceptanceRetryState(shareID: String) {
+        shareAcceptanceRetryTasks[shareID]?.cancel()
+        shareAcceptanceRetryTasks[shareID] = nil
+        shareAcceptanceRetryCounts[shareID] = nil
     }
 
     private func isRetryableShareError(_ error: Error) -> Bool {

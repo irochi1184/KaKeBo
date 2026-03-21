@@ -28,6 +28,7 @@
 - `acceptShare`, `prepareShare`, `createLedger`, `addTransaction` で `CKError.quotaExceeded` を明示ハンドリング
 - トースト文言を専用化（再試行目安を表示）
 - ログに `operation / container / shareID / ledgerID / retryAfter` を含める
+- `acceptShare` では `retryAfter` を使って自動再試行（最大2回）を行い、反映遅延時の再取得を試みます。
 
 ## 6. Dashboard確認しやすさ
 - 新規作成される recordName に接頭辞を付与
