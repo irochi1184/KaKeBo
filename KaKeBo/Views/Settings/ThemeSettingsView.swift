@@ -97,23 +97,32 @@ struct ThemeSettingsView: View {
                 }
             }
 
-            Section("収支カラー") {
-                ColorPicker(
-                    "収入カラー",
-                    selection: Binding(
-                        get: { working.incomeRGBA.swiftUIColor },
-                        set: { c in var w = working; w.incomeRGBA = .init(c); w.markAsCustom(); working = w }
-                    ),
-                    supportsOpacity: false
-                )
-                ColorPicker(
-                    "支出カラー",
-                    selection: Binding(
-                        get: { working.expenseRGBA.swiftUIColor },
-                        set: { c in var w = working; w.expenseRGBA = .init(c); w.markAsCustom(); working = w }
-                    ),
-                    supportsOpacity: false
-                )
+            Section("収支カラー（プレミアム）") {
+                if purchase.isPremiumActive {
+                    ColorPicker(
+                        "収入カラー",
+                        selection: Binding(
+                            get: { working.incomeRGBA.swiftUIColor },
+                            set: { c in var w = working; w.incomeRGBA = .init(c); w.markAsCustom(); working = w }
+                        ),
+                        supportsOpacity: false
+                    )
+                    ColorPicker(
+                        "支出カラー",
+                        selection: Binding(
+                            get: { working.expenseRGBA.swiftUIColor },
+                            set: { c in var w = working; w.expenseRGBA = .init(c); w.markAsCustom(); working = w }
+                        ),
+                        supportsOpacity: false
+                    )
+                } else {
+                    LockedCustomSection(
+                        accent: accent,
+                        message: "収入と支出の表示カラーはプレミアムプランで変更できます。"
+                    ) {
+                        showPaywall = true
+                    }
+                }
             }
 
             // === プレビュー ===
@@ -263,12 +272,13 @@ private struct PresetGrid: View {
 // MARK: - ロック表示（非プレミアム時）
 private struct LockedCustomSection: View {
     let accent: Color
+    var message: String = "プレミアムプラン加入でアクセントカラーに背景色、ライトモードとダークモード時など自由なカラー編集がご利用いただけます。カラー指定も無限大で自由自在にカスタムできます。"
     let onTapUpgrade: () -> Void
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "lock.fill").foregroundStyle(accent)
-                Text("プレミアムプラン加入でアクセントカラーに背景色、ライトモードとダークモード時など自由なカラー編集がご利用いただけます。カラー指定も無限大で自由自在にカスタムできます。")
+                Text(message)
                 Spacer()
             }
             Button("プレミアムを確認") { onTapUpgrade() }
