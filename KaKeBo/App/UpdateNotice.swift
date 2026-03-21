@@ -72,7 +72,18 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
-//        .init(title: "ホームのカードをシンプルに切り替え", message: "テーマ設定から、ホーム画面のカードをフラットで素直な見た目に切り替えられるようになりました。色の差だけで収入と支出が分かります。", symbol: "square.on.square", tint: .pink),
+        .init(
+            title: "招待リンクをアプリ内で開けるように改善",
+            message: "共有家計簿の招待リンクを、よりスムーズにアプリ内で開けるようになりました。",
+            symbol: "link.badge.plus",
+            tint: .blue
+        ),
+        .init(
+            title: "共有家計簿に参加できない問題を修正",
+            message: "一部のバージョンで、招待リンクから共有家計簿に参加できないことがある問題を修正しました。",
+            symbol: "person.2.badge.gearshape",
+            tint: .green
+        ),
     ]
     /*
      アップデート 2.1.0
