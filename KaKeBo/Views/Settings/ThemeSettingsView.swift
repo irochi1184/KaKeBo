@@ -41,7 +41,15 @@ struct ThemeSettingsView: View {
             Section("画面デザイン") {
                 Picker("デザイン", selection: Binding(
                     get: { working.visualStyle },
-                    set: { newVal in var w = working; w.visualStyle = newVal; working = w }
+                    set: { newVal in
+                        var w = working
+                        w.visualStyle = newVal
+                        if newVal == .modern {
+                            // 「標準」に戻したときは従来の立体感デザインを優先して復帰
+                            w.homeCardStyle = .luxe
+                        }
+                        working = w
+                    }
                 )) {
                     ForEach(AppTheme.VisualStyle.allCases, id: \.self) {
                         Text($0.title).tag($0)
@@ -59,9 +67,7 @@ struct ThemeSettingsView: View {
                 if purchase.isPremiumActive {
                     customEditors
                 } else {
-                    LockedCustomSection(accent: accent) {
-                        showPaywall = true
-                    }
+                    LockedCustomSection(accent: accent)
                 }
             }
 
@@ -119,9 +125,15 @@ struct ThemeSettingsView: View {
                     LockedCustomSection(
                         accent: accent,
                         message: "収入と支出の表示カラーはプレミアムプランで変更できます。"
-                    ) {
-                        showPaywall = true
-                    }
+                    )
+                }
+            }
+
+            if !purchase.isPremiumActive {
+                Section("プレミアム") {
+                    Button("プレミアムを確認") { showPaywall = true }
+                        .buttonStyle(.borderedProminent)
+                        .tint(accent)
                 }
             }
 
@@ -273,7 +285,6 @@ private struct PresetGrid: View {
 private struct LockedCustomSection: View {
     let accent: Color
     var message: String = "プレミアムプラン加入でアクセントカラーに背景色、ライトモードとダークモード時など自由なカラー編集がご利用いただけます。カラー指定も無限大で自由自在にカスタムできます。"
-    let onTapUpgrade: () -> Void
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
@@ -281,9 +292,6 @@ private struct LockedCustomSection: View {
                 Text(message)
                 Spacer()
             }
-            Button("プレミアムを確認") { onTapUpgrade() }
-                .buttonStyle(.borderedProminent)
-                .tint(accent)
         }
         .padding(8)
     }

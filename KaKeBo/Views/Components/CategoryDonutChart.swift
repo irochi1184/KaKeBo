@@ -219,7 +219,7 @@ struct CategoryDonutPager: View {
     
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
-        let isFlat = themeStore.theme.homeCardStyle == .flat
+        let isFlat = themeStore.theme.visualStyle == .business
         let pagerHeight = max(requiredHeight(forCount: expense.count),
                               requiredHeight(forCount: income.count))
         
