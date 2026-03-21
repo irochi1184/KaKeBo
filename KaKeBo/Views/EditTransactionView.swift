@@ -131,7 +131,7 @@ struct EditTransactionView: View {
                             // 下地：透明領域でマテリアルが白発光するのを防ぐ
                             Rectangle()
                                 .fill(themeStore.theme.backgroundColor(for: scheme))
-                                .frame(height: safeBottomInset + 100)
+                                .frame(height: max(safeBottomInset + 100, keypadHeight + safeBottomInset))
                                 .ignoresSafeArea(edges: .bottom)
 
                             NumericKeypad(

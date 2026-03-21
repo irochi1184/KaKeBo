@@ -115,7 +115,12 @@ struct AddTransactionView: View {
         view
             .safeAreaInset(edge: .bottom) {
                 if usesCustomKeypad && showCustomKeypad {
-                    ZStack {
+                    ZStack(alignment: .bottom) {
+                        Rectangle()
+                            .fill(themeStore.theme.backgroundColor(for: scheme))
+                            .frame(height: max(safeBottomInset + 100, keypadHeight + safeBottomInset))
+                            .ignoresSafeArea(edges: .bottom)
+
                         NumericKeypad(
                             amount: $amount,
                             maxDigits: 9,
