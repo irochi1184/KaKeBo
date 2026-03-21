@@ -25,7 +25,6 @@ struct SharedLedgerEditorSheet: View {
     // 新規作成時のコピーオプション
     @State private var copyPersonalCategories = true
     @State private var copyPersonalTransactions = false
-    @State private var isSubmitting = false
     
     // 候補アイコン（必要に応じて増やしてOK）
     private static let symbolCandidates: [String] = [
@@ -52,105 +51,74 @@ struct SharedLedgerEditorSheet: View {
     }
     
     var body: some View {
-        ZStack {
-            NavigationStack {
-                Form {
-                    Section("家計簿名") {
-                        TextField("例）生活費", text: $name)
-                    }
-                    
-                    Section("アイコン") {
-                        iconPickerSection
-                    }
-                    
-                    Section("カラー") {
-                        colorPickerSection
-                    }
-                    
-                    Section("iCloudについて") {
-                        Label("共有家計簿の作成・同期には、iCloudの空き容量が必要です。", systemImage: "icloud")
-                            .font(.subheadline)
-                        Text("容量が不足していると、共有の作成や招待が完了しない場合があります。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    if ledger == nil {
-                        Section("個人用家計簿からコピー") {
-                            Toggle("カテゴリをコピーする", isOn: $copyPersonalCategories)
-                            Toggle("取引をコピーする", isOn: $copyPersonalTransactions)
-                            
-                            if copyPersonalTransactions {
-                                Text("※ 現在の個人用家計簿の全ての取引が、この共有家計簿にコピーされます。")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+        NavigationStack {
+            Form {
+                Section("家計簿名") {
+                    TextField("例）生活費", text: $name)
                 }
-                .navigationTitle(ledger == nil ? "共有家計簿を作成" : "共有家計簿を編集")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("キャンセル") { dismiss() }
-                            .disabled(isSubmitting)
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(ledger == nil ? "作成" : "保存") {
-                            Task {
-                                if isSubmitting { return }
-                                isSubmitting = true
-                                defer { isSubmitting = false }
-                                
-                                let trimmedName = name.trimmingCharacters(in: .whitespaces)
-                                guard !trimmedName.isEmpty else { return }
-                                
-                                let hex = Self.hex(from: color)
-                                
-                                if let ledger {
-                                    await store.updateLedger(
-                                        ledger,
-                                        name: trimmedName,
-                                        icon: icon,
-                                        colorHex: hex
-                                    )
-                                } else {
-                                    // 新規作成モード
-                                    if let newLedger = await store.createLedger(
-                                        name: trimmedName,
-                                        icon: icon,
-                                        colorHex: hex
-                                    ) {
-                                        // ここで「裏でコピー開始」するだけ
-                                        store.startInitialCopy(
-                                            from: dataStore,
-                                            to: newLedger,
-                                            copyCategories: copyPersonalCategories,
-                                            copyTransactions: copyPersonalTransactions
-                                        )
-                                    }
-                                }
-                                dismiss()
-                            }
+                
+                Section("アイコン") {
+                    iconPickerSection
+                }
+                
+                Section("カラー") {
+                    colorPickerSection
+                }
+                if ledger == nil {
+                    Section("個人用家計簿からコピー") {
+                        Toggle("カテゴリをコピーする", isOn: $copyPersonalCategories)
+                        Toggle("取引をコピーする", isOn: $copyPersonalTransactions)
+                        
+                        if copyPersonalTransactions {
+                            Text("※ 現在の個人用家計簿の全ての取引が、この共有家計簿にコピーされます。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isSubmitting)
                     }
                 }
             }
-            
-            if isSubmitting {
-                Color.black.opacity(0.15)
-                    .ignoresSafeArea()
-                
-                VStack(spacing: 8) {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                    Text("読み込み中…")
-                        .font(.footnote.weight(.semibold))
+            .navigationTitle(ledger == nil ? "共有家計簿を作成" : "共有家計簿を編集")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { dismiss() }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(ledger == nil ? "作成" : "保存") {
+                        Task {
+                            let trimmedName = name.trimmingCharacters(in: .whitespaces)
+                            guard !trimmedName.isEmpty else { return }
+                            
+                            let hex = Self.hex(from: color)
+                            
+                            if let ledger {
+                                await store.updateLedger(
+                                    ledger,
+                                    name: trimmedName,
+                                    icon: icon,
+                                    colorHex: hex
+                                )
+                            } else {
+                                // 新規作成モード
+                                if let newLedger = await store.createLedger(
+                                    name: trimmedName,
+                                    icon: icon,
+                                    colorHex: hex
+                                ) {
+                                    // ここで「裏でコピー開始」するだけ
+                                    store.startInitialCopy(
+                                        from: dataStore,
+                                        to: newLedger,
+                                        copyCategories: copyPersonalCategories,
+                                        copyTransactions: copyPersonalTransactions
+                                    )
+                                }
+                            }
+                            dismiss()
+                        }
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
             }
         }
     }

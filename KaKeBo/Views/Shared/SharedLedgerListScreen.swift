@@ -22,7 +22,6 @@ struct SharedLedgerListScreen: View {
     @State private var showShareError = false
     @State private var deleteErrorMessage: String? = nil
     @State private var showDeleteError = false
-    @State private var deleteLoading = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -34,14 +33,6 @@ struct SharedLedgerListScreen: View {
             if shareLoading {
                 sharingLoadingView
                     .padding(.horizontal, 20)
-            }
-
-            if store.isLoading && !store.ledgers.isEmpty {
-                loadingOverlay(message: "読み込み中…")
-            }
-
-            if deleteLoading {
-                loadingOverlay(message: "削除中…")
             }
         }
         .task {
@@ -71,9 +62,7 @@ struct SharedLedgerListScreen: View {
         ) { ledger in
             Button("削除", role: .destructive) {
                 Task {
-                    deleteLoading = true
                     await handleDelete(ledger)
-                    deleteLoading = false
                 }
             }
             Button("キャンセル", role: .cancel) { }
@@ -372,24 +361,6 @@ struct SharedLedgerListScreen: View {
         )
         .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 6)
     }
-
-    private func loadingOverlay(message: String) -> some View {
-        ZStack {
-            Color.black.opacity(0.12)
-                .ignoresSafeArea()
-
-            VStack(spacing: 8) {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                Text(message)
-                    .font(.footnote.weight(.semibold))
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .transition(.opacity)
-    }
 }
 
 // MARK: - 招待シート
@@ -409,19 +380,6 @@ private struct ShareInvitationSheet: View {
                     }
 
                     infoSection
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("iCloudの空き容量について")
-                            .font(.headline)
-                        Text("共有家計簿の招待・同期にはiCloudの空き容量が必要です。容量が不足していると共有が完了しない場合があります。")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color(.secondarySystemGroupedBackground))
-                    )
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text("このリンクを共有すると？")
