@@ -859,17 +859,13 @@ final class SharedLedgerStore: ObservableObject {
     }
     
     func updateLedger(_ ledger: SharedLedger, name: String, icon: String, colorHex: String) async {
-        guard isOwned(ledger) else {
-            // 招待された側は編集不可にするならこう
-            print("updateLedger: non-owned ledger, skip")
-            return
-        }
         do {
-            let record = try await db.record(for: ledger.id)
+            let targetDB = database(for: ledger)
+            let record = try await targetDB.record(for: ledger.id)
             record["name"] = name as CKRecordValue
             record["icon"] = icon as CKRecordValue
             record["colorHex"] = colorHex as CKRecordValue
-            let saved = try await db.save(record)
+            let saved = try await targetDB.save(record)
             if let updated = SharedLedger(record: saved) {
                 if let idx = ledgers.firstIndex(where: { $0.id == ledger.id }) {
                     ledgers[idx] = updated
