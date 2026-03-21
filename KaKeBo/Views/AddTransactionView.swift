@@ -392,6 +392,7 @@ struct AddTransactionView: View {
             }
             .padding(.top, 12)
             .padding(.horizontal)
+            .padding(.bottom, contentBottomPadding)
         }
         .background(themeStore.theme.backgroundColor(for: scheme))
         .sheet(isPresented: $showAddCategory) {
