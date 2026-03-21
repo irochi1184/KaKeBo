@@ -718,7 +718,7 @@ private struct TransactionListCard<RowID: Hashable>: View {
     }
     
     var body: some View {
-        let isFlat = themeStore.theme.homeCardStyle == .flat
+        let isFlat = themeStore.theme.visualStyle == .business
         let emptyView: AnyView = {
             if isFlat {
                 return AnyView(
