@@ -113,6 +113,11 @@ struct EditTransactionView: View {
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
+    private var keypadBackdropColor: Color {
+        scheme == .dark
+        ? Color(red: 0.08, green: 0.08, blue: 0.09)
+        : Color(white: 0.98)
+    }
     private var prefersCustomKeypad: Bool { themeStore.theme.prefersCustomKeypad }
     private var keypadColor: Color { themeStore.theme.keypadColor(isIncome: type == .income) }
 
@@ -130,8 +135,8 @@ struct EditTransactionView: View {
                         ZStack(alignment: .bottom) {
                             // 下地：透明領域でマテリアルが白発光するのを防ぐ
                             Rectangle()
-                                .fill(themeStore.theme.backgroundColor(for: scheme))
-                                .frame(height: safeBottomInset + 100)
+                                .fill(keypadBackdropColor)
+                                .frame(height: safeBottomInset + keypadLift + 24)
                                 .ignoresSafeArea(edges: .bottom)
 
                             NumericKeypad(
