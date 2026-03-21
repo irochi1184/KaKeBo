@@ -84,6 +84,12 @@ private struct UpdateNoticeContent: View {
             symbol: "person.2.badge.gearshape",
             tint: .green
         ),
+        .init(
+            title: "金額入力エリアの表示を見やすく改善",
+            message: "取引の追加・編集画面で、金額入力エリアの下側が途切れて見えることがないように調整しました。",
+            symbol: "rectangle.bottomthird.inset.filled",
+            tint: .pink
+        ),
     ]
     /*
      アップデート 2.1.0
@@ -181,7 +187,7 @@ private struct UpdateNoticeContent: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("カレンダー表示のカスタマイズ、フィルター結果のグラフ出力、共有家計簿の参加体験を改善しました。")
+            Text("日々の入力や確認を、より見やすく・使いやすく整えました。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

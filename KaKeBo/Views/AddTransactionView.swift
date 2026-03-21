@@ -83,6 +83,10 @@ struct AddTransactionView: View {
     private var safeBottomInset: CGFloat {
         UIApplication.shared.activeKeyWindow?.safeAreaInsets.bottom ?? 0
     }
+    private var contentBottomPadding: CGFloat {
+        guard prefersCustomKeypad && showCustomKeypad else { return 0 }
+        return max(0, keypadHeight - keypadLift) + 16 + safeBottomInset
+    }
     private var prefersCustomKeypad: Bool { themeStore.theme.prefersCustomKeypad }
     private var keypadColor: Color { themeStore.theme.keypadColor(isIncome: type == .income) }
 
@@ -113,9 +117,14 @@ struct AddTransactionView: View {
     @ViewBuilder
     private func addCustomKeypad<Content: View>(to view: Content, usesCustomKeypad: Bool) -> some View {
         view
-            .safeAreaInset(edge: .bottom) {
+            .overlay(alignment: .bottom) {
                 if usesCustomKeypad && showCustomKeypad {
-                    ZStack {
+                    ZStack(alignment: .bottom) {
+                        Rectangle()
+                            .fill(themeStore.theme.backgroundColor(for: scheme))
+                            .frame(height: max(safeBottomInset + 100, keypadHeight + safeBottomInset + keypadLift + 24))
+                            .ignoresSafeArea(edges: .bottom)
+
                         NumericKeypad(
                             amount: $amount,
                             maxDigits: 9,
@@ -127,8 +136,8 @@ struct AddTransactionView: View {
                             onHeightChange: { h in keypadHeight = h }
                         )
                         .padding(.bottom, safeBottomInset)
+                        .offset(y: -keypadLift)
                     }
-                    .offset(y: -keypadLift)
                 }
             }
             .overlay(alignment: .bottomTrailing) {
@@ -376,10 +385,11 @@ struct AddTransactionView: View {
                         .presentationDragIndicator(.visible)
                 }
                 
-                Spacer(minLength: showCustomKeypad ? (isSmallPhone ? 20 : 60) : 0)
+                Spacer(minLength: 0)
             }
             .padding(.top, 12)
             .padding(.horizontal)
+            .padding(.bottom, contentBottomPadding)
         }
         .background(themeStore.theme.backgroundColor(for: scheme))
         .sheet(isPresented: $showAddCategory) {
