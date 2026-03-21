@@ -627,6 +627,8 @@ private struct TransactionRowContent {
 
 private struct TransactionRow: View {
     let row: TransactionRowContent
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     
     private var displayTags: [String] {
         row.tags.map { String($0.prefix(8)) }
@@ -678,7 +680,7 @@ private struct TransactionRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(currency(row.amount))
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(row.isIncome ? .green : .primary)
+                    .foregroundStyle(row.isIncome ? incomeColor : expenseColor)
                 Text(dateStr(row.date))
                     .font(.caption2)
                     .foregroundStyle(.secondary)

@@ -49,17 +49,6 @@ struct ThemeSettingsView: View {
                 }
                 .pickerStyle(.segmented)
 
-                Picker("ホームカード", selection: Binding(
-                    get: { working.homeCardStyle },
-                    set: { newVal in var w = working; w.homeCardStyle = newVal; working = w }
-                )) {
-                    ForEach(AppTheme.HomeCardStyle.allCases, id: \.self) {
-                        Text($0.title).tag($0)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(working.visualStyle == .business)
-
                 Text("「フラット」を選ぶと、全体の見た目が平坦で枠線中心の表示になります。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -106,6 +95,25 @@ struct ThemeSettingsView: View {
                         Text("プレミアムで電卓の収入/支出カラーを自由に変更できます。")
                     }
                 }
+            }
+
+            Section("収支カラー") {
+                ColorPicker(
+                    "収入カラー",
+                    selection: Binding(
+                        get: { working.incomeRGBA.swiftUIColor },
+                        set: { c in var w = working; w.incomeRGBA = .init(c); w.markAsCustom(); working = w }
+                    ),
+                    supportsOpacity: false
+                )
+                ColorPicker(
+                    "支出カラー",
+                    selection: Binding(
+                        get: { working.expenseRGBA.swiftUIColor },
+                        set: { c in var w = working; w.expenseRGBA = .init(c); w.markAsCustom(); working = w }
+                    ),
+                    supportsOpacity: false
+                )
             }
 
             // === プレビュー ===

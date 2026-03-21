@@ -9,12 +9,14 @@ import SwiftUI
 
 struct TypePillSelector: View {
     @Binding var type: TransactionType
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     
     var body: some View {
         HStack(spacing: 10) {
-            pill(title: "支出", isOn: type == .expense, base: .red.opacity(0.8))
+            pill(title: "支出", isOn: type == .expense, base: expenseColor.opacity(0.8))
                 .onTapGesture { withAnimation(.snappy) { type = .expense } }
-            pill(title: "収入", isOn: type == .income, base: .green.opacity(0.8))
+            pill(title: "収入", isOn: type == .income, base: incomeColor.opacity(0.8))
                 .onTapGesture { withAnimation(.snappy) { type = .income } }
         }
         .accessibilityElement(children: .contain)
