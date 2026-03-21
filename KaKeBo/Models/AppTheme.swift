@@ -37,6 +37,15 @@ extension AppTheme.HomeCardStyle {
     }
 }
 
+extension AppTheme.VisualStyle {
+    var title: String {
+        switch self {
+        case .modern: return "標準"
+        case .business: return "フラット"
+        }
+    }
+}
+
 struct RGBAColor: Codable, Equatable {
     var r: Double; var g: Double; var b: Double; var a: Double
     
@@ -60,6 +69,7 @@ struct AppTheme: Codable, Equatable {
     // アクセント
     enum Preset: String, Codable, CaseIterable { case `default`, green, red, orange, custom }
     enum HomeCardStyle: String, Codable, CaseIterable { case luxe, flat }
+    enum VisualStyle: String, Codable, CaseIterable { case modern, business }
     
     // 現在有効なプリセット（カスタム編集をしたら custom に）
     var activePreset: Preset = .default
@@ -81,6 +91,8 @@ struct AppTheme: Codable, Equatable {
 
     // ホームカード
     var homeCardStyle: HomeCardStyle = .luxe
+    // アプリ全体のトーン
+    var visualStyle: VisualStyle = .modern
     
     mutating func apply(_ preset: Preset) {
         activePreset = preset
