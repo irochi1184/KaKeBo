@@ -98,9 +98,21 @@ struct SharedLedgerListScreen: View {
             ScrollView {
                 VStack(spacing: 18) {
                     headerCard
-                    
-                    ForEach(store.ledgers) { ledger in
-                        ledgerCard(for: ledger)
+
+                    if !store.ownedLedgers.isEmpty {
+                        ledgerSection(
+                            title: "自分が管理する共有家計簿",
+                            description: "あなたが作成し、招待リンクを発行できる家計簿です。",
+                            ledgers: store.ownedLedgers
+                        )
+                    }
+
+                    if !store.participatingLedgers.isEmpty {
+                        ledgerSection(
+                            title: "参加中の共有家計簿",
+                            description: "招待リンクから参加した家計簿です。",
+                            ledgers: store.participatingLedgers
+                        )
                     }
                     
                     addLedgerButton
@@ -171,6 +183,22 @@ struct SharedLedgerListScreen: View {
     }
     
     // MARK: - カード
+
+    private func ledgerSection(title: String, description: String, ledgers: [SharedLedger]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(ledgers) { ledger in
+                ledgerCard(for: ledger)
+            }
+        }
+    }
     
     private func ledgerCard(for ledger: SharedLedger) -> some View {
         Button {
@@ -194,6 +222,17 @@ struct SharedLedgerListScreen: View {
                         .font(.headline)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        Text(store.source(for: ledger) == .shared ? "参加中" : "管理中")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.vertical, 2)
+                            .padding(.horizontal, 8)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(store.source(for: ledger) == .shared ? Color.green.opacity(0.18) : Color.blue.opacity(0.16))
+                            )
+                    }
                     
                     HStack(spacing: 6) {
                         Image(systemName: "calendar.badge.plus")
