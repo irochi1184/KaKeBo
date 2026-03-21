@@ -36,6 +36,10 @@
   - `tx_...`
 - これにより Dashboard 上でレコード用途を識別しやすくしています。
 
+## 6.1 旧バージョン互換
+- `SharedLedger` 読み込み時に `ownerUserId` が欠損していても読み込めるようにし、旧データを継続利用できるようにしています。
+- `acceptShare` で `acceptSharesResult` が成功した場合は、`perShareResult` の個別失敗があっても shared DB の再取得で最終状態を確認します。
+
 ## 7. CloudKit Dashboard確認手順
 1. CloudKit Dashboard で対象 Environment（Development / Production）を選択
 2. **Private Database** で `SharedLedgerZone` を開く

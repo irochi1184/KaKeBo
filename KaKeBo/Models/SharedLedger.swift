@@ -41,7 +41,6 @@ extension SharedLedger {
             let name = record[FieldKey.name] as? String,
             let icon = record[FieldKey.icon] as? String,
             let colorHex = record[FieldKey.colorHex] as? String,
-            let ownerUserId = record[FieldKey.ownerUserId] as? String,
             let createdAt = record[FieldKey.createdAt] as? Date,
             let updatedAt = record[FieldKey.updatedAt] as? Date
         else {
@@ -52,7 +51,8 @@ extension SharedLedger {
         self.name = name
         self.icon = icon
         self.colorHex = colorHex
-        self.ownerUserId = ownerUserId
+        // 旧バージョン互換: ownerUserId が未保存のケースは空文字で受け取る
+        self.ownerUserId = record[FieldKey.ownerUserId] as? String ?? ""
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
