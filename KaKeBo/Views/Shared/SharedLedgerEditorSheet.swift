@@ -29,11 +29,11 @@ struct SharedLedgerEditorSheet: View {
     @State private var selectedIconCategory: IconCategory = .shared
 
     private enum IconCategory: String, CaseIterable, Identifiable {
-        case shared = "共有向け"
+        case shared = "共有"
         case living = "暮らし"
         case shopping = "買い物"
-        case moveAndTrip = "移動・旅行"
-        case hobby = "趣味・学び"
+        case moveAndTrip = "旅行"
+        case hobby = "趣味"
         case health = "健康"
         case income = "収入"
 

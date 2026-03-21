@@ -73,11 +73,6 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
 //        .init(title: "ホームのカードをシンプルに切り替え", message: "テーマ設定から、ホーム画面のカードをフラットで素直な見た目に切り替えられるようになりました。色の差だけで収入と支出が分かります。", symbol: "square.on.square", tint: .pink),
-        .init(title: "日別推移がカテゴリの色でひと目で分かる", message: "ホームの棒グラフがカテゴリごとの色で表示され、どの支出が多い日なのか見分けやすくなりました。", symbol: "chart.bar.fill", tint: .teal),
-        .init(title: "大きいウィジェットでカレンダーを確認", message: "ホーム画面の最大サイズのウィジェットに当月カレンダーを表示できるようになり、日付を押すとその日の家計簿をすぐ開けます。", symbol: "calendar", tint: .blue),
-        .init(title: "固定費の合計をひと目で確認", message: "固定費の管理シートに有効状態の固定費合計金額を表示するようになり、毎月の支出をすぐに把握できます。", symbol: "yensign.circle.fill", tint: .mint),
-        .init(title: "バックアップの家計簿選択を改善", message: "個人用・共有家計簿ごとに作成／復元を選べる新しいシートを追加し、失敗時に気付きやすいよう堅牢性を高めました。", symbol: "arrow.triangle.2.circlepath", tint: .purple),
-        .init(title: "設定画面の下にバージョンを表示", message: "サポートへの連絡時などにすぐ確認できるよう、設定画面のいちばん下へ現在のバージョンを記載しました。", symbol: "info.circle.fill", tint: .gray)
     ]
     /*
      アップデート 2.1.0
@@ -92,6 +87,12 @@ private struct UpdateNoticeContent: View {
      - カレンダーの下部に表示する内容を好みに合わせて切り替えられるようになりました。
      - フィルターした結果をそのままグラフに出力できます。（無料プランは毎月3回まで）
      - 参加画面の案内や配置を調整し、スムーズに入れるようになりました。
+     アップデート 2.1.4
+     - 日別推移がカテゴリの色でひと目で分かる
+     - 大きいウィジェットでカレンダーを確認
+     - 固定費の合計をひと目で確認
+     - バックアップの家計簿選択を改善
+     - 設定画面の下にバージョンを表示
      */
 
     let accent: Color
