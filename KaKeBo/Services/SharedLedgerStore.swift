@@ -1343,6 +1343,7 @@ extension SharedLedgerStore {
         print("ℹ️ [SharedLedgerStore] prepareShare strategy=recordHierarchySharing rootRecord=\(ledger.id.recordName) zone=\(ledger.id.zoneID.zoneName) database=privateCloudDatabase")
         // ① 常にサーバー側の最新 rootRecord を取得
         let rootRecord = try await db.record(for: ledger.id)
+        try await backfillRecordHierarchyIfNeeded(for: ledger)
         
         // ② すでに共有設定済みなら share を再利用
         if let shareRef = rootRecord.share {
@@ -1519,6 +1520,46 @@ extension SharedLedgerStore {
             throw error
         }
     }
+
+    /// 旧バージョンで作成されたレコードのうち parent が未設定のものを補正する
+    /// - Note: record hierarchy sharing で共有対象になるよう、SharedCategory / SharedTransaction の parent を root ledger に揃える
+    private func backfillRecordHierarchyIfNeeded(for ledger: SharedLedger) async throws {
+        let ledgerReference = CKRecord.Reference(recordID: ledger.id, action: .none)
+        let categoryPredicate = NSPredicate(format: "%K == %@", SharedCategory.FieldKey.ledgerRef, ledgerReference)
+        let transactionPredicate = NSPredicate(format: "%K == %@", SharedTransaction.FieldKey.ledgerRef, ledgerReference)
+
+        let categoryQuery = CKQuery(recordType: SharedCategory.recordType, predicate: categoryPredicate)
+        let transactionQuery = CKQuery(recordType: SharedTransaction.recordType, predicate: transactionPredicate)
+
+        let categoryRecords = try await queryRecords(categoryQuery, in: db, zoneID: ledger.id.zoneID)
+        let transactionRecords = try await queryRecords(transactionQuery, in: db, zoneID: ledger.id.zoneID)
+
+        let parentRef = CKRecord.Reference(recordID: ledger.id, action: .none)
+        var recordsToFix: [CKRecord] = []
+
+        for record in categoryRecords where record.parent?.recordID != ledger.id {
+            record.parent = parentRef
+            recordsToFix.append(record)
+        }
+
+        for record in transactionRecords where record.parent?.recordID != ledger.id {
+            record.parent = parentRef
+            recordsToFix.append(record)
+        }
+
+        guard recordsToFix.isEmpty == false else { return }
+
+        for chunk in recordsToFix.chunked(into: 200) {
+            _ = try await db.modifyRecords(
+                saving: chunk,
+                deleting: [],
+                savePolicy: .changedKeys,
+                atomically: false
+            )
+        }
+
+        print("ℹ️ [SharedLedgerStore] backfillRecordHierarchyIfNeeded fixed=\(recordsToFix.count) ledger=\(ledger.id.recordName)")
+    }
         
     /// 個人用家計簿の全カテゴリを共有家計簿にコピー
     func copyAllCategories(from dataStore: DataStore, to ledger: SharedLedger) async {
@@ -1584,6 +1625,23 @@ extension SharedLedgerStore {
                 category: sharedCategory
             )
         }
+    }
+}
+
+private extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0, isEmpty == false else { return isEmpty ? [] : [self] }
+
+        var chunks: [[Element]] = []
+        chunks.reserveCapacity((count + size - 1) / size)
+
+        var start = startIndex
+        while start < endIndex {
+            let end = index(start, offsetBy: size, limitedBy: endIndex) ?? endIndex
+            chunks.append(Array(self[start..<end]))
+            start = end
+        }
+        return chunks
     }
 }
 
