@@ -289,17 +289,10 @@ final class SharedLedgerStore: ObservableObject {
 
         let shareID = metadata.share.recordID.recordName
         print("ℹ️ [SharedLedgerStore] acceptShare start container=\(metadata.containerIdentifier), shareID=\(shareID)")
-        let beforeLedgerIDs = Set(ledgers.map(\.id))
-        if let rootRecordID = metadata.rootRecordID,
-           beforeLedgerIDs.contains(rootRecordID) {
-            globalToast = ToastState(
-                message: "すでにこの共有家計簿に参加しています。",
-                systemImage: "person.2.fill",
-                actionTitle: nil,
-                action: nil
-            )
-            return .alreadyJoined
-        }
+        // NOTE:
+        // CKShare.Metadata.rootRecordID は iOS 16 で deprecated のため参照しない。
+        // 参加結果は「受諾成功後に一覧へ新規追加されたか」と CloudKit のエラー種別で判定する。
+        let previousLedgerIDs = Set(ledgers.map(\.id))
 
         do {
             let targetContainer = CKContainer(identifier: metadata.containerIdentifier)
@@ -312,7 +305,7 @@ final class SharedLedgerStore: ObservableObject {
             if reloadSucceeded {
                 await refreshCachedRecords(for: ledgers)
             }
-            let addedLedger = ledgers.first(where: { !beforeLedgerIDs.contains($0.id) })
+            let addedLedger = ledgers.first(where: { !previousLedgerIDs.contains($0.id) })
             if let addedLedger {
                 lastAcceptedLedgerID = addedLedger.id
                 rememberLastOpened(ledger: addedLedger)
@@ -378,7 +371,7 @@ final class SharedLedgerStore: ObservableObject {
             if let ckError = error as? CKError, ckError.code == .quotaExceeded {
                 let recovered = await fallbackReloadAfterAcceptanceIssue(
                     metadata,
-                    beforeLedgerIDs: beforeLedgerIDs
+                    beforeLedgerIDs: previousLedgerIDs
                 )
                 if recovered {
                     lastError = nil
