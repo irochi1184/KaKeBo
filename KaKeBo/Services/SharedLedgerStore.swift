@@ -326,16 +326,6 @@ final class SharedLedgerStore: ObservableObject {
                     action: nil
                 )
                 return .joined
-            } else if reloadSucceeded,
-                      let rootRecordID = metadata.rootRecordID,
-                      ledgers.contains(where: { $0.id == rootRecordID }) {
-                globalToast = ToastState(
-                    message: "すでにこの共有家計簿に参加しています。",
-                    systemImage: "person.2.fill",
-                    actionTitle: nil,
-                    action: nil
-                )
-                return .alreadyJoined
             } else if reloadSucceeded {
                 globalToast = ToastState(
                     message: "参加処理を受け付けました。反映に少し時間がかかる場合があります。",
