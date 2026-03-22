@@ -42,8 +42,10 @@ struct FlatListRowBackground: View {
     @Environment(\.appVisualStyle) private var visualStyle
     @Environment(\.colorScheme) private var scheme
 
+    var appliesFlatBorder: Bool = true
+
     var body: some View {
-        let isFlat = visualStyle == .business
+        let isFlat = visualStyle == .business && appliesFlatBorder
         let fill = scheme == .dark ? Color.white.opacity(0.06) : Color.white
         let stroke = scheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.10)
 

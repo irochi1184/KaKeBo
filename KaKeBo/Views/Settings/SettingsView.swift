@@ -560,7 +560,7 @@ struct SettingsView: View {
         } header: {
             Text("各種設定")
         }
-        .listRowBackground(FlatListRowBackground())
+        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
 
     }
     
@@ -582,7 +582,7 @@ struct SettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
-        .listRowBackground(FlatListRowBackground())
+        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
     }
     
     @ViewBuilder
@@ -631,7 +631,7 @@ struct SettingsView: View {
         } header: {
             Text("サポート")
         }
-        .listRowBackground(FlatListRowBackground())
+        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
     }
     
     private func defaultFeedbackBody() -> String {
@@ -783,7 +783,7 @@ private struct CalendarBottomDisplaySettingsView: View {
             }
         }
          .listStyle(.insetGrouped)
-        .listRowBackground(FlatListRowBackground())
+        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("閉じる") { dismiss() }
