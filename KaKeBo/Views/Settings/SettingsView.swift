@@ -560,8 +560,7 @@ struct SettingsView: View {
         } header: {
             Text("各種設定")
         }
-        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
-
+        .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
     }
     
     @ViewBuilder
@@ -631,7 +630,7 @@ struct SettingsView: View {
         } header: {
             Text("サポート")
         }
-        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
+//        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
     }
     
     private func defaultFeedbackBody() -> String {
