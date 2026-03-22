@@ -140,6 +140,7 @@ struct ReminderRuleEditor: View {
                 }
             }
         }
+        .listRowBackground(FlatListRowBackground())
         .navigationTitle("リマインダーを編集")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { Button("キャンセル") { dismiss() } }

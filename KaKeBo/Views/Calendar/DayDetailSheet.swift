@@ -16,6 +16,7 @@ struct DayDetailSheet: View {
     @EnvironmentObject var ledgerContext: LedgerContext
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject var dayNotes: DayNotesStore
+    @Environment(\.appVisualStyle) private var visualStyle
     private var dayTodos: [CalendarTodo] { todoStore.todos(on: date) }
     
     let date: Date
@@ -110,7 +111,8 @@ struct DayDetailSheet: View {
                     }
 
                 }
-                .listStyle(.insetGrouped)
+                 .listStyle(.insetGrouped)
+                .listRowBackground(FlatListRowBackground())
             }
             .navigationTitle(dateTitle)
             .toolbar {
@@ -130,6 +132,7 @@ struct DayDetailSheet: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(accent.opacity(0.2))
+                    .shadow(color: .black.opacity(visualStyle == .business ? 0 : 0.1), radius: visualStyle == .business ? 0 : 3, y: visualStyle == .business ? 0 : 2)
                 }
             }
             // 編集シート

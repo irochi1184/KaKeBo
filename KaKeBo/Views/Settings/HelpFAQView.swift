@@ -32,6 +32,7 @@ struct HelpFAQView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .listRowBackground(FlatListRowBackground())
     }
 }
 
