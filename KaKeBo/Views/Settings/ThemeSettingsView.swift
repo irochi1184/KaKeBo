@@ -61,24 +61,42 @@ struct ThemeSettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            
-            // === カスタム（プレミアム限定） ===
-            Section("カスタム（プレミアム）") {
-                if purchase.isPremiumActive {
-                    customEditors
-                } else {
-                    LockedCustomSection(accent: accent)
+
+            // === プレビュー ===
+            Section("プレビュー") {
+                Picker("表示モード", selection: $previewMode) {
+                    ForEach(PreviewMode.allCases) { Text($0.rawValue).tag($0) }
                 }
+                .pickerStyle(.segmented)
+                
+                let s = previewMode.colorScheme
+                HomePreview(
+                    background: working.backgroundColor(for: s),
+                    accent: working.accentColor(for: s),
+                    income: working.incomeRGBA.swiftUIColor,
+                    expense: working.expenseRGBA.swiftUIColor,
+                    keypadIncome: working.keypadIncomeRGBA.swiftUIColor,
+                    keypadExpense: working.keypadExpenseRGBA.swiftUIColor,
+                    cardStyle: working.homeCardStyle,
+                    visualStyle: working.visualStyle
+                )
+                .environment(\.colorScheme, s)
+                .frame(maxHeight: 220)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
 
-            // === 入力・電卓設定 ===
-            Section("入力・電卓") {
-                Toggle("カスタム電卓キーパッドを使う", isOn: Binding(
-                    get: { working.prefersCustomKeypad },
-                    set: { newVal in var w = working; w.prefersCustomKeypad = newVal; working = w }
-                ))
+            if purchase.isPremiumActive {
+                // === カスタム（プレミアム限定） ===
+                Section("カスタム（プレミアム）") {
+                    customEditors
+                }
 
-                if purchase.isPremiumActive {
+                // === 入力・電卓設定 ===
+                Section("入力・電卓") {
+                    Toggle("カスタム電卓キーパッドを使う", isOn: Binding(
+                        get: { working.prefersCustomKeypad },
+                        set: { newVal in var w = working; w.prefersCustomKeypad = newVal; working = w }
+                    ))
                     ColorPicker(
                         "収入カラー",
                         selection: Binding(
@@ -95,16 +113,9 @@ struct ThemeSettingsView: View {
                         ),
                         supportsOpacity: false
                     )
-                } else {
-                    HStack(spacing: 12) {
-                        Image(systemName: "lock.fill").foregroundStyle(accent)
-                        Text("プレミアムで電卓の収入/支出カラーを自由に変更できます。")
-                    }
                 }
-            }
 
-            Section("収支カラー（プレミアム）") {
-                if purchase.isPremiumActive {
+                Section("収支カラー（プレミアム）") {
                     ColorPicker(
                         "収入カラー",
                         selection: Binding(
@@ -121,39 +132,26 @@ struct ThemeSettingsView: View {
                         ),
                         supportsOpacity: false
                     )
-                } else {
+                }
+            } else {
+                Section("プレミアムカスタマイズ") {
+                    Toggle("カスタム電卓キーパッドを使う", isOn: Binding(
+                        get: { working.prefersCustomKeypad },
+                        set: { newVal in var w = working; w.prefersCustomKeypad = newVal; working = w }
+                    ))
+                    LockedCustomSection(accent: accent)
                     LockedCustomSection(
                         accent: accent,
                         message: "収入と支出の表示カラーはプレミアムプランで変更できます。"
                     )
-                }
-            }
-
-            if !purchase.isPremiumActive {
-                Section("プレミアム") {
+                    LockedCustomSection(
+                        accent: accent,
+                        message: "電卓の収入/支出カラーはプレミアムプランで変更できます。"
+                    )
                     Button("プレミアムを確認") { showPaywall = true }
                         .buttonStyle(.borderedProminent)
                         .tint(accent)
                 }
-            }
-
-            // === プレビュー ===
-            Section("プレビュー") {
-                Picker("表示モード", selection: $previewMode) {
-                    ForEach(PreviewMode.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                
-                let s = previewMode.colorScheme
-                HomePreview(
-                    background: working.backgroundColor(for: s),
-                    accent: working.accentColor(for: s),
-                    cardStyle: working.homeCardStyle,
-                    visualStyle: working.visualStyle
-                )
-                .environment(\.colorScheme, s)
-                .frame(maxHeight: 160)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
         }
         .onAppear { working = themeStore.theme }
@@ -301,12 +299,16 @@ private struct LockedCustomSection: View {
 private struct HomePreview: View {
     var background: Color
     var accent: Color
+    var income: Color
+    var expense: Color
+    var keypadIncome: Color
+    var keypadExpense: Color
     var cardStyle: AppTheme.HomeCardStyle
     var visualStyle: AppTheme.VisualStyle
     var body: some View {
         ZStack {
             Rectangle().fill(background)
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 HStack {
                     Text("合計支出").font(.caption).foregroundStyle(.secondary)
                     Spacer()
@@ -320,10 +322,51 @@ private struct HomePreview: View {
                 .padding(.vertical, 16)
                 .modifier(HomePreviewCardStyle(cardStyle: cardStyle, visualStyle: visualStyle))
                 .padding(.horizontal, 12)
+
+                HStack(spacing: 8) {
+                    PreviewColorChip(title: "収入", value: "+ ¥8,000", color: income)
+                    PreviewColorChip(title: "支出", value: "- ¥3,200", color: expense)
+                }
+                .padding(.horizontal, 12)
+
+                HStack(spacing: 8) {
+                    PreviewColorChip(title: "電卓 収入", value: "+", color: keypadIncome)
+                    PreviewColorChip(title: "電卓 支出", value: "-", color: keypadExpense)
+                }
+                .padding(.horizontal, 12)
             }
             .padding(.vertical, 10)
         }
         .fontDesign(visualStyle == .business ? .default : .rounded)
+    }
+}
+
+private struct PreviewColorChip: View {
+    let title: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 10, height: 10)
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(color)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.primary.opacity(0.06))
+        )
     }
 }
 
