@@ -73,18 +73,6 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         .init(
-            title: "招待リンクをアプリ内で開けるように改善",
-            message: "共有家計簿の招待リンクを、よりスムーズにアプリ内で開けるようになりました。",
-            symbol: "link.badge.plus",
-            tint: .blue
-        ),
-        .init(
-            title: "共有家計簿に参加できない問題を修正",
-            message: "一部のバージョンで、招待リンクから共有家計簿に参加できないことがある問題を修正しました。",
-            symbol: "person.2.badge.gearshape",
-            tint: .green
-        ),
-        .init(
             title: "金額入力エリアの表示を見やすく改善",
             message: "取引の追加・編集画面で、金額入力エリアの下側が途切れて見えることがないように調整しました。",
             symbol: "rectangle.bottomthird.inset.filled",
@@ -110,6 +98,9 @@ private struct UpdateNoticeContent: View {
      - 固定費の合計をひと目で確認
      - バックアップの家計簿選択を改善
      - 設定画面の下にバージョンを表示
+     アップデート 2.1.5
+     - 招待リンクをアプリ内で開けるように改善
+     - 共有家計簿に参加できない問題を修正
      */
 
     let accent: Color

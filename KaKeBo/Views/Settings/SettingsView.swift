@@ -719,7 +719,7 @@ struct SettingsView: View {
     private var appVersionLabel: String {
         let version = AppVersion.current
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
-        return build.isEmpty ? "バージョン \(version)" : "バージョン \(version) (\(build))"
+        return build.isEmpty ? "バージョン \(version)" : "バージョン \(version)"
     }
 
     private var versionFooter: some View {

@@ -14,6 +14,7 @@ struct CalendarScreen: View {
     @EnvironmentObject var ledgerContext: LedgerContext
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @EnvironmentObject var appRoute: AppRoute
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.appVisualStyle) private var visualStyle
     public var cal: Calendar { .current }
     @StateObject private var keyboard = KeyboardHeightReader()
