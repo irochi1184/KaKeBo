@@ -154,7 +154,7 @@ struct ThemeSettingsView: View {
                 }
             }
         }
-        .listRowBackground(FlatListRowBackground())
+        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
         .onAppear { working = themeStore.theme }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { Button("閉じる") { dismiss() } }

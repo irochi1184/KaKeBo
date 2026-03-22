@@ -66,7 +66,7 @@ struct ReminderSettingsView: View {
             }
         }
         .navigationTitle("リマインダー")
-        .listRowBackground(FlatListRowBackground())
+        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { EditButton().disabled(rstore.rules.isEmpty) }
             ToolbarItem(placement: .topBarTrailing) {
