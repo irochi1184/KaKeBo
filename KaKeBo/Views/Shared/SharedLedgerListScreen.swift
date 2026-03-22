@@ -610,6 +610,7 @@ private struct JoinSharedLedgerByLinkSheet: View {
     @State private var isSubmitting = false
     @State private var validationMessage: String?
     @State private var showAlreadyJoinedModal = false
+    @State private var showPendingModal = false
 
     var body: some View {
         NavigationStack {
@@ -671,6 +672,13 @@ private struct JoinSharedLedgerByLinkSheet: View {
         } message: {
             Text("この共有家計簿にはすでに参加しています。共有家計簿一覧からそのまま利用できます。")
         }
+        .alert("参加処理を受け付けました", isPresented: $showPendingModal) {
+            Button("OK", role: .cancel) {
+                dismiss()
+            }
+        } message: {
+            Text("反映まで少し時間がかかる場合があります。しばらくしてから共有家計簿一覧をご確認ください。")
+        }
     }
 
     private func submit() {
@@ -690,8 +698,10 @@ private struct JoinSharedLedgerByLinkSheet: View {
             await MainActor.run {
                 isSubmitting = false
                 switch result {
-                case .joined, .pending:
+                case .joined:
                     dismiss()
+                case .pending:
+                    showPendingModal = true
                 case .alreadyJoined:
                     showAlreadyJoinedModal = true
                 case .failed:

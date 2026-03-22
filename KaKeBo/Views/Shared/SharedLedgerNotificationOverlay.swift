@@ -99,6 +99,16 @@ struct SharedLedgerNotificationOverlay: View {
                 }
             }
             Spacer()
+            Button {
+                withAnimation {
+                    store.globalToast = nil
+                }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
         }
         .padding(14)
         .background(
