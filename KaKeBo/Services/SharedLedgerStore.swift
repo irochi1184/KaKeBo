@@ -290,6 +290,16 @@ final class SharedLedgerStore: ObservableObject {
         let shareID = metadata.share.recordID.recordName
         print("ℹ️ [SharedLedgerStore] acceptShare start container=\(metadata.containerIdentifier), shareID=\(shareID)")
         let beforeLedgerIDs = Set(ledgers.map(\.id))
+        if let rootRecordID = metadata.rootRecordID,
+           beforeLedgerIDs.contains(rootRecordID) {
+            globalToast = ToastState(
+                message: "すでにこの共有家計簿に参加しています。",
+                systemImage: "person.2.fill",
+                actionTitle: nil,
+                action: nil
+            )
+            return .alreadyJoined
+        }
 
         do {
             let targetContainer = CKContainer(identifier: metadata.containerIdentifier)
