@@ -24,6 +24,7 @@ struct SharedLedgerListScreen: View {
     @State private var deleteErrorMessage: String? = nil
     @State private var showDeleteError = false
     @State private var showJoinByLinkSheet = false
+    @State private var ledgerActionLabel = "削除"
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -70,25 +71,29 @@ struct SharedLedgerListScreen: View {
                 .environmentObject(store)
         }
         .confirmationDialog(
-            "この共有家計簿を削除しますか？",
+            "この共有家計簿を\(ledgerActionLabel)しますか？",
             isPresented: $showDeleteConfirm,
             presenting: ledgerToDelete
         ) { ledger in
-            Button("削除", role: .destructive) {
+            Button(ledgerActionLabel, role: .destructive) {
                 Task {
-                    await handleDelete(ledger)
+                    await handleLedgerAction(ledger)
                 }
             }
             Button("キャンセル", role: .cancel) { }
         } message: { ledger in
-            Text("「\(ledger.name)」を削除すると、共有家計簿に登録された取引も見えなくなります。")
+            if store.isOwned(ledger) {
+                Text("「\(ledger.name)」を削除すると、共有家計簿に登録された取引も見えなくなります。")
+            } else {
+                Text("「\(ledger.name)」から脱退します。あとから再参加する場合は、もう一度招待リンクが必要です。")
+            }
         }
         .alert("共有の準備に失敗しました", isPresented: $showShareError) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(shareErrorMessage ?? "不明なエラーが発生しました。時間をおいて再度お試しください。")
         }
-        .alert("削除に失敗しました", isPresented: $showDeleteError) {
+        .alert("操作に失敗しました", isPresented: $showDeleteError) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(deleteErrorMessage ?? "通信環境をご確認のうえ、時間をおいて再度お試しください。")
@@ -311,18 +316,20 @@ struct SharedLedgerListScreen: View {
             }
             
             Button(role: .destructive) {
+                ledgerActionLabel = store.isOwned(ledger) ? "削除" : "脱退"
                 ledgerToDelete = ledger
                 showDeleteConfirm = true
             } label: {
-                Label("削除", systemImage: "trash")
+                Label(store.isOwned(ledger) ? "削除" : "脱退", systemImage: store.isOwned(ledger) ? "trash" : "rectangle.portrait.and.arrow.right")
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
+                ledgerActionLabel = store.isOwned(ledger) ? "削除" : "脱退"
                 ledgerToDelete = ledger
                 showDeleteConfirm = true
             } label: {
-                Label("削除", systemImage: "trash")
+                Label(store.isOwned(ledger) ? "削除" : "脱退", systemImage: store.isOwned(ledger) ? "trash" : "rectangle.portrait.and.arrow.right")
             }
         }
     }
@@ -393,8 +400,13 @@ struct SharedLedgerListScreen: View {
         }
     }
 
-    private func handleDelete(_ ledger: SharedLedger) async {
-        let success = await store.deleteLedger(ledger)
+    private func handleLedgerAction(_ ledger: SharedLedger) async {
+        let success: Bool
+        if store.isOwned(ledger) {
+            success = await store.deleteLedger(ledger)
+        } else {
+            success = await store.leaveLedger(ledger)
+        }
 
         if success {
             // 成功メッセージは共有オーバーレイで表示
@@ -597,6 +609,7 @@ private struct JoinSharedLedgerByLinkSheet: View {
     @State private var invitationURLText: String = ""
     @State private var isSubmitting = false
     @State private var validationMessage: String?
+    @State private var showAlreadyJoinedModal = false
 
     var body: some View {
         NavigationStack {
@@ -651,6 +664,13 @@ private struct JoinSharedLedgerByLinkSheet: View {
                 )
             }
         }
+        .alert("すでに参加済みです", isPresented: $showAlreadyJoinedModal) {
+            Button("OK", role: .cancel) {
+                dismiss()
+            }
+        } message: {
+            Text("この共有家計簿にはすでに参加しています。共有家計簿一覧からそのまま利用できます。")
+        }
     }
 
     private func submit() {
@@ -666,11 +686,16 @@ private struct JoinSharedLedgerByLinkSheet: View {
         validationMessage = nil
         isSubmitting = true
         Task {
-            let didJoin = await store.acceptShareURL(url)
+            let result = await store.acceptShareURL(url)
             await MainActor.run {
                 isSubmitting = false
-                if didJoin {
+                switch result {
+                case .joined, .pending:
                     dismiss()
+                case .alreadyJoined:
+                    showAlreadyJoinedModal = true
+                case .failed:
+                    break
                 }
             }
         }

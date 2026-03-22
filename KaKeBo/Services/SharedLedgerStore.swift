@@ -12,6 +12,13 @@ import SwiftUI
 
 @MainActor
 final class SharedLedgerStore: ObservableObject {
+    enum ShareAcceptResult {
+        case joined
+        case alreadyJoined
+        case pending
+        case failed
+    }
+
     @Published var ledgers: [SharedLedger] = []
     @Published var transactionsByLedger: [CKRecord.ID: [SharedTransaction]] = [:]
     @Published var categoriesByLedger: [CKRecord.ID: [SharedCategory]] = [:]
@@ -256,13 +263,12 @@ final class SharedLedgerStore: ObservableObject {
     
 
     @discardableResult
-    func acceptShareURL(_ url: URL) async -> Bool {
+    func acceptShareURL(_ url: URL) async -> ShareAcceptResult {
         print("ℹ️ [SharedLedgerStore] acceptShareURL start url=\(url.absoluteString)")
         do {
             let metadata = try await CKContainer.default().shareMetadata(for: url)
             print("ℹ️ [SharedLedgerStore] shareMetadata resolved via URL container=\(metadata.containerIdentifier), shareID=\(metadata.share.recordID.recordName)")
-            await acceptShare(metadata)
-            return lastError == nil
+            return await acceptShare(metadata)
         } catch {
             lastError = error
             globalToast = ToastState(
@@ -272,11 +278,12 @@ final class SharedLedgerStore: ObservableObject {
                 action: nil
             )
             print("❌ [SharedLedgerStore] acceptShareURL error url=\(url.absoluteString), error=\(error)")
-            return false
+            return .failed
         }
     }
 
-    func acceptShare(_ metadata: CKShare.Metadata) async {
+    @discardableResult
+    func acceptShare(_ metadata: CKShare.Metadata) async -> ShareAcceptResult {
         isAcceptingShare = true
         defer { isAcceptingShare = false }
 
@@ -308,6 +315,7 @@ final class SharedLedgerStore: ObservableObject {
                     actionTitle: nil,
                     action: nil
                 )
+                return .joined
             } else if reloadSucceeded {
                 globalToast = ToastState(
                     message: "参加処理を受け付けました。反映に少し時間がかかる場合があります。",
@@ -317,6 +325,7 @@ final class SharedLedgerStore: ObservableObject {
                         Task { await self?.reloadLedgers(logContext: "acceptShare delayed reload") }
                     }
                 )
+                return .pending
             } else {
                 globalToast = ToastState(
                     message: "参加は完了しましたが一覧の更新に失敗しました。再度お試しください。",
@@ -326,6 +335,7 @@ final class SharedLedgerStore: ObservableObject {
                         Task { await self?.reloadLedgers(logContext: "acceptShare retry reload") }
                     }
                 )
+                return .pending
             }
         } catch {
             if let ckError = error as? CKError, isAlreadyParticipantError(ckError) {
@@ -352,7 +362,7 @@ final class SharedLedgerStore: ObservableObject {
                         }
                     )
                 }
-                return
+                return .alreadyJoined
             }
 
             if let ckError = error as? CKError, ckError.code == .quotaExceeded {
@@ -369,14 +379,14 @@ final class SharedLedgerStore: ObservableObject {
                         actionTitle: nil,
                         action: nil
                     )
-                    return
+                    return .pending
                 }
                 scheduleShareAcceptanceRetryIfNeeded(
                     metadata: metadata,
                     retryAfter: retryAfterSeconds(from: ckError)
                 )
                 lastError = nil
-                return
+                return .pending
             }
 
             lastFailedShareMetadata = metadata
@@ -410,6 +420,7 @@ final class SharedLedgerStore: ObservableObject {
             } else {
                 print("❌ [SharedLedgerStore] acceptShare error container=\(metadata.containerIdentifier), shareID=\(shareID), error=\(error)")
             }
+            return .failed
         }
     }
 
@@ -906,6 +917,58 @@ final class SharedLedgerStore: ObservableObject {
             showToast(message: "「\(ledger.name)」の削除が完了しました")
             return true
         } catch {
+            lastError = error
+            if let ledger = removedLedger, let idx = removedIndex {
+                ledgers.insert(ledger, at: idx)
+            }
+            deletingLedgerIDs.remove(ledger.id)
+            return false
+        }
+    }
+
+    @discardableResult
+    func leaveLedger(_ ledger: SharedLedger) async -> Bool {
+        guard !isOwned(ledger) else {
+            print("leaveLedger: owned ledger, skip")
+            return false
+        }
+
+        deletingLedgerIDs.insert(ledger.id)
+
+        var removedLedger: SharedLedger?
+        var removedIndex: Int?
+
+        if let idx = ledgers.firstIndex(where: { $0.id == ledger.id }) {
+            removedLedger = ledgers[idx]
+            removedIndex = idx
+            _ = withAnimation {
+                ledgers.remove(at: idx)
+            }
+        }
+
+        do {
+            let rootRecord = try await sharedDB.record(for: ledger.id)
+            if let shareRef = rootRecord.share {
+                try await sharedDB.deleteRecord(withID: shareRef.recordID)
+            } else {
+                try await sharedDB.deleteRecord(withID: ledger.id)
+            }
+            ledgerSourceMap[ledger.id] = nil
+            transactionsByLedger[ledger.id] = nil
+            categoriesByLedger[ledger.id] = nil
+            deletingLedgerIDs.remove(ledger.id)
+            showToast(message: "「\(ledger.name)」から脱退しました")
+            return true
+        } catch {
+            if let ckError = error as? CKError, ckError.code == .unknownItem {
+                ledgerSourceMap[ledger.id] = nil
+                transactionsByLedger[ledger.id] = nil
+                categoriesByLedger[ledger.id] = nil
+                deletingLedgerIDs.remove(ledger.id)
+                showToast(message: "「\(ledger.name)」から脱退しました")
+                return true
+            }
+
             lastError = error
             if let ledger = removedLedger, let idx = removedIndex {
                 ledgers.insert(ledger, at: idx)
