@@ -23,6 +23,7 @@ struct CalendarDayDetailCard: View {
     @State private var showAdd = false
     @State private var showAddTodoSheet = false
     @State private var pendingNewTitle: String = ""
+    @Environment(\.appVisualStyle) private var visualStyle
 
     private var cal: Calendar { .current }
 
@@ -111,7 +112,8 @@ struct CalendarDayDetailCard: View {
                     )
                 }
             }
-            .listStyle(.insetGrouped)
+             .listStyle(.insetGrouped)
+            .listRowBackground(FlatListRowBackground())
             .scrollContentBackground(.hidden)
             .frame(maxHeight: .infinity)
         }
@@ -176,7 +178,7 @@ struct CalendarDayDetailCard: View {
                         .overlay(
                             Circle().stroke(.white.opacity(0.25), lineWidth: 0.8)
                         )
-                        .shadow(color: .black.opacity(0.1), radius: 3, y: 2)
+                         .shadow(color: .black.opacity(visualStyle == .business ? 0 : 0.1), radius: visualStyle == .business ? 0 : 3, y: visualStyle == .business ? 0 : 2)
                     Image(systemName: "plus")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(accent)

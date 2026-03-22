@@ -14,7 +14,7 @@ struct CalendarScreen: View {
     @EnvironmentObject var ledgerContext: LedgerContext
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @EnvironmentObject var appRoute: AppRoute
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appVisualStyle) private var visualStyle
     public var cal: Calendar { .current }
     @StateObject private var keyboard = KeyboardHeightReader()
     @StateObject private var dayNotes = DayNotesStore()
@@ -392,6 +392,7 @@ private struct TodoListCard: View {
     let onTapAdd: () -> Void
     @Binding var showOnlyUndone: Bool
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appVisualStyle) private var visualStyle
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -413,7 +414,7 @@ private struct TodoListCard: View {
                             .overlay(
                                 Circle().stroke(.white.opacity(0.25), lineWidth: 0.8)
                             )
-                            .shadow(color: .black.opacity(0.1), radius: 3, y: 2)
+                             .shadow(color: .black.opacity(visualStyle == .business ? 0 : 0.1), radius: visualStyle == .business ? 0 : 3, y: visualStyle == .business ? 0 : 2)
                         
                         Image(systemName: "plus")
                             .font(.system(size: 16, weight: .semibold))
@@ -477,19 +478,10 @@ private struct TodoListCard: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .frame(maxHeight: 260)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(scheme == .dark ? Color.white.opacity(0.06) : .white)
-                        .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.06), radius: 10, y: 5)
-                )
+                .background(FlatCardBackground(cornerRadius: 16))
             }
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(scheme == .dark ? Color.white.opacity(0.06) : .white)
-                .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.06), radius: 10, y: 5)
-        )
+        .flatCard(cornerRadius: 16, padding: 12)
     }
     
     private func monthTitle(_ date: Date) -> String {

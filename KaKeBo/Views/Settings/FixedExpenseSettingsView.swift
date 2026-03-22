@@ -152,6 +152,7 @@ struct FixedExpenseSettingsView: View {
                 Button("OK", role: .cancel) {}
             } message: { Text(confirmMessage) }
         }
+        .listRowBackground(FlatListRowBackground())
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 EditButton().disabled(templates.isEmpty)

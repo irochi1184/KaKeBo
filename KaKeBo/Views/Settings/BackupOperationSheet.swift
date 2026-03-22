@@ -112,6 +112,7 @@ struct BackupOperationSheet: View {
                     }
                 }
             }
+            .listRowBackground(FlatListRowBackground())
             .navigationTitle("バックアップを作成・復元")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
