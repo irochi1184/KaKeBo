@@ -55,7 +55,6 @@ struct RootTabView: View {
         .overlay(alignment: .bottom) {
             SharedLedgerNotificationOverlay()
                 .environmentObject(sharedLedgerStore)
-                .allowsHitTesting(false)
         }
         .environment(\.appVisualStyle, themeStore.theme.visualStyle)
         .environment(\.appHomeCardStyle, themeStore.theme.homeCardStyle)
