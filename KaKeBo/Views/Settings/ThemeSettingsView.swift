@@ -135,6 +135,10 @@ struct ThemeSettingsView: View {
                 }
             } else {
                 Section("プレミアムカスタマイズ") {
+                    Toggle("カスタム電卓キーパッドを使う", isOn: Binding(
+                        get: { working.prefersCustomKeypad },
+                        set: { newVal in var w = working; w.prefersCustomKeypad = newVal; working = w }
+                    ))
                     LockedCustomSection(accent: accent)
                     LockedCustomSection(
                         accent: accent,
