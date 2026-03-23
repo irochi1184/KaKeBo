@@ -97,6 +97,8 @@ struct ReportsView: View {
                 if availableYears.contains(year) == false, let latest = availableYears.max() {
                     year = latest
                 }
+                ReviewRequestManager.shared.recordReportScreenViewed()
+                ReviewRequestManager.shared.scheduleReviewRequestIfEligible()
             }
             .task { await reloadSharedLedgerDataIfNeeded() }
             .task(id: ledgerContext.selectedSharedLedgerId) { await reloadSharedLedgerDataIfNeeded() }
