@@ -227,8 +227,8 @@ final class ReviewRequestManager {
     private var hasAttemptedInSession = false
     private var delayedTask: Task<Void, Never>?
 
-    private init(defaults: UserDefaults = .appGroup) {
-        self.defaults = defaults
+    private init() {
+        self.defaults = .appGroup
         registerFirstLaunchIfNeeded()
     }
 
@@ -250,12 +250,12 @@ final class ReviewRequestManager {
 
     func scheduleReviewRequestIfEligible() {
         delayedTask?.cancel()
-        delayedTask = Task { [weak self] in
+        delayedTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let delay = Double.random(in: Constants.minDelaySeconds)
             let delayNanos = UInt64(delay * 1_000_000_000)
             try? await Task.sleep(nanoseconds: delayNanos)
-            await self.tryPresentReviewPrompt()
+            self.tryPresentReviewPrompt()
         }
     }
 
