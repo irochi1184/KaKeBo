@@ -36,6 +36,7 @@ struct HomeView: View {
 
     @State private var showMonthStartIntro = false
     @State private var breakdownSheet: CategoryBreakdownSheetData?
+    @State private var dailyDetailSheet: DailyTrendDetailContext?
 
     // ▼ 追加：カード順序の状態とドラッグ中のカード
     @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .donut, .daily, .transactions])
@@ -123,6 +124,10 @@ struct HomeView: View {
                 )
                 .presentationDetents([.large])
             }
+            .sheet(item: $dailyDetailSheet) { detail in
+                DailyTrendDetailView(context: detail)
+                    .presentationDetents([.large])
+            }
         }
         .onAppear {
             store.applyFixedExpensesForCurrentMonth()
@@ -208,6 +213,13 @@ struct HomeView: View {
                         DailyBarChart(series: dailyPoints)
                             .homeCard()
                             .padding(.horizontal)
+                            .onTapGesture {
+                                dailyDetailSheet = makeSharedDailyDetailContext(
+                                    allTxs: allTxs,
+                                    categories: cats,
+                                    points: dailyPoints
+                                )
+                            }
                     }
                     
                     // ④ 当月の履歴リスト
@@ -292,6 +304,9 @@ struct HomeView: View {
         case .daily:
             DailyBarChart(series: dailySeries)
                 .homeCard()
+                .onTapGesture {
+                    dailyDetailSheet = makePersonalDailyDetailContext(points: dailySeries)
+                }
             
         case .transactions:
             TransactionListCard(
@@ -572,6 +587,55 @@ extension HomeView {
         }
     }
     
+    private func makePersonalDailyDetailContext(points: [DailyCategoryPoint]) -> DailyTrendDetailContext {
+        let txs = store.transactions
+            .filter { $0.type == .expense && isInCurrentMonth($0.date) }
+            .map { tx in
+                let categoryName = store.categories.first(where: { $0.id == tx.categoryId })?.name ?? "未分類"
+                return DailyTrendTransaction(
+                    id: tx.id.uuidString,
+                    date: tx.date,
+                    categoryName: categoryName,
+                    amount: tx.amount,
+                    memo: tx.memo
+                )
+            }
+
+        return DailyTrendDetailContext(
+            title: "\(monthTitle(selectedMonth)) 日別推移",
+            series: points,
+            transactions: txs
+        )
+    }
+
+    private func makeSharedDailyDetailContext(
+        allTxs: [SharedTransaction],
+        categories: [SharedCategory],
+        points: [DailyCategoryPoint]
+    ) -> DailyTrendDetailContext {
+        let txs = allTxs
+            .filter { $0.type == .expense && isInCurrentMonth($0.date) }
+            .map { tx in
+                let fallbackKey = tx.categoryId?.recordName ?? tx.categoryName
+                let categoryName = categories.first(where: { $0.id == tx.categoryId })?.name
+                    ?? categories.first(where: { $0.id.recordName == fallbackKey })?.name
+                    ?? tx.categoryName
+                return DailyTrendTransaction(
+                    id: tx.id.recordName,
+                    date: tx.date,
+                    categoryName: categoryName,
+                    amount: tx.amount,
+                    memo: tx.memo ?? ""
+                )
+            }
+
+        return DailyTrendDetailContext(
+            title: "\(monthTitle(selectedMonth)) 日別推移",
+            series: points,
+            transactions: txs
+        )
+    }
+
     private func sharedThisMonthTx(allTxs: [SharedTransaction]) -> [SharedTransaction] {
         return allTxs.filter {
             isInCurrentMonth($0.date)
