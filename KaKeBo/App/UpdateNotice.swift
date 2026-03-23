@@ -72,7 +72,24 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
-
+        Highlight(
+            title: "テーマ管理に「フラット」を追加",
+            message: "より見やすく、すっきりしたデザインを選べるようになりました。",
+            symbol: "square.grid.2x2",
+            tint: .blue
+        ),
+        Highlight(
+            title: "収支カラーのカスタムに対応（プレミアム）",
+            message: "プレミアムプランで、収入と支出の色を好みに合わせて設定できます。",
+            symbol: "paintpalette",
+            tint: .purple
+        ),
+        Highlight(
+            title: "日別推移の詳細を確認しやすく",
+            message: "ホームタブの日別推移をタップすると、推移の詳細をそのまま確認できます。",
+            symbol: "chart.line.uptrend.xyaxis",
+            tint: .green
+        )
     ]
     /*
      アップデート 2.1.0
