@@ -69,7 +69,10 @@ struct DailyTrendDetailView: View {
     private var selectedDayCategories: [DailyCategorySummary] {
         guard let selected = selectedSummary else { return [] }
         let dayTxs = context.transactions.filter { calendar.isDate($0.date, inSameDayAs: selected.date) }
-        let colorMap = Dictionary(uniqueKeysWithValues: context.series.map { ($0.categoryName, $0.color) })
+        let colorMap = Dictionary(
+            context.series.map { ($0.categoryName, $0.color) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let grouped = Dictionary(grouping: dayTxs, by: { $0.categoryName })
 
         return grouped.map { name, txs in
