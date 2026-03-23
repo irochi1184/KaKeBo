@@ -83,6 +83,7 @@ final class DataStore: ObservableObject {
     func addTransaction(_ tx: Transaction) {
         transactions.insert(tx, at: 0)
         saveTransactions()
+        ReviewRequestManager.shared.recordSuccessfulSave()
         WidgetCenter.shared.reloadAllTimelines()
     }
 
@@ -201,12 +202,16 @@ final class DataStore: ObservableObject {
 
 extension DataStore {
     func upsertTransaction(_ tx: Transaction) {
+        let shouldCountAsNewSave = !transactions.contains(where: { $0.id == tx.id })
         if let i = transactions.firstIndex(where: { $0.id == tx.id }) {
             transactions[i] = tx
         } else {
             transactions.insert(tx, at: 0)
         }
         saveTransactions()
+        if shouldCountAsNewSave {
+            ReviewRequestManager.shared.recordSuccessfulSave()
+        }
     }
     
     /// ID配列でまとめて削除して保存

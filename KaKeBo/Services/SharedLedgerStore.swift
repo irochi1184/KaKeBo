@@ -1036,6 +1036,7 @@ final class SharedLedgerStore: ObservableObject {
             list.append(final)
             list.sort(by: { $0.date < $1.date })
             transactionsByLedger[ledger.id] = list
+            ReviewRequestManager.shared.recordSuccessfulSave()
         } catch {
             self.lastError = error
             if let ckError = error as? CKError {
