@@ -72,12 +72,7 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
-        .init(
-            title: "金額入力エリアの表示を見やすく改善",
-            message: "取引の追加・編集画面で、金額入力エリアの下側が途切れて見えることがないように調整しました。",
-            symbol: "rectangle.bottomthird.inset.filled",
-            tint: .pink
-        ),
+
     ]
     /*
      アップデート 2.1.0
