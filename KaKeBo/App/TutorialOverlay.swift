@@ -52,6 +52,7 @@ private struct TutorialOverlay: View {
     @State private var sharedColor: Color = Color.accentColor
     @State private var isCreatingSharedLedger = false
     @State private var creationError: String?
+    @State private var showDesignSelectionSheet = false
 
     private var accent: Color { themeStore.theme.accentColor(for: scheme) }
     private var background: Color { themeStore.theme.backgroundColor(for: scheme) }
@@ -101,6 +102,15 @@ private struct TutorialOverlay: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: isPresented)
+        .sheet(isPresented: $showDesignSelectionSheet) {
+            DesignStyleSelectionSheet(
+                isPresented: $showDesignSelectionSheet,
+                title: "見た目を選びましょう",
+                message: "「標準」と「フラット」を見比べて、好きな表示を選べます。",
+                primaryButtonTitle: "このデザインにする"
+            )
+            .environmentObject(themeStore)
+        }
     }
 
     // MARK: - UI Building Blocks
@@ -151,6 +161,8 @@ private struct TutorialOverlay: View {
             sharedLedgerStep
         case .categorySetup:
             categoryStep
+        case .designChoice:
+            designChoiceStep
         case .summary:
             summaryStep
         }
@@ -391,6 +403,49 @@ private struct TutorialOverlay: View {
         }
     }
 
+    private var designChoiceStep: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("画面デザインを選ぶ")
+                .font(.title3.weight(.bold))
+            Text("「標準」と「フラット」を比較して、好みの見た目を選択できます。後から設定画面でも変更できます。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Image(systemName: "paintpalette.fill")
+                    .foregroundStyle(accent)
+                Text("現在の選択: \(themeStore.theme.visualStyle.title)")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(accent.opacity(0.12))
+            )
+
+            Button {
+                showDesignSelectionSheet = true
+            } label: {
+                HStack {
+                    Image(systemName: "rectangle.grid.2x2")
+                    Text("デザイン比較シートを開く")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.bold))
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.secondary.opacity(0.08))
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     // MARK: - Actions
 
     private func goNext() {
@@ -412,6 +467,8 @@ private struct TutorialOverlay: View {
         case .sharedSetup:
             createSharedLedger()
         case .categorySetup:
+            step = .designChoice
+        case .designChoice:
             step = .summary
         case .summary:
             finish()
@@ -428,8 +485,10 @@ private struct TutorialOverlay: View {
             step = .usageChoice
         case .categorySetup:
             step = usage == .personal ? .usageChoice : .sharedSetup
-        case .summary:
+        case .designChoice:
             step = .categorySetup
+        case .summary:
+            step = .designChoice
         case .welcome:
             break
         }
@@ -476,6 +535,7 @@ private enum TutorialStep: Int, CaseIterable {
     case usageChoice
     case sharedSetup
     case categorySetup
+    case designChoice
     case summary
 
     var progress: Double {
@@ -495,6 +555,8 @@ private enum TutorialStep: Int, CaseIterable {
         case .sharedSetup:
             return "作成して進む"
         case .categorySetup:
+            return "デザイン選択へ"
+        case .designChoice:
             return "完了へ"
         case .summary:
             return "閉じる"
