@@ -1264,6 +1264,10 @@ private struct FilteredChartsSheet: View {
             .background(background.ignoresSafeArea())
             .navigationTitle("フィルター結果のグラフ")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                ReviewRequestManager.shared.recordReportScreenViewed()
+                ReviewRequestManager.shared.scheduleReviewRequestIfEligible()
+            }
         }
     }
 

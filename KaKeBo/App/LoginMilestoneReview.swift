@@ -202,3 +202,151 @@ private struct LoginMilestoneReviewOverlay: View {
         isPresented = false
     }
 }
+
+@MainActor
+final class ReviewRequestManager {
+    static let shared = ReviewRequestManager()
+
+    enum Keys {
+        static let firstLaunchDate = "reviewRequest.firstLaunchDate"
+        static let successfulSaveCount = "reviewRequest.successfulSaveCount"
+        static let reportViewCount = "reviewRequest.reportViewCount"
+        static let lastRequestAttemptDate = "reviewRequest.lastRequestAttemptDate"
+        static let neverShowAgain = "reviewRequest.neverShowAgain"
+    }
+
+    enum Constants {
+        static let minDaysSinceFirstLaunch = 3
+        static let minSuccessfulSaveCount = 5
+        static let minReportViewCount = 2
+        static let requestCooldownDays = 30
+        static let minDelaySeconds: ClosedRange<Double> = 0.8...1.5
+    }
+
+    private let defaults: UserDefaults
+    private var hasAttemptedInSession = false
+    private var delayedTask: Task<Void, Never>?
+
+    private init(defaults: UserDefaults = .appGroup) {
+        self.defaults = defaults
+        registerFirstLaunchIfNeeded()
+    }
+
+    func registerFirstLaunchIfNeeded(date: Date = Date()) {
+        if defaults.object(forKey: Keys.firstLaunchDate) == nil {
+            defaults.set(date, forKey: Keys.firstLaunchDate)
+        }
+    }
+
+    func recordSuccessfulSave() {
+        let next = defaults.integer(forKey: Keys.successfulSaveCount) + 1
+        defaults.set(next, forKey: Keys.successfulSaveCount)
+    }
+
+    func recordReportScreenViewed() {
+        let next = defaults.integer(forKey: Keys.reportViewCount) + 1
+        defaults.set(next, forKey: Keys.reportViewCount)
+    }
+
+    func scheduleReviewRequestIfEligible() {
+        delayedTask?.cancel()
+        delayedTask = Task { [weak self] in
+            guard let self else { return }
+            let delay = Double.random(in: Constants.minDelaySeconds)
+            let delayNanos = UInt64(delay * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: delayNanos)
+            await self.tryPresentReviewPrompt()
+        }
+    }
+
+    private func tryPresentReviewPrompt(now: Date = Date()) {
+        guard isEligible(now: now) else { return }
+        guard let scene = activeWindowScene() else { return }
+        guard let topVC = topViewController(in: scene) else { return }
+
+        hasAttemptedInSession = true
+        defaults.set(now, forKey: Keys.lastRequestAttemptDate)
+
+        let alert = UIAlertController(
+            title: "KaKeBoをご利用いただきありがとうございます",
+            message: "使い心地はいかがですか？よろしければレビューで応援していただけると励みになります。",
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "今回はしない", style: .cancel))
+        alert.addAction(UIAlertAction(title: "今後表示しない", style: .destructive) { [weak self] _ in
+            self?.defaults.set(true, forKey: Keys.neverShowAgain)
+        })
+        alert.addAction(UIAlertAction(title: "レビューする", style: .default) { _ in
+            SKStoreReviewController.requestReview(in: scene)
+        })
+
+        topVC.present(alert, animated: true)
+    }
+
+    private func isEligible(now: Date) -> Bool {
+        if hasAttemptedInSession { return false }
+        if defaults.bool(forKey: Keys.neverShowAgain) { return false }
+
+        guard let firstLaunch = defaults.object(forKey: Keys.firstLaunchDate) as? Date else {
+            return false
+        }
+
+        let calendar = Calendar.current
+        guard let launchThreshold = calendar.date(byAdding: .day, value: Constants.minDaysSinceFirstLaunch, to: firstLaunch),
+              now >= launchThreshold else {
+            return false
+        }
+
+        let successfulSaveCount = defaults.integer(forKey: Keys.successfulSaveCount)
+        guard successfulSaveCount >= Constants.minSuccessfulSaveCount else {
+            return false
+        }
+
+        let reportViewCount = defaults.integer(forKey: Keys.reportViewCount)
+        guard reportViewCount >= Constants.minReportViewCount else {
+            return false
+        }
+
+        if let lastAttempt = defaults.object(forKey: Keys.lastRequestAttemptDate) as? Date,
+           let nextAvailable = calendar.date(byAdding: .day, value: Constants.requestCooldownDays, to: lastAttempt),
+           now < nextAvailable {
+            return false
+        }
+
+        return true
+    }
+
+    private func activeWindowScene() -> UIWindowScene? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })
+    }
+
+    private func topViewController(in scene: UIWindowScene) -> UIViewController? {
+        guard let window = scene.windows.first(where: \.isKeyWindow),
+              window.isHidden == false,
+              let root = window.rootViewController else {
+            return nil
+        }
+
+        // シートやフルスクリーンなど、すでにモーダルが出ている場合は表示しない
+        if root.presentedViewController != nil {
+            return nil
+        }
+
+        var top = root
+        while let presented = top.presentedViewController {
+            top = presented
+        }
+
+        if top.isBeingDismissed || top.isBeingPresented {
+            return nil
+        }
+        if top.transitionCoordinator != nil {
+            return nil
+        }
+
+        return top
+    }
+}

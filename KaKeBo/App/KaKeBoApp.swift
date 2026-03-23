@@ -98,6 +98,7 @@ struct KaKeBoApp: App {
                 }
             // 初回起動時のみ、ロック有効ならロック
                 .onAppear {
+                    ReviewRequestManager.shared.registerFirstLaunchIfNeeded()
                     if !didInitialAppear {
                         didInitialAppear = true
                         if lock.isEnabled {
