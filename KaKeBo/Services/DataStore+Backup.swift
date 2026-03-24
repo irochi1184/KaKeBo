@@ -207,11 +207,7 @@ extension DataStore {
                     tags: tpl.tags
                 )
             }
-            frequentTemplates = templates
-            let defaults = UserDefaults.appGroup
-            defaults.migrateIfNeeded(keys: [DataStore.frequentTemplatesKey])
-            let data = try JSONEncoder().encode(templates)
-            defaults.set(data, forKey: DataStore.frequentTemplatesKey)
+            replaceFrequentTemplatesForBackupImport(templates)
         }
 //        if let arr = backup.reminders {
 //            let data = try JSONEncoder().encode(arr)

@@ -276,6 +276,12 @@ extension DataStore {
         frequentTemplates.move(fromOffsets: offsets, toOffset: destination)
         saveFrequentTemplates()
     }
+
+    /// バックアップ復元用：テンプレート一覧を丸ごと差し替えて保存
+    func replaceFrequentTemplatesForBackupImport(_ templates: [FrequentTransactionTemplate]) {
+        frequentTemplates = templates
+        saveFrequentTemplates()
+    }
     
     /// 今月&今日までに“自動計上すべき”固定費を transactions に反映する
     /// - すでに当月分を計上済みのテンプレートはスキップ（Settings の手動計上からも共通利用可）
