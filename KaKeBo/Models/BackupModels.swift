@@ -18,6 +18,7 @@ struct KaKeBoBackupV1: Codable {
     // 任意（あるなら完全復元）
     var recurringTodos: [BackupRecurringTodo]?
     var fixedExpenses: [BackupFixedExpense]?
+    var frequentTransactions: [BackupFrequentTransaction]? = nil
     var reminders: [BackupReminderRule]?
     var dayNotes: [BackupDayNote]?
     var monthStartSettings: BackupMonthStartSettings?
@@ -57,6 +58,16 @@ struct BackupFixedExpense: Codable, Identifiable {
     var categoryId: UUID?
     var memo: String
     var isActive: Bool
+}
+
+struct BackupFrequentTransaction: Codable, Identifiable {
+    var id: UUID
+    var title: String
+    var amount: Int
+    var typeRaw: String   // "income" | "expense"
+    var memo: String
+    var categoryId: UUID
+    var tags: [String]
 }
 
 struct BackupReminderRule: Codable, Identifiable {
