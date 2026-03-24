@@ -8,6 +8,10 @@
 import SwiftUI
 import Combine
 
+extension Notification.Name {
+    static let dayNotesDidRestoreFromBackup = Notification.Name("kakebo.daynotes.didRestoreFromBackup")
+}
+
 /// 日付(yyyy-MM-dd) → メモ本文 のシンプルな保存
 final class DayNotesStore: ObservableObject {
     private let defaults: UserDefaults
@@ -17,11 +21,18 @@ final class DayNotesStore: ObservableObject {
     
     private let cal = Calendar.current
     private let tz  = TimeZone(identifier: "Asia/Tokyo") ?? .current
+    private var cancellables: Set<AnyCancellable> = []
     
     init(userDefaults: UserDefaults? = .appGroup) {
         self.defaults = userDefaults ?? .standard
         self.defaults.migrateIfNeeded(keys: [storageKey])
         load()
+        NotificationCenter.default.publisher(for: .dayNotesDidRestoreFromBackup)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.reloadFromPersistence()
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Public API
@@ -76,6 +87,11 @@ final class DayNotesStore: ObservableObject {
         if let data = try? JSONEncoder().encode(notes) {
             defaults.set(data, forKey: storageKey)
         }
+    }
+
+    private func reloadFromPersistence() {
+        load()
+        objectWillChange.send()
     }
     
     // MARK: - Key Helpers (yyyy-MM-dd JST)
