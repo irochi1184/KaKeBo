@@ -40,6 +40,7 @@ struct CategoryListView: View {
     // クイック追加の折りたたみ
     @State private var showQuickAdd = true
     @State private var isCreatingSharedCategory = false
+    @State private var pendingSharedQuickAddNames: Set<String> = []
     
     // 対象家計簿（個人 or 共有）
     @State private var owner: CategoryOwner = .personal
@@ -313,24 +314,30 @@ private extension CategoryListView {
                         }
                         // 連打防止
                         if isCreatingSharedCategory { return }
+                        if pendingSharedQuickAddNames.contains(p.name) { return }
                         
                         isCreatingSharedCategory = true
+                        pendingSharedQuickAddNames.insert(p.name)
 
                         Task {
-                            _ = await sharedLedgerStore.createCategory(
+                            let created = await sharedLedgerStore.createCategory(
                                 for: ledger,
                                 name: p.name,
                                 colorHex: p.color.toHexString(),
                                 icon: p.symbol
                             )
-                            await sharedLedgerStore.reloadCategories(for: ledger)
                             await MainActor.run {
+                                pendingSharedQuickAddNames.remove(p.name)
                                 isCreatingSharedCategory = false
+                            }
+                            if created == nil {
+                                await sharedLedgerStore.reloadCategories(for: ledger)
                             }
                         }
                     },
                     // 上限 or 作成中はロック見た目
-                    isLocked: sharedAtLimit || isCreatingSharedCategory
+                    isLocked: sharedAtLimit || isCreatingSharedCategory,
+                    pendingNames: pendingSharedQuickAddNames
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                 
@@ -775,6 +782,7 @@ private struct QuickAddGrid: View {
     let presets: [PresetCategory]
     let onTap: (PresetCategory) -> Void
     var isLocked: Bool = false
+    var pendingNames: Set<String> = []
     
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -798,20 +806,24 @@ private struct QuickAddGrid: View {
                                 .fill(p.color.opacity(0.12))
                         )
                         .overlay(alignment: .topTrailing) {
-                            if isLocked {
+                            if pendingNames.contains(p.name) {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                    .padding(4)
+                            } else if isLocked {
                                 Image(systemName: "lock.fill")
                                     .font(.caption2)
                                     .padding(4)
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        .opacity(isLocked ? 0.65 : 1)
+                        .opacity((isLocked || pendingNames.contains(p.name)) ? 0.65 : 1)
                     }
                     .buttonStyle(.plain)
+                    .disabled(isLocked || pendingNames.contains(p.name))
                 }
             }
             .padding(.vertical, 4)
         }
     }
 }
-
