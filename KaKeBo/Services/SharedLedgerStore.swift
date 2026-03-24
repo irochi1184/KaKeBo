@@ -1104,6 +1104,7 @@ final class SharedLedgerStore: ObservableObject {
     }
     
     // MARK: - カテゴリー
+    @MainActor
     func reloadCategories(for ledger: SharedLedger) async {
         do {
             let ref = CKRecord.Reference(recordID: ledger.id, action: .none)
