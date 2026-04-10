@@ -289,14 +289,14 @@
 				INFOPLIST_FILE = KaKeBoWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = KaKeBoWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				"MARKETING_VERSION[sdk=iphoneos*]" = 2.1.5;
+				"MARKETING_VERSION[sdk=iphoneos*]" = 2.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo.KaKeBoWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -322,14 +322,14 @@
 				INFOPLIST_FILE = KaKeBoWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = KaKeBoWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				"MARKETING_VERSION[sdk=iphoneos*]" = 2.1.5;
+				"MARKETING_VERSION[sdk=iphoneos*]" = 2.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo.KaKeBoWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -488,13 +488,13 @@
 				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				"MARKETING_VERSION[sdk=iphoneos*]" = 2.1.5;
+				"MARKETING_VERSION[sdk=iphoneos*]" = 2.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -528,13 +528,13 @@
 				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				"MARKETING_VERSION[sdk=iphoneos*]" = 2.1.5;
+				"MARKETING_VERSION[sdk=iphoneos*]" = 2.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

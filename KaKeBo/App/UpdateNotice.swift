@@ -88,22 +88,22 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "テーマ管理に「フラット」を追加",
-            message: "より見やすく、すっきりしたデザインを選べるようになりました。",
-            symbol: "square.grid.2x2",
+            title: "iOS 17.4 でも使えるように対応",
+            message: "対象OSを見直し、これまでより幅広い端末でそのまま使えるようにしました。",
+            symbol: "iphone",
+            tint: .green
+        ),
+        Highlight(
+            title: "表示や操作の変更は最小限に",
+            message: "日々の使い方が変わらないよう、見た目や流れへの影響をできるだけ抑えています。",
+            symbol: "hand.tap",
             tint: .blue
         ),
         Highlight(
-            title: "収支カラーのカスタムに対応（プレミアム）",
-            message: "プレミアムプランで、収入と支出の色を好みに合わせて設定できます。",
-            symbol: "paintpalette",
+            title: "動作の安定性を調整",
+            message: "アップデート後も安心して使えるよう、内部の互換性を整えました。",
+            symbol: "checkmark.shield",
             tint: .purple
-        ),
-        Highlight(
-            title: "日別推移の詳細を確認しやすく",
-            message: "ホームタブの日別推移をタップすると、推移の詳細をそのまま確認できます。",
-            symbol: "chart.line.uptrend.xyaxis",
-            tint: .green
         )
     ]
     /*
