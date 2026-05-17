@@ -744,6 +744,8 @@ private extension AllTransactionsView {
 // MARK: - サマリー
 
 private struct SummaryBar: View {
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     let totalIncome: Int
     let totalExpense: Int
     let count: Int
@@ -751,8 +753,8 @@ private struct SummaryBar: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            StatPill(title: "収入", value: totalIncome, color: .green)
-            StatPill(title: "支出", value: totalExpense, color: .red)
+            StatPill(title: "収入", value: totalIncome, color: incomeColor)
+            StatPill(title: "支出", value: totalExpense, color: expenseColor)
             Spacer()
             Text("\(count)件")
                 .font(.subheadline.weight(.medium))
@@ -807,6 +809,8 @@ private struct DisplayTransaction: Identifiable {
 
 private struct HistoryRow: View {
     let content: DisplayTransaction
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
 
     private var displayTags: [String] {
         content.tags.map { String($0.prefix(8)) }
@@ -855,7 +859,7 @@ private struct HistoryRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(amountStr())
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(content.isIncome ? .green : .primary)
+                    .foregroundStyle(content.isIncome ? incomeColor : expenseColor)
                     .monospacedDigit()
                     .lineLimit(1)
                 Text(dateStr(content.date))
@@ -1260,6 +1264,10 @@ private struct FilteredChartsSheet: View {
             .background(background.ignoresSafeArea())
             .navigationTitle("フィルター結果のグラフ")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                ReviewRequestManager.shared.recordReportScreenViewed()
+                ReviewRequestManager.shared.scheduleReviewRequestIfEligible()
+            }
         }
     }
 

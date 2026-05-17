@@ -19,14 +19,19 @@ struct CategoryCard: View {
     var body: some View {
         let strokeColor: Color = isSelected ? themeStore.theme.accentColor(for: scheme) : .white.opacity(0.08)
         let lineWidth: CGFloat = isSelected ? 2 : 1
-        let shadowOpacity: Double = isSelected ? 0.10 : 0.04
-        let shadowRadius: CGFloat = isSelected ? 8 : 4
-        let shadowY: CGFloat = isSelected ? 5 : 3
+        let isFlat = themeStore.theme.visualStyle == .business
+        let shadowOpacity: Double = isFlat ? 0 : (isSelected ? 0.10 : 0.04)
+        let shadowRadius: CGFloat = isFlat ? 0 : (isSelected ? 8 : 4)
+        let shadowY: CGFloat = isFlat ? 0 : (isSelected ? 5 : 3)
         
         VStack(spacing: 6) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(color.opacity(0.10))
+                    .fill(color.opacity(isFlat ? 0.06 : 0.10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(isFlat ? color.opacity(0.45) : .clear, lineWidth: 1)
+                    )
                 Image(systemName: symbolName)
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(color)

@@ -34,6 +34,8 @@ struct CategoryDonutChart: View {
     var isExpense: Bool = true // 表示バッジの文言/色に反映
     var useFlatStyle: Bool = false
     
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     @Environment(\.colorScheme) private var scheme
     
     var body: some View {
@@ -48,9 +50,9 @@ struct CategoryDonutChart: View {
                         .font(.caption.weight(.semibold))
                         .padding(.vertical, 4).padding(.horizontal, 8)
                         .background(
-                            Capsule().fill((isExpense ? Color.red : Color.green).opacity(0.15))
+                            Capsule().fill((isExpense ? expenseColor : incomeColor).opacity(0.15))
                         )
-                        .foregroundStyle(isExpense ? .red : .green)
+                        .foregroundStyle(isExpense ? expenseColor : incomeColor)
                     }
                     
                     Spacer()
@@ -59,7 +61,9 @@ struct CategoryDonutChart: View {
                         current: currentTotal,
                         previous: previousTotal,
                         mode: isExpense ? .expense : .balance,
-                        useFlatStyle: useFlatStyle
+                        useFlatStyle: useFlatStyle,
+                        incomeColor: incomeColor,
+                        expenseColor: expenseColor
                     )
                 }
                 
@@ -140,6 +144,8 @@ private struct DiffBadge: View {
     let previous: Int
     var mode: Mode = .expense            // ← 既定は “支出”
     var useFlatStyle: Bool = false
+    var incomeColor: Color = .green
+    var expenseColor: Color = .red
     
     var body: some View {
         let percent: Double? = {
@@ -162,10 +168,10 @@ private struct DiffBadge: View {
                 let v = round(p) // 小数不要なら丸め
                 if v > 0 {
                     // 支出: 赤（悪化） / 収支: 緑（改善）
-                    let color: Color = (mode == .expense) ? .red.opacity(0.85) : .green.opacity(0.85)
+                    let color: Color = (mode == .expense) ? expenseColor.opacity(0.85) : incomeColor.opacity(0.85)
                     return ("先月比 +\(Int(v))%", color, "arrow.up.right")
                 } else if v < 0 {
-                    let color: Color = (mode == .expense) ? .green.opacity(0.85) : .red.opacity(0.85)
+                    let color: Color = (mode == .expense) ? incomeColor.opacity(0.85) : expenseColor.opacity(0.85)
                     return ("先月比 \(Int(v))%", color, "arrow.down.right")
                 } else {
                     return ("先月比 ±0%", .secondary, "arrow.right")
@@ -213,7 +219,7 @@ struct CategoryDonutPager: View {
     
     var body: some View {
         let accent = themeStore.theme.accentColor(for: scheme)
-        let isFlat = themeStore.theme.homeCardStyle == .flat
+        let isFlat = themeStore.theme.visualStyle == .business
         let pagerHeight = max(requiredHeight(forCount: expense.count),
                               requiredHeight(forCount: income.count))
         

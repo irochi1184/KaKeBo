@@ -12,6 +12,13 @@ import SwiftUI
 
 @MainActor
 final class SharedLedgerStore: ObservableObject {
+    enum ShareAcceptResult {
+        case joined
+        case alreadyJoined
+        case pending
+        case failed
+    }
+
     @Published var ledgers: [SharedLedger] = []
     @Published var transactionsByLedger: [CKRecord.ID: [SharedTransaction]] = [:]
     @Published var categoriesByLedger: [CKRecord.ID: [SharedCategory]] = [:]
@@ -21,6 +28,8 @@ final class SharedLedgerStore: ObservableObject {
 
     @Published var activeCopy: CopyState? = nil
     @Published var globalToast: ToastState? = nil
+    @Published var isAcceptingShare = false
+    @Published var lastAcceptedLedgerID: CKRecord.ID?
     @Published var deletingLedgerIDs: Set<CKRecord.ID> = []
     
     private let container: CKContainer
@@ -28,9 +37,16 @@ final class SharedLedgerStore: ObservableObject {
     private let sharedDB: CKDatabase    // 共有で見える DB
     private var currentUserRecordName: String?
     
-    private enum LedgerSource {
+    enum LedgerSource {
         case `private`
         case shared
+
+        var databaseLabel: String {
+            switch self {
+            case .private: return "privateCloudDatabase"
+            case .shared: return "sharedCloudDatabase"
+            }
+        }
     }
     
     struct CopyState {
@@ -61,6 +77,9 @@ final class SharedLedgerStore: ObservableObject {
     private let defaults = UserDefaults.appGroup
     private var toastTask: Task<Void, Never>?
     private var lastFailedShareMetadata: CKShare.Metadata?
+    private var shareAcceptanceRetryTasks: [String: Task<Void, Never>] = [:]
+    private var shareAcceptanceRetryCounts: [String: Int] = [:]
+    private let maxShareAcceptanceRetryCount = 6
     private let privateSubscriptionID = "kakebo.sharedLedger.privateChanges"
     private let sharedSubscriptionID = "kakebo.sharedLedger.sharedChanges"
 
@@ -78,6 +97,24 @@ final class SharedLedgerStore: ObservableObject {
 
     private let lastOpenedLedgerKey = "LastOpenedSharedLedgerRecordName"
     private let sharedFrequentTemplatesKeyPrefix = "kakebo.shared.frequent.transactions."
+
+    var ownedLedgers: [SharedLedger] {
+        ledgers.filter { ledgerSourceMap[$0.id] != .shared }
+    }
+
+    var participatingLedgers: [SharedLedger] {
+        ledgers.filter { ledgerSourceMap[$0.id] == .shared }
+    }
+
+    func source(for ledger: SharedLedger) -> LedgerSource {
+        if let source = ledgerSourceMap[ledger.id] {
+            return source
+        }
+        if let currentUserRecordName, ledger.ownerUserId != currentUserRecordName {
+            return .shared
+        }
+        return .private
+    }
 
     private func frequentTemplatesKey(for ledger: SharedLedger) -> String {
         sharedFrequentTemplatesKeyPrefix + ledger.id.recordName
@@ -224,20 +261,74 @@ final class SharedLedgerStore: ObservableObject {
     
     // MARK: - Ledger
     
-    func acceptShare(_ metadata: CKShare.Metadata) async {
+
+    @discardableResult
+    func acceptShareURL(_ url: URL) async -> ShareAcceptResult {
+        print("ℹ️ [SharedLedgerStore] acceptShareURL start url=\(url.absoluteString)")
+        do {
+            let metadata = try await CKContainer.default().shareMetadata(for: url)
+            print("ℹ️ [SharedLedgerStore] shareMetadata resolved via URL container=\(metadata.containerIdentifier), shareID=\(metadata.share.recordID.recordName)")
+            return await acceptShare(metadata)
+        } catch {
+            lastError = error
+            globalToast = ToastState(
+                message: "リンクの読み込みに失敗しました。Safariでリンクを開くか、リンク全体をコピーしてもう一度お試しください。",
+                systemImage: "exclamationmark.triangle.fill",
+                actionTitle: nil,
+                action: nil
+            )
+            print("❌ [SharedLedgerStore] acceptShareURL error url=\(url.absoluteString), error=\(error)")
+            return .failed
+        }
+    }
+
+    @discardableResult
+    func acceptShare(_ metadata: CKShare.Metadata) async -> ShareAcceptResult {
+        isAcceptingShare = true
+        defer { isAcceptingShare = false }
+
+        let shareID = metadata.share.recordID.recordName
+        print("ℹ️ [SharedLedgerStore] acceptShare start container=\(metadata.containerIdentifier), shareID=\(shareID)")
+        // NOTE:
+        // CKShare.Metadata.rootRecordID は iOS 16 で deprecated のため参照しない。
+        // 参加結果は「受諾成功後に一覧へ新規追加されたか」と CloudKit のエラー種別で判定する。
+        let previousLedgerIDs = Set(ledgers.map(\.id))
+
         do {
             let targetContainer = CKContainer(identifier: metadata.containerIdentifier)
-            print("🔗 [SharedLedgerStore] Accepting share: container=\(metadata.containerIdentifier)")
+            print("🔗 [SharedLedgerStore] Accepting share: container=\(metadata.containerIdentifier), shareID=\(shareID)")
             try await acceptShareMetadata(metadata, container: targetContainer)
             lastFailedShareMetadata = nil
+            lastError = nil
+            clearShareAcceptanceRetryState(shareID: shareID)
             let reloadSucceeded = await reloadLedgers(logContext: "acceptShare success")
             if reloadSucceeded {
+                await refreshCachedRecords(for: ledgers)
+            }
+            let addedLedger = ledgers.first(where: { !previousLedgerIDs.contains($0.id) })
+            if let addedLedger {
+                lastAcceptedLedgerID = addedLedger.id
+                rememberLastOpened(ledger: addedLedger)
+                print("✅ [SharedLedgerStore] accepted ledger detected id=\(addedLedger.id.recordName)")
+            }
+            if reloadSucceeded, addedLedger != nil {
                 globalToast = ToastState(
                     message: "共有家計簿に参加しました。",
                     systemImage: "person.2.fill",
                     actionTitle: nil,
                     action: nil
                 )
+                return .joined
+            } else if reloadSucceeded {
+                globalToast = ToastState(
+                    message: "参加処理を受け付けました。反映に少し時間がかかる場合があります。",
+                    systemImage: "clock.badge.exclamationmark",
+                    actionTitle: "再読み込み",
+                    action: { [weak self] in
+                        Task { await self?.reloadLedgers(logContext: "acceptShare delayed reload") }
+                    }
+                )
+                return .pending
             } else {
                 globalToast = ToastState(
                     message: "参加は完了しましたが一覧の更新に失敗しました。再度お試しください。",
@@ -247,10 +338,16 @@ final class SharedLedgerStore: ObservableObject {
                         Task { await self?.reloadLedgers(logContext: "acceptShare retry reload") }
                     }
                 )
+                return .pending
             }
         } catch {
             if let ckError = error as? CKError, isAlreadyParticipantError(ckError) {
+                clearShareAcceptanceRetryState(shareID: shareID)
                 let reloadSucceeded = await reloadLedgers(logContext: "acceptShare alreadyParticipant")
+                if reloadSucceeded {
+                    await refreshCachedRecords(for: ledgers)
+                }
+                lastError = nil
                 if reloadSucceeded {
                     globalToast = ToastState(
                         message: "すでにこの共有家計簿に参加しています。",
@@ -268,24 +365,65 @@ final class SharedLedgerStore: ObservableObject {
                         }
                     )
                 }
-                return
+                return .alreadyJoined
+            }
+
+            if let ckError = error as? CKError, ckError.code == .quotaExceeded {
+                let recovered = await fallbackReloadAfterAcceptanceIssue(
+                    metadata,
+                    beforeLedgerIDs: previousLedgerIDs
+                )
+                if recovered {
+                    lastError = nil
+                    clearShareAcceptanceRetryState(shareID: shareID)
+                    globalToast = ToastState(
+                        message: "共有家計簿の同期に時間がかかっています。しばらくしてから内容が表示されます。",
+                        systemImage: "clock.badge.exclamationmark",
+                        actionTitle: nil,
+                        action: nil
+                    )
+                    return .pending
+                }
+                scheduleShareAcceptanceRetryIfNeeded(
+                    metadata: metadata,
+                    retryAfter: retryAfterSeconds(from: ckError)
+                )
+                lastError = nil
+                return .pending
             }
 
             lastFailedShareMetadata = metadata
             lastError = error
             let retryable = isRetryableShareError(error)
-            let actionTitle = retryable ? "再試行" : nil
-            let action: (() -> Void)? = retryable ? { [weak self] in
+            let friendlyMessage = shareAcceptanceErrorMessage(for: error)
+            let canRetryImmediately = canRetryImmediately(for: error)
+            let actionTitle = retryable && canRetryImmediately ? "再試行" : nil
+            let action: (() -> Void)? = retryable && canRetryImmediately ? { [weak self] in
                 guard let self else { return }
                 Task { await self.acceptShare(metadata) }
             } : nil
             globalToast = ToastState(
-                message: "共有家計簿の参加に失敗しました。",
+                message: friendlyMessage,
                 systemImage: "exclamationmark.triangle.fill",
                 actionTitle: actionTitle,
                 action: action
             )
-            print("❌ [SharedLedgerStore] acceptShare error: \(error)")
+            if let ckError = error as? CKError {
+                presentQuotaExceededToast(
+                    operation: "acceptShare",
+                    containerIdentifier: metadata.containerIdentifier,
+                    shareID: shareID,
+                    ledgerID: nil,
+                    error: ckError
+                )
+            }
+            if let ckError = error as? CKError,
+               let retryAfter = retryAfterSeconds(from: ckError) {
+                print("❌ [SharedLedgerStore] acceptShare error container=\(metadata.containerIdentifier), shareID=\(shareID), retryAfter=\(retryAfter), error=\(error)")
+            } else {
+                print("❌ [SharedLedgerStore] acceptShare error container=\(metadata.containerIdentifier), shareID=\(shareID), error=\(error)")
+            }
+            return .failed
         }
     }
 
@@ -296,26 +434,39 @@ final class SharedLedgerStore: ObservableObject {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let operation = CKAcceptSharesOperation(shareMetadatas: [metadata])
             operation.qualityOfService = .userInitiated
-            var firstError: Error?
+            var perShareErrors: [String: Error] = [:]
             operation.perShareResultBlock = { meta, result in
                 let prefix = "🔍 [SharedLedgerStore] perShareResult"
-                if case .failure(let error) = result, firstError == nil {
-                    firstError = error
+                if case .failure(let error) = result {
+                    perShareErrors[meta.share.recordID.recordName] = error
                     if let ckError = error as? CKError {
-                        print("\(prefix) failed code=\(ckError.code.rawValue), userInfo=\(ckError.userInfo)")
+                        print("\(prefix) failed container=\(meta.containerIdentifier), shareID=\(meta.share.recordID.recordName), code=\(ckError.code.rawValue), userInfo=\(ckError.userInfo)")
                     } else {
-                        print("\(prefix) failed error=\(error)")
+                        print("\(prefix) failed container=\(meta.containerIdentifier), shareID=\(meta.share.recordID.recordName), error=\(error)")
                     }
                 } else if case .success = result {
-                    print("\(prefix) succeeded")
+                    print("\(prefix) succeeded container=\(meta.containerIdentifier), shareID=\(meta.share.recordID.recordName)")
                 }
             }
             operation.acceptSharesResultBlock = { result in
                 switch result {
                 case .success:
                     print("✅ [SharedLedgerStore] acceptSharesResult succeeded")
-                    if let error = firstError {
-                        continuation.resume(throwing: error)
+                    if !perShareErrors.isEmpty {
+                        let quotaError = perShareErrors.values
+                            .compactMap { $0 as? CKError }
+                            .first(where: { $0.code == .quotaExceeded })
+                        if let quotaError {
+                            print("⚠️ [SharedLedgerStore] acceptSharesResult succeeded with perShare quotaExceeded. continue as success and reload from shared DB.")
+                            continuation.resume(throwing: quotaError)
+                        } else {
+                            print("⚠️ [SharedLedgerStore] acceptSharesResult succeeded with perShare errors. continue as success and rely on reload.")
+                            if let firstError = perShareErrors.values.first {
+                                continuation.resume(throwing: firstError)
+                            } else {
+                                continuation.resume()
+                            }
+                        }
                     } else {
                         continuation.resume()
                     }
@@ -337,6 +488,10 @@ final class SharedLedgerStore: ObservableObject {
             return true
         }
 
+        if error.code == .serverRecordChanged {
+            return true
+        }
+
         guard error.code == .partialFailure,
               let partials = error.userInfo[CKPartialErrorsByItemIDKey] as? [CKRecord.ID: Error]
         else {
@@ -349,14 +504,167 @@ final class SharedLedgerStore: ObservableObject {
         }
     }
 
+    private func fallbackReloadAfterAcceptanceIssue(
+        _ metadata: CKShare.Metadata,
+        beforeLedgerIDs: Set<CKRecord.ID>
+    ) async -> Bool {
+        let reloadSucceeded = await reloadLedgers(logContext: "acceptShare fallbackReload")
+        if reloadSucceeded {
+            await refreshCachedRecords(for: ledgers)
+        }
+
+        let acceptedShareID = metadata.share.recordID.recordName
+        if let matched = ledgers.first(where: { !beforeLedgerIDs.contains($0.id) }) {
+            lastAcceptedLedgerID = matched.id
+            rememberLastOpened(ledger: matched)
+            print("✅ [SharedLedgerStore] fallbackReload matched ledger id=\(matched.id.recordName), shareID=\(acceptedShareID)")
+            return true
+        }
+        return false
+    }
+
+    private func scheduleShareAcceptanceRetryIfNeeded(
+        metadata: CKShare.Metadata,
+        retryAfter: TimeInterval?
+    ) {
+        let shareID = metadata.share.recordID.recordName
+        let attempts = shareAcceptanceRetryCounts[shareID] ?? 0
+        guard attempts < maxShareAcceptanceRetryCount else {
+            print("⚠️ [SharedLedgerStore] skip auto-retry shareID=\(shareID) reason=maxAttempts(\(maxShareAcceptanceRetryCount))")
+            globalToast = ToastState(
+                message: "参加処理が完了できませんでした。招待した人のiCloud空き容量を確認してから、もう一度お試しください。",
+                systemImage: "externaldrive.fill.badge.exclamationmark",
+                actionTitle: nil,
+                action: nil
+            )
+            return
+        }
+
+        shareAcceptanceRetryTasks[shareID]?.cancel()
+        shareAcceptanceRetryCounts[shareID] = attempts + 1
+
+        let delay = max(30, Int((retryAfter ?? 120).rounded()))
+        print("ℹ️ [SharedLedgerStore] schedule auto-retry shareID=\(shareID), attempt=\(attempts + 1), delay=\(delay)s")
+
+        globalToast = ToastState(
+            message: "参加処理に時間がかかっています。約\(formattedRetryText(seconds: TimeInterval(delay)))後に自動で再試行します。招待した人のiCloud空き容量が不足していると完了しない場合があります。",
+            systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90",
+            actionTitle: nil,
+            action: nil
+        )
+
+        shareAcceptanceRetryTasks[shareID] = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await self?.acceptShare(metadata)
+        }
+    }
+
+    private func clearShareAcceptanceRetryState(shareID: String) {
+        shareAcceptanceRetryTasks[shareID]?.cancel()
+        shareAcceptanceRetryTasks[shareID] = nil
+        shareAcceptanceRetryCounts[shareID] = nil
+    }
+
     private func isRetryableShareError(_ error: Error) -> Bool {
         guard let ckError = error as? CKError else { return false }
         switch ckError.code {
-        case .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy, .limitExceeded, .resultsTruncated:
+        case .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy, .limitExceeded, .resultsTruncated, .quotaExceeded:
             return true
         default:
             return false
         }
+    }
+
+    private func canRetryImmediately(for error: Error) -> Bool {
+        guard let ckError = error as? CKError else { return true }
+        if ckError.code == .quotaExceeded { return false }
+        if ckError.code == .requestRateLimited,
+           retryAfterSeconds(from: ckError) != nil {
+            return false
+        }
+        return true
+    }
+
+    private func retryAfterSeconds(from ckError: CKError) -> TimeInterval? {
+        if let seconds = ckError.userInfo[CKErrorRetryAfterKey] as? TimeInterval {
+            return seconds
+        }
+        if let seconds = ckError.userInfo[CKErrorRetryAfterKey] as? NSNumber {
+            return seconds.doubleValue
+        }
+        return nil
+    }
+
+    private func formattedRetryText(seconds: TimeInterval) -> String {
+        let rounded = max(1, Int(seconds.rounded()))
+        if rounded < 60 {
+            return "\(rounded)秒"
+        }
+        let minutes = Int(ceil(Double(rounded) / 60.0))
+        return "\(minutes)分"
+    }
+
+    private func shareAcceptanceErrorMessage(for error: Error) -> String {
+        guard let ckError = error as? CKError else {
+            return "共有家計簿の参加に失敗しました。時間をおいて再度お試しください。"
+        }
+
+        switch ckError.code {
+        case .notAuthenticated:
+            return "iCloudにサインインしてから、もう一度お試しください。"
+        case .permissionFailure:
+            return "この共有家計簿に参加する権限がありません。共有リンクの再発行を依頼してください。"
+        case .unknownItem:
+            return "共有リンクの有効期限が切れているか、すでに無効になっています。新しいリンクをお試しください。"
+        case .networkUnavailable, .networkFailure, .serviceUnavailable:
+            return "通信が不安定なため参加できませんでした。接続状況を確認して再度お試しください。"
+        case .requestRateLimited:
+            if let retryAfter = retryAfterSeconds(from: ckError) {
+                return "アクセスが集中しています。約\(formattedRetryText(seconds: retryAfter))後にもう一度お試しください。"
+            }
+            return "アクセスが集中しています。しばらく待ってからもう一度お試しください。"
+        case .quotaExceeded:
+            if let retryAfter = retryAfterSeconds(from: ckError) {
+                return "現在、iCloud側の処理待ちが発生しています。約\(formattedRetryText(seconds: retryAfter))後にもう一度お試しください。招待した人のiCloud空き容量不足でも失敗することがあります。"
+            }
+            return "現在、iCloud側の処理待ちが発生しています。しばらく待ってからもう一度お試しください。招待した人のiCloud空き容量不足でも失敗することがあります。"
+        default:
+            return "共有家計簿の参加に失敗しました。LINEなどのアプリ内ブラウザで開いた場合は、Safariで開き直してお試しください。"
+        }
+    }
+
+    private func presentQuotaExceededToast(
+        operation: String,
+        containerIdentifier: String,
+        shareID: String? = nil,
+        ledgerID: CKRecord.ID? = nil,
+        error: CKError
+    ) {
+        guard error.code == .quotaExceeded else { return }
+
+        let retrySuffix: String
+        if let retryAfter = retryAfterSeconds(from: error) {
+            retrySuffix = " 約\(formattedRetryText(seconds: retryAfter))後に再試行してください。"
+        } else {
+            retrySuffix = " 少し時間を空けて再試行してください。"
+        }
+
+        let ledgerSuffix = ledgerID.map { " ledgerID=\($0.recordName)" } ?? ""
+        let shareSuffix = shareID.map { ", shareID=\($0)" } ?? ""
+
+        globalToast = ToastState(
+            message: "iCloudの容量上限により処理できませんでした。" + retrySuffix,
+            systemImage: "externaldrive.fill.badge.exclamationmark",
+            actionTitle: nil,
+            action: nil
+        )
+
+        print("❌ [SharedLedgerStore] quotaExceeded operation=\(operation), container=\(containerIdentifier)\(shareSuffix)\(ledgerSuffix), retryAfter=\(retryAfterSeconds(from: error)?.description ?? "n/a"), userInfo=\(error.userInfo)")
     }
 
     @discardableResult
@@ -368,6 +676,8 @@ final class SharedLedgerStore: ObservableObject {
         print("ℹ️ \(contextPrefix) start")
 
         do {
+            ledgerSourceMap.removeAll()
+            let previousIDs = Set(ledgers.map(\.id))
             let userId = try await currentUserId()
             
             // ① 自分が owner の Ledger（privateDB）
@@ -394,6 +704,13 @@ final class SharedLedgerStore: ObservableObject {
             // ③ マージして createdAt でソート
             let all = (owned + shared).sorted(by: { $0.createdAt < $1.createdAt })
             self.ledgers = all
+            let currentIDs = Set(all.map(\.id))
+            let removed = previousIDs.subtracting(currentIDs)
+            for removedID in removed {
+                transactionsByLedger[removedID] = nil
+                categoriesByLedger[removedID] = nil
+                frequentTemplatesByLedger[removedID] = nil
+            }
             print("ℹ️ \(contextPrefix) merged total=\(all.count)")
             if shared.isEmpty {
                 print("⚠️ \(contextPrefix) shared list is empty")
@@ -543,22 +860,26 @@ final class SharedLedgerStore: ObservableObject {
             return final
         } catch {
             self.lastError = error
+            if let ckError = error as? CKError {
+                presentQuotaExceededToast(
+                    operation: "createLedger",
+                    containerIdentifier: container.containerIdentifier ?? "default",
+                    ledgerID: nil,
+                    error: ckError
+                )
+            }
             return nil
         }
     }
     
     func updateLedger(_ ledger: SharedLedger, name: String, icon: String, colorHex: String) async {
-        guard isOwned(ledger) else {
-            // 招待された側は編集不可にするならこう
-            print("updateLedger: non-owned ledger, skip")
-            return
-        }
         do {
-            let record = try await db.record(for: ledger.id)
+            let targetDB = database(for: ledger)
+            let record = try await targetDB.record(for: ledger.id)
             record["name"] = name as CKRecordValue
             record["icon"] = icon as CKRecordValue
             record["colorHex"] = colorHex as CKRecordValue
-            let saved = try await db.save(record)
+            let saved = try await targetDB.save(record)
             if let updated = SharedLedger(record: saved) {
                 if let idx = ledgers.firstIndex(where: { $0.id == ledger.id }) {
                     ledgers[idx] = updated
@@ -599,6 +920,58 @@ final class SharedLedgerStore: ObservableObject {
             showToast(message: "「\(ledger.name)」の削除が完了しました")
             return true
         } catch {
+            lastError = error
+            if let ledger = removedLedger, let idx = removedIndex {
+                ledgers.insert(ledger, at: idx)
+            }
+            deletingLedgerIDs.remove(ledger.id)
+            return false
+        }
+    }
+
+    @discardableResult
+    func leaveLedger(_ ledger: SharedLedger) async -> Bool {
+        guard !isOwned(ledger) else {
+            print("leaveLedger: owned ledger, skip")
+            return false
+        }
+
+        deletingLedgerIDs.insert(ledger.id)
+
+        var removedLedger: SharedLedger?
+        var removedIndex: Int?
+
+        if let idx = ledgers.firstIndex(where: { $0.id == ledger.id }) {
+            removedLedger = ledgers[idx]
+            removedIndex = idx
+            _ = withAnimation {
+                ledgers.remove(at: idx)
+            }
+        }
+
+        do {
+            let rootRecord = try await sharedDB.record(for: ledger.id)
+            if let shareRef = rootRecord.share {
+                try await sharedDB.deleteRecord(withID: shareRef.recordID)
+            } else {
+                try await sharedDB.deleteRecord(withID: ledger.id)
+            }
+            ledgerSourceMap[ledger.id] = nil
+            transactionsByLedger[ledger.id] = nil
+            categoriesByLedger[ledger.id] = nil
+            deletingLedgerIDs.remove(ledger.id)
+            showToast(message: "「\(ledger.name)」から脱退しました")
+            return true
+        } catch {
+            if let ckError = error as? CKError, ckError.code == .unknownItem {
+                ledgerSourceMap[ledger.id] = nil
+                transactionsByLedger[ledger.id] = nil
+                categoriesByLedger[ledger.id] = nil
+                deletingLedgerIDs.remove(ledger.id)
+                showToast(message: "「\(ledger.name)」から脱退しました")
+                return true
+            }
+
             lastError = error
             if let ledger = removedLedger, let idx = removedIndex {
                 ledgers.insert(ledger, at: idx)
@@ -663,8 +1036,17 @@ final class SharedLedgerStore: ObservableObject {
             list.append(final)
             list.sort(by: { $0.date < $1.date })
             transactionsByLedger[ledger.id] = list
+            ReviewRequestManager.shared.recordSuccessfulSave()
         } catch {
             self.lastError = error
+            if let ckError = error as? CKError {
+                presentQuotaExceededToast(
+                    operation: "addTransaction",
+                    containerIdentifier: container.containerIdentifier ?? "default",
+                    ledgerID: ledger.id,
+                    error: ckError
+                )
+            }
         }
     }
 
@@ -722,6 +1104,7 @@ final class SharedLedgerStore: ObservableObject {
     }
     
     // MARK: - カテゴリー
+    @MainActor
     func reloadCategories(for ledger: SharedLedger) async {
         do {
             let ref = CKRecord.Reference(recordID: ledger.id, action: .none)
@@ -812,9 +1195,9 @@ final class SharedLedgerStore: ObservableObject {
     }
 
     private func database(for ledger: SharedLedger) -> CKDatabase {
-        switch ledgerSourceMap[ledger.id] {
+        switch source(for: ledger) {
         case .shared: return sharedDB
-        default:      return db
+        case .private: return db
         }
     }
     
@@ -1025,8 +1408,10 @@ extension SharedLedgerStore {
     /// 既に share がある場合はそれを再利用、無ければ新規作成する
     func prepareShare(for ledger: SharedLedger) async throws -> SharePayload {
         try await ensureSharedZone()
+        print("ℹ️ [SharedLedgerStore] prepareShare strategy=recordHierarchySharing rootRecord=\(ledger.id.recordName) zone=\(ledger.id.zoneID.zoneName) database=privateCloudDatabase")
         // ① 常にサーバー側の最新 rootRecord を取得
         let rootRecord = try await db.record(for: ledger.id)
+        try await backfillRecordHierarchyIfNeeded(for: ledger)
         
         // ② すでに共有設定済みなら share を再利用
         if let shareRef = rootRecord.share {
@@ -1077,9 +1462,27 @@ extension SharedLedgerStore {
                         atomically: false
                     )
                 } catch {
+                    if let ckError = error as? CKError {
+                        presentQuotaExceededToast(
+                            operation: "prepareShare.modifyRecords.retry",
+                            containerIdentifier: container.containerIdentifier ?? "default",
+                            shareID: share.recordID.recordName,
+                            ledgerID: ledger.id,
+                            error: ckError
+                        )
+                    }
                     throw error
                 }
             } else {
+                if let ckError = error as? CKError {
+                    presentQuotaExceededToast(
+                        operation: "prepareShare.modifyRecords",
+                        containerIdentifier: container.containerIdentifier ?? "default",
+                        shareID: share.recordID.recordName,
+                        ledgerID: ledger.id,
+                        error: ckError
+                    )
+                }
                 throw error
             }
         }
@@ -1185,6 +1588,46 @@ extension SharedLedgerStore {
             throw error
         }
     }
+
+    /// 旧バージョンで作成されたレコードのうち parent が未設定のものを補正する
+    /// - Note: record hierarchy sharing で共有対象になるよう、SharedCategory / SharedTransaction の parent を root ledger に揃える
+    private func backfillRecordHierarchyIfNeeded(for ledger: SharedLedger) async throws {
+        let ledgerReference = CKRecord.Reference(recordID: ledger.id, action: .none)
+        let categoryPredicate = NSPredicate(format: "%K == %@", SharedCategory.FieldKey.ledgerRef, ledgerReference)
+        let transactionPredicate = NSPredicate(format: "%K == %@", SharedTransaction.FieldKey.ledgerRef, ledgerReference)
+
+        let categoryQuery = CKQuery(recordType: SharedCategory.recordType, predicate: categoryPredicate)
+        let transactionQuery = CKQuery(recordType: SharedTransaction.recordType, predicate: transactionPredicate)
+
+        let categoryRecords = try await queryRecords(categoryQuery, in: db, zoneID: ledger.id.zoneID)
+        let transactionRecords = try await queryRecords(transactionQuery, in: db, zoneID: ledger.id.zoneID)
+
+        let parentRef = CKRecord.Reference(recordID: ledger.id, action: .none)
+        var recordsToFix: [CKRecord] = []
+
+        for record in categoryRecords where record.parent?.recordID != ledger.id {
+            record.parent = parentRef
+            recordsToFix.append(record)
+        }
+
+        for record in transactionRecords where record.parent?.recordID != ledger.id {
+            record.parent = parentRef
+            recordsToFix.append(record)
+        }
+
+        guard recordsToFix.isEmpty == false else { return }
+
+        for chunk in recordsToFix.chunked(into: 200) {
+            _ = try await db.modifyRecords(
+                saving: chunk,
+                deleting: [],
+                savePolicy: .changedKeys,
+                atomically: false
+            )
+        }
+
+        print("ℹ️ [SharedLedgerStore] backfillRecordHierarchyIfNeeded fixed=\(recordsToFix.count) ledger=\(ledger.id.recordName)")
+    }
         
     /// 個人用家計簿の全カテゴリを共有家計簿にコピー
     func copyAllCategories(from dataStore: DataStore, to ledger: SharedLedger) async {
@@ -1250,6 +1693,23 @@ extension SharedLedgerStore {
                 category: sharedCategory
             )
         }
+    }
+}
+
+private extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0, isEmpty == false else { return isEmpty ? [] : [self] }
+
+        var chunks: [[Element]] = []
+        chunks.reserveCapacity((count + size - 1) / size)
+
+        var start = startIndex
+        while start < endIndex {
+            let end = index(start, offsetBy: size, limitedBy: endIndex) ?? endIndex
+            chunks.append(Array(self[start..<end]))
+            start = end
+        }
+        return chunks
     }
 }
 

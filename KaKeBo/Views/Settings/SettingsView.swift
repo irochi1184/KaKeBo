@@ -561,7 +561,6 @@ struct SettingsView: View {
             Text("各種設定")
         }
         .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
-
     }
     
     @ViewBuilder
@@ -582,7 +581,7 @@ struct SettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
-        .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
+        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
     }
     
     @ViewBuilder
@@ -631,7 +630,7 @@ struct SettingsView: View {
         } header: {
             Text("サポート")
         }
-        .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .white)
+//        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
     }
     
     private func defaultFeedbackBody() -> String {
@@ -719,7 +718,7 @@ struct SettingsView: View {
     private var appVersionLabel: String {
         let version = AppVersion.current
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
-        return build.isEmpty ? "バージョン \(version)" : "バージョン \(version) (\(build))"
+        return build.isEmpty ? "バージョン \(version)" : "バージョン \(version)"
     }
 
     private var versionFooter: some View {
@@ -782,7 +781,8 @@ private struct CalendarBottomDisplaySettingsView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+         .listStyle(.insetGrouped)
+        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("閉じる") { dismiss() }

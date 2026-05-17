@@ -49,9 +49,11 @@ private struct TutorialOverlay: View {
     @State private var showCategoryManager = false
     @State private var sharedName: String = "みんなの家計簿"
     @State private var sharedIcon: String = "person.2.fill"
+    @State private var sharedIconCategory: SharedLedgerIconCategory = .shared
     @State private var sharedColor: Color = Color.accentColor
     @State private var isCreatingSharedLedger = false
     @State private var creationError: String?
+    @State private var showDesignSelectionSheet = false
 
     private var accent: Color { themeStore.theme.accentColor(for: scheme) }
     private var background: Color { themeStore.theme.backgroundColor(for: scheme) }
@@ -101,6 +103,15 @@ private struct TutorialOverlay: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: isPresented)
+        .sheet(isPresented: $showDesignSelectionSheet) {
+            DesignStyleSelectionSheet(
+                isPresented: $showDesignSelectionSheet,
+                title: "見た目を選びましょう",
+                message: "「標準」と「フラット」を見比べて、好きな表示を選べます。",
+                primaryButtonTitle: "このデザインにする"
+            )
+            .environmentObject(themeStore)
+        }
     }
 
     // MARK: - UI Building Blocks
@@ -151,6 +162,8 @@ private struct TutorialOverlay: View {
             sharedLedgerStep
         case .categorySetup:
             categoryStep
+        case .designChoice:
+            designChoiceStep
         case .summary:
             summaryStep
         }
@@ -311,9 +324,16 @@ private struct TutorialOverlay: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("アイコン")
                 .font(.subheadline.weight(.semibold))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(TutorialUsage.symbolCandidates, id: \.self) { symbol in
+            Picker("アイコンカテゴリ", selection: $sharedIconCategory) {
+                ForEach(SharedLedgerIconCategory.allCases) { category in
+                    Text(category.rawValue).tag(category)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 6), spacing: 10) {
+                    ForEach(SharedLedgerIconCategory.symbolsByCategory[sharedIconCategory] ?? [], id: \.self) { symbol in
                         Button {
                             sharedIcon = symbol
                         } label: {
@@ -331,8 +351,24 @@ private struct TutorialOverlay: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, 6)
             }
+            .frame(height: 180)
+
+            HStack(spacing: 8) {
+                Text("選択中:")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Image(systemName: sharedIcon)
+                    .font(.title3)
+                    .foregroundStyle(accent)
+            }
+        }
+        .onAppear {
+            sharedIconCategory = SharedLedgerIconCategory.category(for: sharedIcon)
+        }
+        .onChange(of: sharedIcon) { _, newValue in
+            sharedIconCategory = SharedLedgerIconCategory.category(for: newValue)
         }
     }
 
@@ -391,6 +427,49 @@ private struct TutorialOverlay: View {
         }
     }
 
+    private var designChoiceStep: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("画面デザインを選ぶ")
+                .font(.title3.weight(.bold))
+            Text("「標準」と「フラット」を比較して、好みの見た目を選択できます。後から設定画面でも変更できます。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Image(systemName: "paintpalette.fill")
+                    .foregroundStyle(accent)
+                Text("現在の選択: \(themeStore.theme.visualStyle.title)")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(accent.opacity(0.12))
+            )
+
+            Button {
+                showDesignSelectionSheet = true
+            } label: {
+                HStack {
+                    Image(systemName: "rectangle.grid.2x2")
+                    Text("デザイン比較シートを開く")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.bold))
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.secondary.opacity(0.08))
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     // MARK: - Actions
 
     private func goNext() {
@@ -412,6 +491,8 @@ private struct TutorialOverlay: View {
         case .sharedSetup:
             createSharedLedger()
         case .categorySetup:
+            step = .designChoice
+        case .designChoice:
             step = .summary
         case .summary:
             finish()
@@ -428,8 +509,10 @@ private struct TutorialOverlay: View {
             step = .usageChoice
         case .categorySetup:
             step = usage == .personal ? .usageChoice : .sharedSetup
-        case .summary:
+        case .designChoice:
             step = .categorySetup
+        case .summary:
+            step = .designChoice
         case .welcome:
             break
         }
@@ -476,6 +559,7 @@ private enum TutorialStep: Int, CaseIterable {
     case usageChoice
     case sharedSetup
     case categorySetup
+    case designChoice
     case summary
 
     var progress: Double {
@@ -495,6 +579,8 @@ private enum TutorialStep: Int, CaseIterable {
         case .sharedSetup:
             return "作成して進む"
         case .categorySetup:
+            return "デザイン選択へ"
+        case .designChoice:
             return "完了へ"
         case .summary:
             return "閉じる"
@@ -506,20 +592,6 @@ private enum TutorialUsage: String {
     case personal
     case shared
 
-    static let symbolCandidates: [String] = [
-        "wallet.pass", "yensign.circle", "yensign.circle.fill",
-        "creditcard", "creditcard.fill",
-        "cart", "cart.fill",
-        "bag", "bag.fill",
-        "house", "house.fill",
-        "building.2", "building.2.fill",
-        "tram.fill", "airplane",
-        "heart.fill", "heart.circle.fill",
-        "person.2", "person.2.fill",
-        "gift.fill", "fork.knife",
-        "fuelpump.fill"
-    ]
-
     static func hex(from color: Color) -> String {
         let uiColor = UIColor(color)
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
@@ -529,6 +601,70 @@ private enum TutorialUsage: String {
         let intG = Int(g * 255)
         let intB = Int(b * 255)
         return String(format: "#%02X%02X%02X", intR, intG, intB)
+    }
+}
+
+private enum SharedLedgerIconCategory: String, CaseIterable, Identifiable {
+    case shared = "共有"
+    case living = "暮らし"
+    case shopping = "買い物"
+    case moveAndTrip = "旅行"
+    case hobby = "趣味"
+    case health = "健康"
+    case income = "収入"
+
+    var id: String { rawValue }
+
+    static let symbolsByCategory: [SharedLedgerIconCategory: [String]] = [
+        .shared: [
+            "person.2.fill", "person.2", "person.3.fill", "person.3",
+            "house.fill", "house", "building.2.fill", "building.2",
+            "heart.fill", "heart.circle.fill", "calendar", "wallet.pass.fill",
+            "wallet.pass", "creditcard.fill", "tray.full.fill", "list.bullet.clipboard.fill"
+        ],
+        .living: [
+            "fork.knife", "cup.and.saucer.fill", "takeoutbag.and.cup.and.straw.fill",
+            "lightbulb.fill", "drop.fill", "wifi", "house.fill", "sofa.fill",
+            "washer.fill", "lamp.table.fill", "refrigerator.fill", "bed.double.fill",
+            "pawprint.fill", "leaf.fill", "gift.fill", "sparkles"
+        ],
+        .shopping: [
+            "cart.fill", "cart", "basket.fill", "bag.fill",
+            "tag.fill", "creditcard.fill", "shippingbox.fill", "takeoutbag.and.cup.and.straw",
+            "gift.fill", "ticket.fill", "storefront.fill", "barcode.viewfinder",
+            "qrcode.viewfinder", "scissors", "tshirt.fill", "bag.badge.plus"
+        ],
+        .moveAndTrip: [
+            "tram.fill", "car.fill", "bus.fill", "bicycle", "airplane",
+            "ferry.fill", "fuelpump.fill", "suitcase.fill", "bed.double.fill", "map.fill",
+            "mappin.circle.fill", "camera.fill", "building.columns.fill", "house.lodge.fill",
+            "figure.walk", "figure.run"
+        ],
+        .hobby: [
+            "gamecontroller.fill", "music.note.list", "tv.fill", "book.fill", "graduationcap.fill",
+            "pencil.and.scribble", "paintbrush.pointed.fill", "camera.macro", "theatermasks.fill",
+            "sportscourt.fill", "figure.badminton", "dumbbell.fill", "party.popper.fill",
+            "birthday.cake.fill", "baseball.fill", "basketball.fill"
+        ],
+        .health: [
+            "cross.case.fill", "stethoscope", "pills.fill", "bandage.fill", "heart.text.square.fill",
+            "figure.walk.motion", "figure.cooldown", "figure.mind.and.body", "figure.strengthtraining.traditional",
+            "face.smiling.fill", "sun.max.fill", "moon.stars.fill", "lungs.fill", "allergens.fill",
+            "cross.fill", "bolt.heart.fill"
+        ],
+        .income: [
+            "yensign.circle.fill", "yensign.circle", "banknote.fill", "wallet.pass.fill",
+            "building.columns.fill", "creditcard.fill", "chart.line.uptrend.xyaxis", "briefcase.fill",
+            "doc.text.fill", "calendar.badge.clock", "giftcard.fill", "sparkles.tv.fill",
+            "dollarsign.circle.fill", "eurosign.circle.fill", "sterlingsign.circle.fill", "percent"
+        ]
+    ]
+
+    static func category(for icon: String) -> SharedLedgerIconCategory {
+        if let match = symbolsByCategory.first(where: { $0.value.contains(icon) })?.key {
+            return match
+        }
+        return .shared
     }
 }
 

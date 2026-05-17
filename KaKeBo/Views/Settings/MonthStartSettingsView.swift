@@ -107,6 +107,7 @@ struct MonthStartSettingsView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
         .background(themeColor)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -12,6 +12,11 @@ struct SharedLedgerNotificationOverlay: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            if store.isAcceptingShare {
+                shareAcceptanceProgressView
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
             if let copy = store.activeCopy {
                 copyProgressView(copy: copy)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -25,8 +30,26 @@ struct SharedLedgerNotificationOverlay: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity, alignment: .center)
+        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: store.isAcceptingShare)
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: store.activeCopy != nil)
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: store.globalToast)
+    }
+
+
+    private var shareAcceptanceProgressView: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            Text("共有家計簿へ参加中…")
+                .font(.caption.weight(.semibold))
+            Spacer()
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.systemBackground).opacity(0.95))
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
     }
 
     @ViewBuilder
@@ -61,7 +84,7 @@ struct SharedLedgerNotificationOverlay: View {
     private func toastView(_ toast: SharedLedgerStore.ToastState) -> some View {
         HStack(spacing: 12) {
             Image(systemName: toast.systemImage)
-                .foregroundStyle(.green)
+                .foregroundStyle(toast.systemImage.contains("triangle") ? .orange : .green)
             VStack(alignment: .leading, spacing: 6) {
                 Text(toast.message)
                     .font(.subheadline.weight(.semibold))
@@ -76,6 +99,16 @@ struct SharedLedgerNotificationOverlay: View {
                 }
             }
             Spacer()
+            Button {
+                withAnimation {
+                    store.globalToast = nil
+                }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
         }
         .padding(14)
         .background(

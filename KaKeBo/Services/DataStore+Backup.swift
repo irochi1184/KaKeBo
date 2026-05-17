@@ -48,6 +48,20 @@ extension DataStore {
                       memo: $0.memo ?? "", isActive: $0.isActive)
             }
         }()
+        let frequent: [BackupFrequentTransaction]? = {
+            guard !frequentTemplates.isEmpty else { return nil }
+            return frequentTemplates.map {
+                .init(
+                    id: $0.id,
+                    title: $0.title,
+                    amount: $0.amount,
+                    typeRaw: $0.type == .income ? "income" : "expense",
+                    memo: $0.memo,
+                    categoryId: $0.categoryId,
+                    tags: $0.tags
+                )
+            }
+        }()
 //        // リマインダールール
 //        let reminders: [BackupReminderRule]? = {
 //            let data = UserDefaults.standard.data(forKey: ReminderStore.storageKey) ?? Data()
@@ -93,6 +107,7 @@ extension DataStore {
             transactions: txs,
             recurringTodos: recTodos,
             fixedExpenses: fixed,
+            frequentTransactions: frequent,
             //            reminders: reminders,
             dayNotes: dayNotes,
             monthStartSettings: monthStart,
@@ -178,6 +193,22 @@ extension DataStore {
             defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
             defaults.set(data, forKey: DataStore.fixedTemplatesKey)
         }
+        if let arr = backup.frequentTransactions {
+            let templates: [FrequentTransactionTemplate] = arr.compactMap { tpl in
+                guard let mappedCategory = idMap[tpl.categoryId] else { return nil }
+                let type: TransactionType = (tpl.typeRaw == "income") ? .income : .expense
+                return FrequentTransactionTemplate(
+                    id: tpl.id,
+                    title: tpl.title,
+                    amount: tpl.amount,
+                    type: type,
+                    memo: tpl.memo,
+                    categoryId: mappedCategory,
+                    tags: tpl.tags
+                )
+            }
+            replaceFrequentTemplatesForBackupImport(templates)
+        }
 //        if let arr = backup.reminders {
 //            let data = try JSONEncoder().encode(arr)
 //            UserDefaults.standard.set(data, forKey: ReminderStore.storageKey)
@@ -188,6 +219,7 @@ extension DataStore {
             let defaults = UserDefaults.appGroup
             defaults.migrateIfNeeded(keys: ["kakebo.daynotes.v1"])
             defaults.set(data, forKey: "kakebo.daynotes.v1")
+            NotificationCenter.default.post(name: .dayNotesDidRestoreFromBackup, object: nil)
         }
         if let ms = backup.monthStartSettings {
             let settings = MonthStartSettings(

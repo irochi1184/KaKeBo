@@ -199,6 +199,8 @@ private struct DayCell: View {
 // 数値だけを右揃えで出すラベル
 private struct AmountLabel: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     let text: String          // 例: "¥12,345"
     let isIncome: Bool        // true=緑, false=赤
     let strength: Double      // 0...1 : 大きいほど濃い
@@ -216,7 +218,7 @@ private struct AmountLabel: View {
     }
     
     private var dynamicColor: Color {
-        let base = isIncome ? Color.green : Color.red
+        let base = isIncome ? incomeColor : expenseColor
         // ダークモードではやや淡く、かつ強さで少し濃淡をつける
         let darkFactor = (scheme == .dark) ? 0.85 : 1.0
         let strengthFactor = 0.6 + 0.4 * max(0.0, min(1.0, strength))  // 0.6〜1.0

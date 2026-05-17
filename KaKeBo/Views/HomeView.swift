@@ -36,9 +36,10 @@ struct HomeView: View {
 
     @State private var showMonthStartIntro = false
     @State private var breakdownSheet: CategoryBreakdownSheetData?
+    @State private var dailyDetailSheet: DailyTrendDetailContext?
 
     // ▼ 追加：カード順序の状態とドラッグ中のカード
-    @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .donut, .daily, .transactions])
+    @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .forecast, .donut, .daily, .transactions])
     @State private var dragging: DashboardCard?
 
     private let dropUTIs: [UTType] = [.plainText] // onDrag のペイロード種別
@@ -123,6 +124,10 @@ struct HomeView: View {
                 )
                 .presentationDetents([.large])
             }
+            .sheet(item: $dailyDetailSheet) { detail in
+                DailyTrendDetailView(context: detail)
+                    .presentationDetents([.large])
+            }
         }
         .onAppear {
             store.applyFixedExpensesForCurrentMonth()
@@ -133,6 +138,15 @@ struct HomeView: View {
                 selectedMonth = monthResolver.anchorMonth(containing: Date())
                 didSetInitialMonth = true
             }
+            // 予算超過チェック通知
+            let forecast = BudgetForecastService.calculate(
+                transactions: store.transactions,
+                budgets: store.budgets,
+                categories: store.categories,
+                currentMonth: monthResolver.anchorMonth(containing: Date()),
+                resolver: monthResolver
+            )
+            BudgetAlertNotifier.checkAndNotify(forecast: forecast)
         }
     }
     
@@ -208,6 +222,13 @@ struct HomeView: View {
                         DailyBarChart(series: dailyPoints)
                             .homeCard()
                             .padding(.horizontal)
+                            .onTapGesture {
+                                dailyDetailSheet = makeSharedDailyDetailContext(
+                                    allTxs: allTxs,
+                                    categories: cats,
+                                    points: dailyPoints
+                                )
+                            }
                     }
                     
                     // ④ 当月の履歴リスト
@@ -269,7 +290,11 @@ struct HomeView: View {
                 balance: monthBalance
             )
             .homeCard()
-            
+
+        case .forecast:
+            BudgetForecastCard(forecast: budgetForecast)
+                .homeCard()
+
         case .donut:
             CategoryDonutPager(
                 expense: expenseBreakdown,
@@ -292,6 +317,9 @@ struct HomeView: View {
         case .daily:
             DailyBarChart(series: dailySeries)
                 .homeCard()
+                .onTapGesture {
+                    dailyDetailSheet = makePersonalDailyDetailContext(points: dailySeries)
+                }
             
         case .transactions:
             TransactionListCard(
@@ -346,6 +374,16 @@ extension HomeView {
         store.transactions.filter { isInCurrentMonth($0.date) }
     }
     
+    private var budgetForecast: BudgetForecastService.Forecast {
+        BudgetForecastService.calculate(
+            transactions: store.transactions,
+            budgets: store.budgets,
+            categories: store.categories,
+            currentMonth: selectedMonth,
+            resolver: monthResolver
+        )
+    }
+
     private var monthIncome: Int {
         thisMonthTx.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
     }
@@ -572,6 +610,55 @@ extension HomeView {
         }
     }
     
+    private func makePersonalDailyDetailContext(points: [DailyCategoryPoint]) -> DailyTrendDetailContext {
+        let txs = store.transactions
+            .filter { $0.type == .expense && isInCurrentMonth($0.date) }
+            .map { tx in
+                let categoryName = store.categories.first(where: { $0.id == tx.categoryId })?.name ?? "未分類"
+                return DailyTrendTransaction(
+                    id: tx.id.uuidString,
+                    date: tx.date,
+                    categoryName: categoryName,
+                    amount: tx.amount,
+                    memo: tx.memo
+                )
+            }
+
+        return DailyTrendDetailContext(
+            title: "\(monthTitle(selectedMonth)) 日別推移",
+            series: points,
+            transactions: txs
+        )
+    }
+
+    private func makeSharedDailyDetailContext(
+        allTxs: [SharedTransaction],
+        categories: [SharedCategory],
+        points: [DailyCategoryPoint]
+    ) -> DailyTrendDetailContext {
+        let txs = allTxs
+            .filter { $0.type == .expense && isInCurrentMonth($0.date) }
+            .map { tx in
+                let fallbackKey = tx.categoryId?.recordName ?? tx.categoryName
+                let categoryName = categories.first(where: { $0.id == tx.categoryId })?.name
+                    ?? categories.first(where: { $0.id.recordName == fallbackKey })?.name
+                    ?? tx.categoryName
+                return DailyTrendTransaction(
+                    id: tx.id.recordName,
+                    date: tx.date,
+                    categoryName: categoryName,
+                    amount: tx.amount,
+                    memo: tx.memo ?? ""
+                )
+            }
+
+        return DailyTrendDetailContext(
+            title: "\(monthTitle(selectedMonth)) 日別推移",
+            series: points,
+            transactions: txs
+        )
+    }
+
     private func sharedThisMonthTx(allTxs: [SharedTransaction]) -> [SharedTransaction] {
         return allTxs.filter {
             isInCurrentMonth($0.date)
@@ -627,6 +714,8 @@ private struct TransactionRowContent {
 
 private struct TransactionRow: View {
     let row: TransactionRowContent
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     
     private var displayTags: [String] {
         row.tags.map { String($0.prefix(8)) }
@@ -678,7 +767,7 @@ private struct TransactionRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(currency(row.amount))
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(row.isIncome ? .green : .primary)
+                    .foregroundStyle(row.isIncome ? incomeColor : expenseColor)
                 Text(dateStr(row.date))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -716,7 +805,7 @@ private struct TransactionListCard<RowID: Hashable>: View {
     }
     
     var body: some View {
-        let isFlat = themeStore.theme.homeCardStyle == .flat
+        let isFlat = themeStore.theme.visualStyle == .business
         let emptyView: AnyView = {
             if isFlat {
                 return AnyView(
@@ -902,6 +991,7 @@ extension TransactionListCard where RowID == CKRecord.ID {
 // 並び替え対象のカード
 private enum DashboardCard: String, CaseIterable, Identifiable {
     case header        // 月次ヘッダー（収支・支出・収入）
+    case forecast      // 支出予測・予算カード
     case donut         // 円グラフ（支出/収入ブレイクダウン）
     case daily         // 日別推移（棒グラフ）
     case transactions  // 最近の取引リスト

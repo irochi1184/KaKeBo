@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CloudKit
+import UIKit
 
 struct SharedLedgerListScreen: View {
     @EnvironmentObject var store: SharedLedgerStore
@@ -22,6 +23,8 @@ struct SharedLedgerListScreen: View {
     @State private var showShareError = false
     @State private var deleteErrorMessage: String? = nil
     @State private var showDeleteError = false
+    @State private var showJoinByLinkSheet = false
+    @State private var ledgerActionLabel = "削除"
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -33,6 +36,13 @@ struct SharedLedgerListScreen: View {
             if shareLoading {
                 sharingLoadingView
                     .padding(.horizontal, 20)
+            }
+
+            if store.isLoading && !store.ledgers.isEmpty {
+                LoadingOverlayView(
+                    title: "読み込み中",
+                    message: "共有家計簿の最新情報を更新しています…"
+                )
             }
         }
         .task {
@@ -54,27 +64,36 @@ struct SharedLedgerListScreen: View {
                 payload: payload,
                 ledger: shareTargetLedger
             )
+            .environmentObject(store)
+        }
+        .sheet(isPresented: $showJoinByLinkSheet) {
+            JoinSharedLedgerByLinkSheet()
+                .environmentObject(store)
         }
         .confirmationDialog(
-            "この共有家計簿を削除しますか？",
+            "この共有家計簿を\(ledgerActionLabel)しますか？",
             isPresented: $showDeleteConfirm,
             presenting: ledgerToDelete
         ) { ledger in
-            Button("削除", role: .destructive) {
+            Button(ledgerActionLabel, role: .destructive) {
                 Task {
-                    await handleDelete(ledger)
+                    await handleLedgerAction(ledger)
                 }
             }
             Button("キャンセル", role: .cancel) { }
         } message: { ledger in
-            Text("「\(ledger.name)」を削除すると、共有家計簿に登録された取引も見えなくなります。")
+            if store.isOwned(ledger) {
+                Text("「\(ledger.name)」を削除すると、共有家計簿に登録された取引も見えなくなります。")
+            } else {
+                Text("「\(ledger.name)」から脱退します。あとから再参加する場合は、もう一度招待リンクが必要です。")
+            }
         }
         .alert("共有の準備に失敗しました", isPresented: $showShareError) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(shareErrorMessage ?? "不明なエラーが発生しました。時間をおいて再度お試しください。")
         }
-        .alert("削除に失敗しました", isPresented: $showDeleteError) {
+        .alert("操作に失敗しました", isPresented: $showDeleteError) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(deleteErrorMessage ?? "通信環境をご確認のうえ、時間をおいて再度お試しください。")
@@ -92,9 +111,21 @@ struct SharedLedgerListScreen: View {
             ScrollView {
                 VStack(spacing: 18) {
                     headerCard
-                    
-                    ForEach(store.ledgers) { ledger in
-                        ledgerCard(for: ledger)
+
+                    if !store.ownedLedgers.isEmpty {
+                        ledgerSection(
+                            title: "自分が管理する共有家計簿",
+                            description: "あなたが作成し、招待リンクを発行できる家計簿です。",
+                            ledgers: store.ownedLedgers
+                        )
+                    }
+
+                    if !store.participatingLedgers.isEmpty {
+                        ledgerSection(
+                            title: "参加中の共有家計簿",
+                            description: "招待リンクから参加した家計簿です。",
+                            ledgers: store.participatingLedgers
+                        )
                     }
                     
                     addLedgerButton
@@ -144,6 +175,23 @@ struct SharedLedgerListScreen: View {
             Text("複数人で一緒に使う家計簿をまとめて管理できます。カップル用、家族用、旅行用など、目的ごとに分けておくと便利です。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "icloud")
+                    .font(.footnote)
+                    .foregroundStyle(.blue)
+                Text("共有家計簿の作成や招待リンクの発行には、iCloudの空き容量が必要です。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button {
+                showJoinByLinkSheet = true
+            } label: {
+                Label("招待リンクで参加", systemImage: "link.badge.plus")
+                    .font(.footnote.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
         }
         .padding(16)
         .background(
@@ -157,6 +205,22 @@ struct SharedLedgerListScreen: View {
     }
     
     // MARK: - カード
+
+    private func ledgerSection(title: String, description: String, ledgers: [SharedLedger]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(ledgers) { ledger in
+                ledgerCard(for: ledger)
+            }
+        }
+    }
     
     private func ledgerCard(for ledger: SharedLedger) -> some View {
         Button {
@@ -180,6 +244,17 @@ struct SharedLedgerListScreen: View {
                         .font(.headline)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        Text(store.source(for: ledger) == .shared ? "参加中" : "管理中")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.vertical, 2)
+                            .padding(.horizontal, 8)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(store.source(for: ledger) == .shared ? Color.green.opacity(0.18) : Color.blue.opacity(0.16))
+                            )
+                    }
                     
                     HStack(spacing: 6) {
                         Image(systemName: "calendar.badge.plus")
@@ -241,18 +316,20 @@ struct SharedLedgerListScreen: View {
             }
             
             Button(role: .destructive) {
+                ledgerActionLabel = store.isOwned(ledger) ? "削除" : "脱退"
                 ledgerToDelete = ledger
                 showDeleteConfirm = true
             } label: {
-                Label("削除", systemImage: "trash")
+                Label(store.isOwned(ledger) ? "削除" : "脱退", systemImage: store.isOwned(ledger) ? "trash" : "rectangle.portrait.and.arrow.right")
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
+                ledgerActionLabel = store.isOwned(ledger) ? "削除" : "脱退"
                 ledgerToDelete = ledger
                 showDeleteConfirm = true
             } label: {
-                Label("削除", systemImage: "trash")
+                Label(store.isOwned(ledger) ? "削除" : "脱退", systemImage: store.isOwned(ledger) ? "trash" : "rectangle.portrait.and.arrow.right")
             }
         }
     }
@@ -323,8 +400,13 @@ struct SharedLedgerListScreen: View {
         }
     }
 
-    private func handleDelete(_ ledger: SharedLedger) async {
-        let success = await store.deleteLedger(ledger)
+    private func handleLedgerAction(_ ledger: SharedLedger) async {
+        let success: Bool
+        if store.isOwned(ledger) {
+            success = await store.deleteLedger(ledger)
+        } else {
+            success = await store.leaveLedger(ledger)
+        }
 
         if success {
             // 成功メッセージは共有オーバーレイで表示
@@ -366,6 +448,7 @@ struct SharedLedgerListScreen: View {
 // MARK: - 招待シート
 
 private struct ShareInvitationSheet: View {
+    @EnvironmentObject var store: SharedLedgerStore
     let payload: SharedLedgerStore.SharePayload
     let ledger: SharedLedger?
 
@@ -387,6 +470,7 @@ private struct ShareInvitationSheet: View {
                         VStack(alignment: .leading, spacing: 10) {
                             infoRow(icon: "person.crop.circle.badge.plus", text: "受け取った相手が共有メンバーとして参加できます")
                             infoRow(icon: "lock.open.display", text: "参加すると最新の収支やカテゴリがリアルタイムに同期されます")
+                            infoRow(icon: "icloud", text: "共有の準備には、iCloudの空き容量が必要です")
                             infoRow(icon: "hand.tap", text: "招待を取り消したい場合は、メンバー管理からいつでも解除できます")
                         }
                         .padding(14)
@@ -408,6 +492,19 @@ private struct ShareInvitationSheet: View {
                             container: CKContainer.default()
                         )
                         .frame(maxWidth: .infinity)
+
+                        Button {
+                            guard let shareURL = payload.share.url else { return }
+                            UIPasteboard.general.string = shareURL.absoluteString
+                            store.showToast(message: "リンクをコピーしました")
+                        } label: {
+                            Label("リンクをコピー", systemImage: "doc.on.doc")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(payload.share.url == nil)
 //                        .padding(12)
 //                        .background(
 //                            RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -504,8 +601,162 @@ private struct ShareInvitationSheet: View {
     }
 }
 
+
+private struct JoinSharedLedgerByLinkSheet: View {
+    @EnvironmentObject var store: SharedLedgerStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var invitationURLText: String = ""
+    @State private var isSubmitting = false
+    @State private var validationMessage: String?
+    @State private var showAlreadyJoinedModal = false
+    @State private var showPendingModal = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("招待リンクを貼り付け") {
+                    TextField("https://www.icloud.com/share/...", text: $invitationURLText, axis: .vertical)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.URL)
+
+                    Button("クリップボードから貼り付け") {
+                        invitationURLText = UIPasteboard.general.string ?? ""
+                    }
+                }
+
+                Section("うまく開けないとき") {
+                    Text("LINEなどのアプリ内ブラウザでリンクを開くと、参加画面まで進めない場合があります。Safariでリンクを開くか、リンクをコピーしてこの画面から参加してください。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let message = validationMessage {
+                    Section {
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("招待リンクで参加")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        submit()
+                    } label: {
+                        if isSubmitting {
+                            ProgressView()
+                        } else {
+                            Text("参加")
+                        }
+                    }
+                    .disabled(isSubmitting)
+                }
+            }
+        }
+        .overlay {
+            if isSubmitting {
+                LoadingOverlayView(
+                    title: "読み込み中",
+                    message: "招待リンクを確認しています…"
+                )
+            }
+        }
+        .alert("すでに参加済みです", isPresented: $showAlreadyJoinedModal) {
+            Button("OK", role: .cancel) {
+                dismiss()
+            }
+        } message: {
+            Text("この共有家計簿にはすでに参加しています。共有家計簿一覧からそのまま利用できます。")
+        }
+        .alert("参加処理を受け付けました", isPresented: $showPendingModal) {
+            Button("OK", role: .cancel) {
+                dismiss()
+            }
+        } message: {
+            Text("反映まで少し時間がかかる場合があります。しばらくしてから共有家計簿一覧をご確認ください。")
+        }
+    }
+
+    private func submit() {
+        let trimmed = invitationURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              let host = url.host,
+              host.contains("icloud.com")
+        else {
+            validationMessage = "有効なiCloud共有リンクを入力してください。"
+            return
+        }
+
+        validationMessage = nil
+        isSubmitting = true
+        Task {
+            let result = await store.acceptShareURL(url)
+            await MainActor.run {
+                isSubmitting = false
+                switch result {
+                case .joined:
+                    dismiss()
+                case .pending:
+                    showPendingModal = true
+                case .alreadyJoined:
+                    showAlreadyJoinedModal = true
+                case .failed:
+                    break
+                }
+            }
+        }
+    }
+}
+
+
 private extension Color {
     static var tertiaryLabel: Color {
         Color(UIColor.tertiaryLabel)
+    }
+}
+
+
+struct LoadingOverlayView: View {
+    let title: String
+    var message: String?
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.18)
+                .ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(.accentColor)
+
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                if let message {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(.systemBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            )
+            .padding(.horizontal, 36)
+        }
+        .transition(.opacity)
     }
 }

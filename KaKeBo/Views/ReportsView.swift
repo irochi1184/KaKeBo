@@ -97,6 +97,8 @@ struct ReportsView: View {
                 if availableYears.contains(year) == false, let latest = availableYears.max() {
                     year = latest
                 }
+                ReviewRequestManager.shared.recordReportScreenViewed()
+                ReviewRequestManager.shared.scheduleReviewRequestIfEligible()
             }
             .task { await reloadSharedLedgerDataIfNeeded() }
             .task(id: ledgerContext.selectedSharedLedgerId) { await reloadSharedLedgerDataIfNeeded() }
@@ -276,6 +278,8 @@ private struct YearPicker: View {
 }
 
 private struct KPIHeader: View {
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     let income: Int
     let expense: Int
     let balance: Int
@@ -285,8 +289,8 @@ private struct KPIHeader: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
-                KPICard(title: "収入", value: yen(income), tint: .green)
-                KPICard(title: "支出", value: yen(expense), tint: .red)
+                KPICard(title: "収入", value: yen(income), tint: incomeColor)
+                KPICard(title: "支出", value: yen(expense), tint: expenseColor)
                 KPICard(title: "収支", value: yen(balance), tint: balance >= 0 ? .blue : .orange)
             }
             HStack(spacing: 12) {
@@ -318,6 +322,8 @@ private struct KPICard: View {
 }
 
 private struct MonthlyBarsAndCumLine: View {
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     let monthlyIncome: [Int]   // 1..12
     let monthlyExpense: [Int]  // 1..12
     let stacked: Bool
@@ -332,27 +338,27 @@ private struct MonthlyBarsAndCumLine: View {
                         x: .value("月", m),
                         y: .value("金額", monthlyIncome[m-1])
                     )
-                    .foregroundStyle(.green.opacity(0.85))
+                    .foregroundStyle(incomeColor.opacity(0.85))
                     
                     BarMark(
                         x: .value("月", m),
                         y: .value("金額", -monthlyExpense[m-1]) // 下向きで視覚差別化
                     )
-                    .foregroundStyle(.red.opacity(0.85))
+                    .foregroundStyle(expenseColor.opacity(0.85))
                 } else {
                     BarMark(
                         x: .value("月", Double(m) - 0.2),
                         y: .value("金額", monthlyIncome[m-1]),
                         width: .ratio(0.35)
                     )
-                    .foregroundStyle(.green.opacity(0.85))
+                    .foregroundStyle(incomeColor.opacity(0.85))
                     
                     BarMark(
                         x: .value("月", Double(m) + 0.2),
                         y: .value("金額", monthlyExpense[m-1]),
                         width: .ratio(0.35)
                     )
-                    .foregroundStyle(.red.opacity(0.85))
+                    .foregroundStyle(expenseColor.opacity(0.85))
                 }
             }
             
@@ -484,6 +490,8 @@ private struct CategoryDonutAnnual: View {
 }
 
 private struct HighlightsRow: View {
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     let best: (month: Int, balance: Int)?
     let worst: (month: Int, balance: Int)?
     
@@ -493,13 +501,13 @@ private struct HighlightsRow: View {
                 title: "ベスト月",
                 subtitle: best.map { "\($0.month)月" } ?? "-",
                 value: yen(best?.balance ?? 0),
-                tint: .green
+                tint: incomeColor
             )
             HighlightCard(
                 title: "ワースト月",
                 subtitle: worst.map { "\($0.month)月" } ?? "-",
                 value: yen(worst?.balance ?? 0),
-                tint: .red
+                tint: expenseColor
             )
         }
     }
@@ -546,6 +554,8 @@ private struct YoYRow: View {
 }
 
 private struct KPIYoY: View {
+    @Environment(\.appIncomeColor) private var incomeColor
+    @Environment(\.appExpenseColor) private var expenseColor
     let title: String
     let diff: Int
     var body: some View {
@@ -556,7 +566,7 @@ private struct KPIYoY: View {
                 Image(systemName: up ? "arrow.up.right" : "arrow.down.right")
                 Text(yen(abs(diff))).monospacedDigit()
             }
-            .foregroundStyle(up ? .green : .red)
+            .foregroundStyle(up ? incomeColor : expenseColor)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)

@@ -37,6 +37,15 @@ extension AppTheme.HomeCardStyle {
     }
 }
 
+extension AppTheme.VisualStyle {
+    var title: String {
+        switch self {
+        case .modern: return "標準"
+        case .business: return "フラット"
+        }
+    }
+}
+
 struct RGBAColor: Codable, Equatable {
     var r: Double; var g: Double; var b: Double; var a: Double
     
@@ -60,6 +69,7 @@ struct AppTheme: Codable, Equatable {
     // アクセント
     enum Preset: String, Codable, CaseIterable { case `default`, green, red, orange, custom }
     enum HomeCardStyle: String, Codable, CaseIterable { case luxe, flat }
+    enum VisualStyle: String, Codable, CaseIterable { case modern, business }
     
     // 現在有効なプリセット（カスタム編集をしたら custom に）
     var activePreset: Preset = .default
@@ -78,9 +88,51 @@ struct AppTheme: Codable, Equatable {
     var prefersCustomKeypad: Bool = true
     var keypadIncomeRGBA: RGBAColor = .init(Color.green)
     var keypadExpenseRGBA: RGBAColor = .init(Color.red)
+    // 表示上の収支カラー
+    var incomeRGBA: RGBAColor = .init(Color.green)
+    var expenseRGBA: RGBAColor = .init(Color.red)
 
     // ホームカード
     var homeCardStyle: HomeCardStyle = .luxe
+    // アプリ全体のトーン
+    var visualStyle: VisualStyle = .modern
+
+    enum CodingKeys: String, CodingKey {
+        case activePreset
+        case useSameAccentForBoth
+        case accentLightRGBA
+        case accentDarkRGBA
+        case useSameBackgroundForBoth
+        case backgroundLightRGBA
+        case backgroundDarkRGBA
+        case prefersCustomKeypad
+        case keypadIncomeRGBA
+        case keypadExpenseRGBA
+        case incomeRGBA
+        case expenseRGBA
+        case homeCardStyle
+        case visualStyle
+    }
+
+    init() {}
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        activePreset = try c.decodeIfPresent(Preset.self, forKey: .activePreset) ?? .default
+        useSameAccentForBoth = try c.decodeIfPresent(Bool.self, forKey: .useSameAccentForBoth) ?? true
+        accentLightRGBA = try c.decodeIfPresent(RGBAColor.self, forKey: .accentLightRGBA) ?? .init(Color.blue)
+        accentDarkRGBA = try c.decodeIfPresent(RGBAColor.self, forKey: .accentDarkRGBA) ?? .init(Color.blue)
+        useSameBackgroundForBoth = try c.decodeIfPresent(Bool.self, forKey: .useSameBackgroundForBoth) ?? false
+        backgroundLightRGBA = try c.decodeIfPresent(RGBAColor.self, forKey: .backgroundLightRGBA) ?? .init(Color(red: 250/255, green: 250/255, blue: 250/255))
+        backgroundDarkRGBA = try c.decodeIfPresent(RGBAColor.self, forKey: .backgroundDarkRGBA) ?? .init(Color(red: 18/255, green: 18/255, blue: 18/255))
+        prefersCustomKeypad = try c.decodeIfPresent(Bool.self, forKey: .prefersCustomKeypad) ?? true
+        keypadIncomeRGBA = try c.decodeIfPresent(RGBAColor.self, forKey: .keypadIncomeRGBA) ?? .init(Color.green)
+        keypadExpenseRGBA = try c.decodeIfPresent(RGBAColor.self, forKey: .keypadExpenseRGBA) ?? .init(Color.red)
+        incomeRGBA = try c.decodeIfPresent(RGBAColor.self, forKey: .incomeRGBA) ?? .init(Color.green)
+        expenseRGBA = try c.decodeIfPresent(RGBAColor.self, forKey: .expenseRGBA) ?? .init(Color.red)
+        homeCardStyle = try c.decodeIfPresent(HomeCardStyle.self, forKey: .homeCardStyle) ?? .luxe
+        visualStyle = try c.decodeIfPresent(VisualStyle.self, forKey: .visualStyle) ?? .modern
+    }
     
     mutating func apply(_ preset: Preset) {
         activePreset = preset
@@ -146,5 +198,9 @@ struct AppTheme: Codable, Equatable {
 
     func keypadColor(isIncome: Bool) -> Color {
         isIncome ? keypadIncomeRGBA.swiftUIColor : keypadExpenseRGBA.swiftUIColor
+    }
+
+    func transactionColor(isIncome: Bool) -> Color {
+        isIncome ? incomeRGBA.swiftUIColor : expenseRGBA.swiftUIColor
     }
 }

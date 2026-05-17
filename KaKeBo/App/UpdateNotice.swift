@@ -12,6 +12,8 @@ struct UpdateNoticeGate: View {
     @AppStorage("lastShownVersion") private var lastShownVersion = ""
     @AppStorage("app.installedVersion") private var installedVersion = ""
     @State private var isPresented = false
+    @State private var showDesignSelectionSheet = false
+    @State private var shouldShowDesignSelectionAfterUpdate = false
 
     var body: some View {
         UpdateNoticeOverlay(isPresented: $isPresented)
@@ -23,13 +25,26 @@ struct UpdateNoticeGate: View {
 
                 if installedVersion != AppVersion.current && lastShownVersion != AppVersion.current {
                     isPresented = true
+                    shouldShowDesignSelectionAfterUpdate = true
                 }
             }
             .onChange(of: isPresented) { _, newVal in
                 if newVal == false {
                     lastShownVersion = AppVersion.current
                     installedVersion = AppVersion.current
+                    if shouldShowDesignSelectionAfterUpdate {
+                        showDesignSelectionSheet = true
+                        shouldShowDesignSelectionAfterUpdate = false
+                    }
                 }
+            }
+            .sheet(isPresented: $showDesignSelectionSheet) {
+                DesignStyleSelectionSheet(
+                    isPresented: $showDesignSelectionSheet,
+                    title: "新しいデザイン選択",
+                    message: "アップデート後に、表示デザインを見比べて変更できます。",
+                    primaryButtonTitle: "このデザインを使う"
+                )
             }
     }
 }
@@ -72,12 +87,24 @@ private struct UpdateNoticeContent: View {
     }
 
     static let defaultHighlights: [Highlight] = [
-//        .init(title: "ホームのカードをシンプルに切り替え", message: "テーマ設定から、ホーム画面のカードをフラットで素直な見た目に切り替えられるようになりました。色の差だけで収入と支出が分かります。", symbol: "square.on.square", tint: .pink),
-        .init(title: "日別推移がカテゴリの色でひと目で分かる", message: "ホームの棒グラフがカテゴリごとの色で表示され、どの支出が多い日なのか見分けやすくなりました。", symbol: "chart.bar.fill", tint: .teal),
-        .init(title: "大きいウィジェットでカレンダーを確認", message: "ホーム画面の最大サイズのウィジェットに当月カレンダーを表示できるようになり、日付を押すとその日の家計簿をすぐ開けます。", symbol: "calendar", tint: .blue),
-        .init(title: "固定費の合計をひと目で確認", message: "固定費の管理シートに有効状態の固定費合計金額を表示するようになり、毎月の支出をすぐに把握できます。", symbol: "yensign.circle.fill", tint: .mint),
-        .init(title: "バックアップの家計簿選択を改善", message: "個人用・共有家計簿ごとに作成／復元を選べる新しいシートを追加し、失敗時に気付きやすいよう堅牢性を高めました。", symbol: "arrow.triangle.2.circlepath", tint: .purple),
-        .init(title: "設定画面の下にバージョンを表示", message: "サポートへの連絡時などにすぐ確認できるよう、設定画面のいちばん下へ現在のバージョンを記載しました。", symbol: "info.circle.fill", tint: .gray)
+        Highlight(
+            title: "テーマ管理に「フラット」を追加",
+            message: "より見やすく、すっきりしたデザインを選べるようになりました。",
+            symbol: "square.grid.2x2",
+            tint: .blue
+        ),
+        Highlight(
+            title: "収支カラーのカスタムに対応（プレミアム）",
+            message: "プレミアムプランで、収入と支出の色を好みに合わせて設定できます。",
+            symbol: "paintpalette",
+            tint: .purple
+        ),
+        Highlight(
+            title: "日別推移の詳細を確認しやすく",
+            message: "ホームタブの日別推移をタップすると、推移の詳細をそのまま確認できます。",
+            symbol: "chart.line.uptrend.xyaxis",
+            tint: .green
+        )
     ]
     /*
      アップデート 2.1.0
@@ -92,6 +119,15 @@ private struct UpdateNoticeContent: View {
      - カレンダーの下部に表示する内容を好みに合わせて切り替えられるようになりました。
      - フィルターした結果をそのままグラフに出力できます。（無料プランは毎月3回まで）
      - 参加画面の案内や配置を調整し、スムーズに入れるようになりました。
+     アップデート 2.1.4
+     - 日別推移がカテゴリの色でひと目で分かる
+     - 大きいウィジェットでカレンダーを確認
+     - 固定費の合計をひと目で確認
+     - バックアップの家計簿選択を改善
+     - 設定画面の下にバージョンを表示
+     アップデート 2.1.5
+     - 招待リンクをアプリ内で開けるように改善
+     - 共有家計簿に参加できない問題を修正
      */
 
     let accent: Color
@@ -169,7 +205,7 @@ private struct UpdateNoticeContent: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("カレンダー表示のカスタマイズ、フィルター結果のグラフ出力、共有家計簿の参加体験を改善しました。")
+            Text("日々の入力や確認を、より見やすく・使いやすく整えました。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
