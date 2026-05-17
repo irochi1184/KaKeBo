@@ -191,6 +191,7 @@ struct SettingsView: View {
                         NavigationStack {
                             FixedExpenseSettingsView()
                                 .environmentObject(store)
+                                .environmentObject(monthStartStore)
                                 .navigationTitle("固定費")
                                 .navigationBarTitleDisplayMode(.inline)
                         }
@@ -519,7 +520,23 @@ struct SettingsView: View {
                 accent: accent,
                 trailingText: fixedCountText
             ) { sheet = .fixedExpenses }
-            
+
+            NavigationLink {
+                RecurringExpenseSuggestionsView()
+                    .environmentObject(store)
+                    .environmentObject(monthStartStore)
+            } label: {
+                HStack {
+                    Label {
+                        Text("繰り返し支出を検出")
+                    } icon: {
+                        Image(systemName: "repeat.circle")
+                            .foregroundStyle(accent)
+                    }
+                    Spacer()
+                }
+            }
+
             SettingsRowButton(
                 title: "テーマ管理",
                 systemImage: "paintpalette",
