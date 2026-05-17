@@ -222,41 +222,93 @@ fileprivate struct PhotoPickerBridge: UIViewControllerRepresentable {
     }
 }
 
-// MARK: - Vision OCR（フォールバック）
+// MARK: - Vision OCR（改良版：行位置情報も活用）
 fileprivate func recognizeText(from image: CGImage) async throws -> String {
     let request = VNRecognizeTextRequest()
     request.recognitionLanguages = ["ja-JP", "en-US"]
     request.usesLanguageCorrection = true
     request.recognitionLevel = .accurate
-    request.minimumTextHeight = 0.015
+    request.minimumTextHeight = 0.01  // より小さな文字も検出
+    // 複数候補を取得して精度向上
+    request.revision = VNRecognizeTextRequestRevision3
 
     let handler = VNImageRequestHandler(cgImage: image, options: [:])
     try handler.perform([request])
 
-    let text = request.results?
-        .compactMap { $0.topCandidates(1).first?.string }
+    guard let observations = request.results else { return "" }
+
+    // Y座標（上から下）でソートして自然な読み順に
+    let sorted = observations.sorted { obs1, obs2 in
+        let y1 = obs1.boundingBox.origin.y
+        let y2 = obs2.boundingBox.origin.y
+        // Vision座標は左下原点なので y が大きい方が上
+        return y1 > y2
+    }
+
+    let text = sorted
+        .compactMap { observation -> String? in
+            // 信頼度が低すぎる候補は除外
+            guard let candidate = observation.topCandidates(3).first,
+                  candidate.confidence > 0.3 else { return nil }
+            return candidate.string
+        }
         .joined(separator: "\n")
-    return text ?? ""
+
+    return text
 }
 
-// MARK: - 画像前処理
+// MARK: - 画像前処理（改良版：傾き補正 + ノイズ除去 + シャープニング）
 fileprivate func preprocessImageForOCR(_ image: UIImage) -> CGImage? {
     guard var ciImage = CIImage(image: image) else { return image.cgImage }
 
-    // コントラストを強め、彩度を落とすことで文字のエッジを際立たせる
+    // 1) 自動方向補正（EXIFに基づく回転修正）
+    ciImage = ciImage.oriented(forExifOrientation: Int32(image.imageOrientation.exifValue))
+
+    // 2) グレースケール化（文字認識に不要な色情報を除去）
     let colorControls = CIFilter.colorControls()
     colorControls.inputImage = ciImage
-    colorControls.contrast = 1.2
     colorControls.saturation = 0.0
-    colorControls.brightness = 0.0
+    colorControls.contrast = 1.4       // コントラストを強めに
+    colorControls.brightness = 0.05    // わずかに明るく
     ciImage = colorControls.outputImage ?? ciImage
 
-    // 軽く露出補正をかけて暗部の文字を拾いやすくする
+    // 3) シャープニング（文字のエッジを鮮明に）
+    let sharpen = CIFilter.sharpenLuminance()
+    sharpen.inputImage = ciImage
+    sharpen.sharpness = 0.6
+    sharpen.radius = 1.5
+    ciImage = sharpen.outputImage ?? ciImage
+
+    // 4) ノイズ除去（軽度）
+    let noiseReduction = CIFilter.noiseReduction()
+    noiseReduction.inputImage = ciImage
+    noiseReduction.noiseLevel = 0.01
+    noiseReduction.sharpness = 0.5
+    ciImage = noiseReduction.outputImage ?? ciImage
+
+    // 5) 露出補正（暗い写真対策）
     let exposure = CIFilter.exposureAdjust()
     exposure.inputImage = ciImage
-    exposure.ev = 0.3
+    exposure.ev = 0.2
     ciImage = exposure.outputImage ?? ciImage
 
-    let context = CIContext()
+    let context = CIContext(options: [.useSoftwareRenderer: false])
     return context.createCGImage(ciImage, from: ciImage.extent)
+}
+
+// UIImageOrientation → EXIF 変換
+private extension UIImage.Orientation {
+    var exifValue: Int {
+        switch self {
+        case .up: return 1
+        case .down: return 3
+        case .left: return 8
+        case .right: return 6
+        case .upMirrored: return 2
+        case .downMirrored: return 4
+        case .leftMirrored: return 5
+        case .rightMirrored: return 7
+        @unknown default: return 1
+        }
+    }
 }
