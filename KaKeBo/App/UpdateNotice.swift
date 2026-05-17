@@ -88,21 +88,21 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "テーマ管理に「フラット」を追加",
-            message: "より見やすく、すっきりしたデザインを選べるようになりました。",
-            symbol: "square.grid.2x2",
+            title: "支出予測・予算アラート",
+            message: "過去3ヶ月の支出から今月の着地予測を自動計算。予算超過が見込まれる場合は通知でお知らせします。",
+            symbol: "chart.line.uptrend.xyaxis",
             tint: .blue
         ),
         Highlight(
-            title: "収支カラーのカスタムに対応（プレミアム）",
-            message: "プレミアムプランで、収入と支出の色を好みに合わせて設定できます。",
-            symbol: "paintpalette",
-            tint: .purple
+            title: "レシート・スクショ読み取りを強化",
+            message: "PayPay等の決済アプリのスクリーンショットからも自動入力できるようになりました。レシートの認識精度も大幅に向上。",
+            symbol: "doc.text.viewfinder",
+            tint: .orange
         ),
         Highlight(
-            title: "日別推移の詳細を確認しやすく",
-            message: "ホームタブの日別推移をタップすると、推移の詳細をそのまま確認できます。",
-            symbol: "chart.line.uptrend.xyaxis",
+            title: "繰り返し支出の自動検出",
+            message: "毎月繰り返される支出を自動で見つけて、固定費テンプレートへの登録を提案します。",
+            symbol: "repeat.circle",
             tint: .green
         )
     ]
@@ -128,6 +128,15 @@ private struct UpdateNoticeContent: View {
      アップデート 2.1.5
      - 招待リンクをアプリ内で開けるように改善
      - 共有家計簿に参加できない問題を修正
+     アップデート 2.2.0
+     - テーマ管理に「フラット」を追加
+     - 収支カラーのカスタムに対応（プレミアム）
+     - 日別推移の詳細を確認しやすく
+     アップデート 2.3.0（次回）
+     - 支出予測・予算アラート機能を追加
+     - レシートOCR精度を大幅に向上
+     - PayPay等の決済アプリスクリーンショットからの自動入力に対応
+     - 繰り返し支出の自動検出機能を追加
      */
 
     let accent: Color
@@ -205,7 +214,7 @@ private struct UpdateNoticeContent: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("日々の入力や確認を、より見やすく・使いやすく整えました。")
+            Text("支出の予測・自動検出・読み取り精度向上で、もっと楽に家計管理できるようになりました。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
