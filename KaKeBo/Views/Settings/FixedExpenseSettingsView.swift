@@ -10,16 +10,18 @@ import SwiftUI
 struct FixedExpenseSettingsView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var purchase: PurchaseManager
+    @EnvironmentObject var monthStartStore: MonthStartStore
     @State private var templates: [FixedExpenseTemplate] = []
     @State private var editing: FixedExpenseTemplate? = nil
     @State private var isAdding = false
     @State private var showDeleteAlert: FixedExpenseTemplate? = nil
-    
+
     @State private var quickAddExpanded = false
     @State private var showConfirm = false
     @State private var confirmMessage = ""
     @State private var showPaywall = false
-    
+    @State private var detectedCount: Int = 0
+
     // 無料プランで登録可能な数
     private let freeLimit = 5
     
@@ -49,6 +51,28 @@ struct FixedExpenseSettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
+                }
+            }
+
+            // 繰り返し支出の提案バナー
+            if detectedCount > 0 {
+                Section {
+                    NavigationLink {
+                        RecurringExpenseSuggestionsView()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "lightbulb.fill")
+                                .foregroundStyle(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(detectedCount)件の繰り返し支出を検出")
+                                    .font(.subheadline.weight(.medium))
+                                Text("タップして固定費に登録で���ます")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                    }
                 }
             }
 
@@ -166,7 +190,15 @@ struct FixedExpenseSettingsView: View {
                 } label: { Image(systemName: "plus") }
             }
         }
-        .onAppear { loadTemplates() }
+        .onAppear {
+            loadTemplates()
+            detectedCount = RecurringExpenseDetector.detect(
+                transactions: store.transactions,
+                categories: store.categories,
+                existingTemplates: templates,
+                resolver: monthStartStore.resolver()
+            ).count
+        }
         .sheet(item: $editing) { t in
             FixedExpenseEditorView(
                 initial: t,
