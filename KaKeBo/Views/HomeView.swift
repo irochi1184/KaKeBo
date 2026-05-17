@@ -272,6 +272,7 @@ struct HomeView: View {
         cardOrder.filter { c in
             switch c {
             case .header: return true
+            case .forecast: return true
             case .donut:  return !expenseBreakdown.isEmpty || !incomeBreakdown.isEmpty
             case .daily:  return !dailySeries.isEmpty
             case .transactions: return !allThisMonthTransactions.isEmpty
