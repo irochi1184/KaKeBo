@@ -39,7 +39,7 @@ struct HomeView: View {
     @State private var dailyDetailSheet: DailyTrendDetailContext?
 
     // ▼ 追加：カード順序の状態とドラッグ中のカード
-    @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .donut, .daily, .transactions])
+    @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .forecast, .donut, .daily, .transactions])
     @State private var dragging: DashboardCard?
 
     private let dropUTIs: [UTType] = [.plainText] // onDrag のペイロード種別
@@ -138,6 +138,15 @@ struct HomeView: View {
                 selectedMonth = monthResolver.anchorMonth(containing: Date())
                 didSetInitialMonth = true
             }
+            // 予算超過チェック通知
+            let forecast = BudgetForecastService.calculate(
+                transactions: store.transactions,
+                budgets: store.budgets,
+                categories: store.categories,
+                currentMonth: monthResolver.anchorMonth(containing: Date()),
+                resolver: monthResolver
+            )
+            BudgetAlertNotifier.checkAndNotify(forecast: forecast)
         }
     }
     
@@ -281,7 +290,11 @@ struct HomeView: View {
                 balance: monthBalance
             )
             .homeCard()
-            
+
+        case .forecast:
+            BudgetForecastCard(forecast: budgetForecast)
+                .homeCard()
+
         case .donut:
             CategoryDonutPager(
                 expense: expenseBreakdown,
@@ -361,6 +374,16 @@ extension HomeView {
         store.transactions.filter { isInCurrentMonth($0.date) }
     }
     
+    private var budgetForecast: BudgetForecastService.Forecast {
+        BudgetForecastService.calculate(
+            transactions: store.transactions,
+            budgets: store.budgets,
+            categories: store.categories,
+            currentMonth: selectedMonth,
+            resolver: monthResolver
+        )
+    }
+
     private var monthIncome: Int {
         thisMonthTx.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
     }
@@ -968,6 +991,7 @@ extension TransactionListCard where RowID == CKRecord.ID {
 // 並び替え対象のカード
 private enum DashboardCard: String, CaseIterable, Identifiable {
     case header        // 月次ヘッダー（収支・支出・収入）
+    case forecast      // 支出予測・予算カード
     case donut         // 円グラフ（支出/収入ブレイクダウン）
     case daily         // 日別推移（棒グラフ）
     case transactions  // 最近の取引リスト
