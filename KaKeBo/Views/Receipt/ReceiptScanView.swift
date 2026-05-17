@@ -84,7 +84,7 @@ struct ReceiptScanView: View {
                 .background(.ultraThinMaterial)
             }
         }
-        .navigationTitle("レシート読み取り")
+        .navigationTitle("レシート・スクショ読み取り")
         // 写真選択（PHPicker）：権限不要
         .sheet(isPresented: $showPhotoPicker) {
             PhotoPickerBridge { uiImage in

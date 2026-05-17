@@ -187,7 +187,7 @@ struct AddTransactionView: View {
                 ReceiptScanView { recognized in
                     applyReceiptResult(recognized, usesCustomKeypad: usesCustomKeypad)
                 }
-                .navigationTitle("レシート読み取り")
+                .navigationTitle("レシート・スクショ読み取り")
             }
         }
     }
@@ -260,7 +260,8 @@ struct AddTransactionView: View {
     }
 
     private func applyReceiptResult(_ recognizedText: String, usesCustomKeypad: Bool) {
-        let parsed = ReceiptParser.parse(recognizedText)
+        // 決済アプリのスクリーンショットかレシートかを自動判定してパース
+        let parsed = PaymentScreenshotParser.smartParse(recognizedText)
         if let v = parsed.total { amount = v }
         if let d = parsed.date  { date   = d }
         if let m = parsed.merchant, m.isEmpty == false {
@@ -769,7 +770,7 @@ struct AddTransactionView: View {
                 showCustomKeypad = false
                 showReceiptScanner = true
             } label: {
-                Label("レシート", systemImage: "doc.text.viewfinder")
+                Label("読み取り", systemImage: "doc.text.viewfinder")
             }
         }
         // 保存ボタン
