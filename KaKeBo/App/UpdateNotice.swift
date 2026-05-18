@@ -12,8 +12,6 @@ struct UpdateNoticeGate: View {
     @AppStorage("lastShownVersion") private var lastShownVersion = ""
     @AppStorage("app.installedVersion") private var installedVersion = ""
     @State private var isPresented = false
-    @State private var showDesignSelectionSheet = false
-    @State private var shouldShowDesignSelectionAfterUpdate = false
 
     var body: some View {
         UpdateNoticeOverlay(isPresented: $isPresented)
@@ -25,26 +23,13 @@ struct UpdateNoticeGate: View {
 
                 if installedVersion != AppVersion.current && lastShownVersion != AppVersion.current {
                     isPresented = true
-                    shouldShowDesignSelectionAfterUpdate = true
                 }
             }
             .onChange(of: isPresented) { _, newVal in
                 if newVal == false {
                     lastShownVersion = AppVersion.current
                     installedVersion = AppVersion.current
-                    if shouldShowDesignSelectionAfterUpdate {
-                        showDesignSelectionSheet = true
-                        shouldShowDesignSelectionAfterUpdate = false
-                    }
                 }
-            }
-            .sheet(isPresented: $showDesignSelectionSheet) {
-                DesignStyleSelectionSheet(
-                    isPresented: $showDesignSelectionSheet,
-                    title: "新しいデザイン選択",
-                    message: "アップデート後に、表示デザインを見比べて変更できます。",
-                    primaryButtonTitle: "このデザインを使う"
-                )
             }
     }
 }
