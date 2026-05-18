@@ -31,6 +31,8 @@ struct ReportsView: View {
     @State private var excludedCategoryIds: Set<String> = []
     @State private var trendTarget: CategoryAnnual? = nil
     @State private var breakdownVersion: Int = 0
+    @State private var showPDFShare = false
+    @State private var pdfExportURL: URL?
 
     private var accent: Color {
         themeStore.theme.accentColor(for: scheme)
@@ -65,19 +67,21 @@ struct ReportsView: View {
                         .tint(accent)
                 }
                 
-                // もし右上に共有ボタン（CSV出力）も置きたいならオプションでこれを追加
-                /*
-                 ToolbarItem(placement: .topBarTrailing) {
-                 ShareLink(
-                 item: csvData(),
-                 preview: SharePreview("\(String(year))年レポート",
-                 image: Image(systemName: "doc"))
-                 ) {
-                 Image(systemName: "square.and.arrow.up")
-                 .font(.headline)
-                 }
-                 }
-                 */
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        exportAnnualPDF()
+                    } label: {
+                        Image(systemName: "doc.richtext")
+                            .font(.body)
+                            .foregroundStyle(accent)
+                    }
+                    .accessibilityLabel("年間レポートPDF")
+                }
+            }
+            .sheet(isPresented: $showPDFShare) {
+                if let url = pdfExportURL {
+                    AnnualReportShareSheet(activityItems: [url])
+                }
             }
 
             .navigationDestination(item: $trendTarget) { cat in
@@ -243,6 +247,64 @@ struct ReportsView: View {
         .padding(.horizontal)
         .padding(.bottom, 24)
     }
+
+    // MARK: - PDF書き出し
+
+    private func exportAnnualPDF() {
+        let incomeUIColor = UIColor(themeStore.theme.transactionColor(isIncome: true))
+        let expenseUIColor = UIColor(themeStore.theme.transactionColor(isIncome: false))
+        let accentUIColor = UIColor(themeStore.theme.accentColor(for: scheme))
+
+        let catEntries = categoryTotals.map { cat in
+            AnnualReportPDFService.CategoryEntry(
+                name: cat.name,
+                symbol: cat.symbol,
+                amount: cat.amount,
+                color: UIColor(cat.color)
+            )
+        }
+
+        let reportData = AnnualReportPDFService.ReportData(
+            year: year,
+            yearIncome: yearIncome,
+            yearExpense: yearExpense,
+            yearBalance: yearBalance,
+            savingsRate: yearSavingsRate,
+            avgExpensePerMonth: avgExpensePerMonth,
+            monthlyIncome: monthlyIncome,
+            monthlyExpense: monthlyExpense,
+            categoryBreakdown: catEntries,
+            bestMonth: bestMonth,
+            worstMonth: worstMonth,
+            accentColor: accentUIColor,
+            incomeColor: incomeUIColor,
+            expenseColor: expenseUIColor
+        )
+
+        let data = AnnualReportPDFService.generate(data: reportData)
+        let filename = "KaKeBo_\(year)年_年間レポート.pdf"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+
+        do {
+            try data.write(to: url)
+            pdfExportURL = url
+            showPDFShare = true
+        } catch {
+            print("PDF書き出しエラー: \(error)")
+        }
+    }
+}
+
+// MARK: - ShareSheet
+
+private struct AnnualReportShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - UI Parts
