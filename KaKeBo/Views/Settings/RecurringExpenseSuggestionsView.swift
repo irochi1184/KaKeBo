@@ -18,7 +18,7 @@ struct RecurringExpenseSuggestionsView: View {
                 patternList
             }
         }
-        .navigationTitle("繰り返し支出��検出")
+        .navigationTitle("繰り返し支出の検出")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { detectPatterns() }
         .alert("登録完了", isPresented: .init(
