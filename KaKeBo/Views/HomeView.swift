@@ -39,7 +39,7 @@ struct HomeView: View {
     @State private var dailyDetailSheet: DailyTrendDetailContext?
 
     // ▼ 追加：カード順序の状態とドラッグ中のカード
-    @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .forecast, .donut, .daily, .transactions])
+    @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .forecast, .weeklySummary, .donut, .daily, .transactions])
     @State private var dragging: DashboardCard?
 
     private let dropUTIs: [UTType] = [.plainText] // onDrag のペイロード種別
@@ -273,6 +273,7 @@ struct HomeView: View {
             switch c {
             case .header: return true
             case .forecast: return true
+            case .weeklySummary: return true
             case .donut:  return !expenseBreakdown.isEmpty || !incomeBreakdown.isEmpty
             case .daily:  return !dailySeries.isEmpty
             case .transactions: return !allThisMonthTransactions.isEmpty
@@ -294,6 +295,10 @@ struct HomeView: View {
 
         case .forecast:
             BudgetForecastCard(forecast: budgetForecast)
+                .homeCard()
+
+        case .weeklySummary:
+            WeeklySummaryCard(summary: weeklySummary)
                 .homeCard()
 
         case .donut:
@@ -375,6 +380,10 @@ extension HomeView {
         store.transactions.filter { isInCurrentMonth($0.date) }
     }
     
+    private var weeklySummary: WeeklySummaryService.Summary {
+        WeeklySummaryService.calculate(transactions: store.transactions)
+    }
+
     private var budgetForecast: BudgetForecastService.Forecast {
         BudgetForecastService.calculate(
             transactions: store.transactions,
@@ -991,11 +1000,12 @@ extension TransactionListCard where RowID == CKRecord.ID {
 
 // 並び替え対象のカード
 private enum DashboardCard: String, CaseIterable, Identifiable {
-    case header        // 月次ヘッダー（収支・支出・収入）
-    case forecast      // 支出予測・予算カード
-    case donut         // 円グラフ（支出/収入ブレイクダウン）
-    case daily         // 日別推移（棒グラフ）
-    case transactions  // 最近の取引リスト
+    case header         // 月次ヘッダー（収支・支出・収入）
+    case forecast       // 支出予測・予算カード
+    case weeklySummary  // 週間サマリー
+    case donut          // 円グラフ（支出/収入ブレイクダウン）
+    case daily          // 日別推移（棒グラフ）
+    case transactions   // 最近の取引リスト
     var id: String { rawValue }
 }
 
