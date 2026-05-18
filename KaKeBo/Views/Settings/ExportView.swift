@@ -11,6 +11,8 @@ struct ExportView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var monthStartStore: MonthStartStore
     @EnvironmentObject var pm: PurchaseManager
+    @EnvironmentObject var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var scheme
 
     @State private var format: ExportFormat = .csv
     @State private var periodSelection: Int = 0 // 0=今月, 1=先月, 2=カスタム
@@ -176,7 +178,12 @@ struct ExportView: View {
             fileURL = ExportService.writeToTemporaryFile(data: data, filename: filename)
 
         case .pdf:
-            let data = ExportService.generatePDF(transactions: transactions, categories: categories, title: periodLabel)
+            let themeColors = ExportService.ThemeColors(
+                accent: UIColor(themeStore.theme.accentColor(for: scheme)),
+                income: UIColor(themeStore.theme.transactionColor(isIncome: true)),
+                expense: UIColor(themeStore.theme.transactionColor(isIncome: false))
+            )
+            let data = ExportService.generatePDF(transactions: transactions, categories: categories, title: periodLabel, theme: themeColors)
             let filename = "KaKeBo_\(timestamp).pdf"
             fileURL = ExportService.writeToTemporaryFile(data: data, filename: filename)
         }

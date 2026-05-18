@@ -597,6 +597,7 @@ struct SettingsView: View {
                     .environmentObject(store)
                     .environmentObject(monthStartStore)
                     .environmentObject(pm)
+                    .environmentObject(themeStore)
             } label: {
                 HStack {
                     Label {
