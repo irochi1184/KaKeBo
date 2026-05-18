@@ -66,7 +66,7 @@ struct FixedExpenseSettingsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(detectedCount)件の繰り返し支出を検出")
                                     .font(.subheadline.weight(.medium))
-                                Text("タップして固定費に登録で���ます")
+                                Text("タップして固定費に登録できます")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

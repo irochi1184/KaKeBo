@@ -1,7 +1,7 @@
 import Foundation
 
 /// 繰り返し支出を自動検出するサービス
-/// 過去の取引���ら毎月繰り返されるパターンを検出し、固定費テンプレートへの登録を提案する
+/// 過去の取引から毎月繰り返されるパターンを検出し、固定費テンプレートへの登録を提案する
 struct RecurringExpenseDetector {
 
     /// 検出された繰り返し支出パターン
@@ -10,8 +10,8 @@ struct RecurringExpenseDetector {
         let categoryId: UUID
         let categoryName: String
         let averageAmount: Int
-        let medianDay: Int          // 支払い��の中央値
-        let memo: String            // 最頻���メモ
+        let medianDay: Int          // 支払い日の中央値
+        let memo: String            // 最頻メモ
         let monthsDetected: Int     // 検出された月数
         let confidence: Double      // 信頼度 (0.0〜1.0)
         let recentAmounts: [Int]    // 直近の金額推移
@@ -21,13 +21,13 @@ struct RecurringExpenseDetector {
     struct Config {
         /// 繰り返しとみなす最小月数
         var minMonths: Int = 3
-        /// 金���の変動許容率（中央値からの乖離率）
+        /// 金額の変動許容率（中央値からの乖離率）
         var amountToleranceRatio: Double = 0.25
         /// 分析対象の最大月数
         var lookbackMonths: Int = 6
     }
 
-    /// 繰り返し支出パタ���ンを検出する
+    /// 繰り返し支出パターンを検出する
     static func detect(
         transactions: [Transaction],
         categories: [Category],
@@ -55,7 +55,7 @@ struct RecurringExpenseDetector {
         var results: [DetectedPattern] = []
 
         for (key, monthlyEntries) in grouped {
-            // 登録済みのパター��に近いものはスキップ
+            // 登録済みのパターンに近いものはスキップ
             let avgAmount = monthlyEntries.flatMap(\.amounts).reduce(0, +) / max(1, monthlyEntries.flatMap(\.amounts).count)
             if existingKeys.contains(where: { $0.categoryId == key.categoryId && isAmountSimilar($0.amount, avgAmount) }) {
                 continue
@@ -153,7 +153,7 @@ struct RecurringExpenseDetector {
                     memos: items.map(\.memo)
                 )
             }
-            // 1月に複��回同額の支出がある場合は除外（日用品等の可能性）
+            // 1月に複数回同額の支出がある場合は除外（日用品等の可能性）
             let avgPerMonth = Double(entries.count) / Double(Set(entries.map(\.monthKey)).count)
             if avgPerMonth <= 2.0 {
                 result[key] = monthEntries
