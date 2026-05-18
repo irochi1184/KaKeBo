@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 検出された繰り返し支出の提案��面
+/// 検出された繰り返し支出の提案画面
 struct RecurringExpenseSuggestionsView: View {
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var monthStartStore: MonthStartStore
@@ -128,12 +128,12 @@ struct RecurringExpenseSuggestionsView: View {
         UserDefaults.appGroup.set(data, forKey: DataStore.fixedTemplatesKey)
     }
 
-    /// 一度ス���ップしたパターンのキーを保存（カテゴリID+金額概算）
+    /// 一度スキップしたパターンのキーを保存（カテゴリID+金額概算）
     private static let dismissedKey = "kakebo.recurring.dismissed"
 
     private static func loadDismissed() -> Set<UUID> {
         // 単純にセッション内でのみ有効（パターンIDは毎回変わるため）
-        // 代わりにカテゴリ+金額ベ���スで永続スキップを管理
+        // 代わりにカテゴリ+金額ベースで永続スキップを管理
         return []
     }
 
@@ -234,7 +234,7 @@ private struct PatternRow: View {
     }
 }
 
-// MARK: - 金額推移ミニ���ラフ
+// MARK: - 金額推移ミニグラフ
 
 private struct AmountTrendMini: View {
     let amounts: [Int]
