@@ -73,22 +73,22 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "支出予測・予算アラート",
-            message: "過去3ヶ月の支出から今月の着地予測を自動計算。予算超過が見込まれる場合は通知でお知らせします。",
-            symbol: "chart.line.uptrend.xyaxis",
+            title: "CSV/PDFデータ書き出し",
+            message: "取引データをCSVやPDFで書き出せるようになりました。カテゴリ別グラフや日別チャート付きのリッチなレポートを共有できます。",
+            symbol: "square.and.arrow.up",
             tint: .blue
         ),
         Highlight(
-            title: "レシート・スクショ読み取りを強化",
-            message: "PayPay等の決済アプリのスクリーンショットからも自動入力できるようになりました。レシートの認識精度も大幅に向上。",
-            symbol: "doc.text.viewfinder",
-            tint: .orange
+            title: "年間レポートPDF",
+            message: "レポート画面から年間レポートをPDFで出力。KPI・月別チャート・カテゴリ別ドーナツなど、1年の家計を一目で振り返れます。",
+            symbol: "doc.richtext",
+            tint: .purple
         ),
         Highlight(
-            title: "繰り返し支出の自動検出",
-            message: "毎月繰り返される支出を自動で見つけて、固定費テンプレートへの登録を提案します。",
-            symbol: "repeat.circle",
-            tint: .green
+            title: "週間サマリーカード",
+            message: "ホーム画面に今週の支出ペースを表示。先週との比較で使いすぎを早めにキャッチできます。",
+            symbol: "calendar.day.timeline.leading",
+            tint: .orange
         )
     ]
     /*
@@ -117,11 +117,18 @@ private struct UpdateNoticeContent: View {
      - テーマ管理に「フラット」を追加
      - 収支カラーのカスタムに対応（プレミアム）
      - 日別推移の詳細を確認しやすく
-     アップデート 2.3.0（次回）
+     アップデート 2.3.0
      - 支出予測・予算アラート機能を追加
      - レシートOCR精度を大幅に向上
      - PayPay等の決済アプリスクリーンショットからの自動入力に対応
      - 繰り返し支出の自動検出機能を追加
+     アップデート 2.3.1
+     - CSV/PDFデータ書き出し機能を追加
+     - 年間レポートPDF書き出し機能を追加
+     - 週間サマリーカードをホーム画面に追加
+     - PDF出力をアプリ内テーマカラーに統一
+     - アップデート時の不要な画面表示を修正
+     - 複数箇所の文字化けを修正
      */
 
     let accent: Color
@@ -199,7 +206,7 @@ private struct UpdateNoticeContent: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("支出の予測・自動検出・読み取り精度向上で、もっと楽に家計管理できるようになりました。")
+            Text("データの書き出し・レポート出力・週間サマリーで、家計の振り返りがもっと簡単になりました。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
