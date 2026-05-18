@@ -591,10 +591,30 @@ struct SettingsView: View {
             ) {
                 showBackupSheet = true
             }
+
+            NavigationLink {
+                ExportView()
+                    .environmentObject(store)
+                    .environmentObject(monthStartStore)
+                    .environmentObject(pm)
+            } label: {
+                HStack {
+                    Label {
+                        Text("データを書き出す")
+                    } icon: {
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundStyle(accent)
+                    }
+                    Spacer()
+                    Text("CSV / PDF")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
         } header: {
-            Text("バックアップを作成・復元")
+            Text("バックアップ・書き出し")
         } footer: {
-            Text("個人用または共有家計簿を選び、作成・復元を実行できます。")
+            Text("バックアップの作成・復元、またはCSV/PDFでデータを書き出せます。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
