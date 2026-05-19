@@ -8,5 +8,5 @@
 import Foundation
 
 enum AppGroup {
-    static let id = "group.com.irochiTech.KaKeBo" // ← entitlements と完全一致
+    static let id = "group.com.irochi.KaKeBo" // ← entitlements と完全一致
 }
