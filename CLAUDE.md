@@ -109,6 +109,14 @@ Shared/            # アプリ・Widget共有コード（AppGroup, TransactionDT
 - コミットメッセージ: `feat:` / `fix:` / `docs:` プレフィックス（日本語本文）
 - PR 作成後、`gh pr merge N --merge --delete-branch` でマージ
 
+## 絶対に変更禁止
+
+- **AppGroup ID**: `group.com.irochiTech.KaKeBo` を絶対に変更しないこと。変更すると全ユーザーのデータが消失する。関連ファイル3つが常に一致している必要がある:
+  - `Shared/AppGroup.swift`
+  - `KaKeBo/KaKeBo.entitlements`
+  - `KaKeBoWidgetExtension.entitlements`
+- 整合性チェック: `scripts/check-appgroup.sh` で検証可能。pre-commit hook でも自動チェックされる
+
 ## よくある落とし穴
 
 - **DashboardCard の switch 漏れ**: enum にケースを追加したら `visibleCardsInOrder()` と `render()` 両方に追加すること

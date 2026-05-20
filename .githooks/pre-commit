@@ -1,0 +1,32 @@
+#!/bin/bash
+# pre-commit hook: AppGroup ID が変更されていないことを確認
+#
+# セットアップ: git config core.hooksPath .githooks
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# ステージングされたファイルに AppGroup 関連ファイルが含まれるか確認
+STAGED=$(git diff --cached --name-only)
+APPGROUP_FILES="AppGroup.swift KaKeBo.entitlements KaKeBoWidgetExtension.entitlements"
+
+NEED_CHECK=false
+for f in $APPGROUP_FILES; do
+    if echo "$STAGED" | grep -q "$f"; then
+        NEED_CHECK=true
+        break
+    fi
+done
+
+if [ "$NEED_CHECK" = true ]; then
+    echo "AppGroup 関連ファイルが変更されています。整合性チェックを実行..."
+    # ステージング済みの内容でチェック（ワーキングツリーではなく）
+    "$PROJECT_ROOT/scripts/check-appgroup.sh"
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "コミットを中止しました。AppGroup ID を元に戻してください。"
+        exit 1
+    fi
+fi
+
+exit 0
