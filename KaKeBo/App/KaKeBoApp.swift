@@ -149,11 +149,7 @@ struct KaKeBoApp: App {
             showDataRecovery = false
             return
         }
-        dataStore.restoreFromAutoBackup(
-            categories: payload.categories,
-            transactions: payload.transactions,
-            budgets: payload.budgets
-        )
+        dataStore.restoreFromAutoBackup(payload: payload)
         showDataRecovery = false
     }
 }

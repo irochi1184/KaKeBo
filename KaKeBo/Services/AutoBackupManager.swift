@@ -31,7 +31,7 @@ final class AutoBackupManager {
     // MARK: - 自動バックアップ実行
 
     /// データ保存時に呼び出す。最小間隔を超えていればバックアップを作成
-    func performIfNeeded(categories: [Category], transactions: [Transaction], budgets: [Budget]) {
+    func performIfNeeded(categories: [Category], transactions: [Transaction], budgets: [Budget], frequentTemplates: [FrequentTransactionTemplate]) {
         guard let dir = backupDir else { return }
         guard !transactions.isEmpty else { return } // 空データはバックアップしない
 
@@ -46,12 +46,44 @@ final class AutoBackupManager {
             categoryCount: categories.count
         )
 
+        // UserDefaults から追加データを収集
+        let defaults = UserDefaults.appGroup
+        let fixedExpenses: [FixedExpenseTemplate]? = {
+            defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
+            guard let data = defaults.migratedData(forKey: DataStore.fixedTemplatesKey) else { return nil }
+            return try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data)
+        }()
+        let recurringTodos: [RecurringTodoTemplate]? = {
+            guard let data = defaults.migratedData(forKey: "kakebo.recurring.templates") else { return nil }
+            return try? JSONDecoder().decode([RecurringTodoTemplate].self, from: data)
+        }()
+        let dayNotes: [String: String]? = {
+            guard let data = defaults.migratedData(forKey: "kakebo.daynotes.v1") else { return nil }
+            return try? JSONDecoder().decode([String: String].self, from: data)
+        }()
+        let monthStartSettings: MonthStartSettings? = {
+            let ud = UserDefaults(suiteName: AppGroup.id) ?? .standard
+            guard let data = ud.data(forKey: "kakebo.monthStart.settings") else { return nil }
+            return try? JSONDecoder().decode(MonthStartSettings.self, from: data)
+        }()
+        let theme: AppTheme? = {
+            let ud = UserDefaults(suiteName: AppGroup.id) ?? .standard
+            guard let data = ud.data(forKey: "kakebo.theme.data") else { return nil }
+            return try? JSONDecoder().decode(AppTheme.self, from: data)
+        }()
+
         // バックアップデータ作成
         let backup = AutoBackupPayload(
             metadata: metadata,
             categories: categories,
             transactions: transactions,
-            budgets: budgets
+            budgets: budgets,
+            fixedExpenses: fixedExpenses,
+            frequentTemplates: frequentTemplates.isEmpty ? nil : frequentTemplates,
+            recurringTodos: recurringTodos,
+            dayNotes: dayNotes,
+            monthStartSettings: monthStartSettings,
+            theme: theme
         )
 
         let encoder = JSONEncoder()
@@ -188,6 +220,13 @@ struct AutoBackupPayload: Codable {
     let categories: [Category]
     let transactions: [Transaction]
     let budgets: [Budget]
+    // UserDefaults に保存されている追加データ
+    var fixedExpenses: [FixedExpenseTemplate]?
+    var frequentTemplates: [FrequentTransactionTemplate]?
+    var recurringTodos: [RecurringTodoTemplate]?
+    var dayNotes: [String: String]?
+    var monthStartSettings: MonthStartSettings?
+    var theme: AppTheme?
 }
 
 struct BackupFileInfo: Identifiable {
