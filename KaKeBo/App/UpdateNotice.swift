@@ -73,22 +73,22 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "CSV/PDFデータ書き出し",
-            message: "取引データをCSVやPDFで書き出せるようになりました。カテゴリ別グラフや日別チャート付きのリッチなレポートを共有できます。",
-            symbol: "square.and.arrow.up",
+            title: "自動バックアップ",
+            message: "データ保存時に自動でバックアップを作成。万が一のデータトラブルにも安心です。",
+            symbol: "shield.checkered",
             tint: .blue
         ),
         Highlight(
-            title: "年間レポートPDF",
-            message: "レポート画面から年間レポートをPDFで出力。KPI・月別チャート・カテゴリ別ドーナツなど、1年の家計を一目で振り返れます。",
-            symbol: "doc.richtext",
-            tint: .purple
+            title: "データ復元アシスト",
+            message: "起動時にデータの消失を自動検知し、バックアップからの復元を提案します。",
+            symbol: "arrow.counterclockwise",
+            tint: .orange
         ),
         Highlight(
-            title: "週間サマリーカード",
-            message: "ホーム画面に今週の支出ペースを表示。先週との比較で使いすぎを早めにキャッチできます。",
-            symbol: "calendar.day.timeline.leading",
-            tint: .orange
+            title: "バックアップ範囲の拡大",
+            message: "電卓カラー・収支カラー・テーマスタイルなど、すべての設定がバックアップに含まれるようになりました。",
+            symbol: "paintpalette",
+            tint: .purple
         )
     ]
     /*
@@ -129,6 +129,12 @@ private struct UpdateNoticeContent: View {
      - PDF出力をアプリ内テーマカラーに統一
      - アップデート時の不要な画面表示を修正
      - 複数箇所の文字化けを修正
+     アップデート 2.3.3
+     - 自動バックアップ機能を追加（最大5世代、1時間間隔）
+     - 起動時データ消失検知＋復元提案UIを追加
+     - バックアップ範囲を拡大（電卓カラー・収支カラー・テーマスタイル等）
+     - AppGroup ID誤変更防止ガードを追加
+     - レポート画面のPDF共有シートが空白になる問題を修正
      */
 
     let accent: Color
@@ -206,7 +212,7 @@ private struct UpdateNoticeContent: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("データの書き出し・レポート出力・週間サマリーで、家計の振り返りがもっと簡単になりました。")
+            Text("自動バックアップとデータ復元機能で、大切な家計データをしっかり守ります。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
