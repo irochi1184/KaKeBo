@@ -101,6 +101,17 @@ struct BackupTheme: Codable {
     var useSameBackgroundForBoth: Bool
     var backgroundLightHex: String
     var backgroundDarkHex: String
+    // 電卓キーパッドカラー
+    var keypadIncomeHex: String?
+    var keypadExpenseHex: String?
+    // 収支表示カラー
+    var incomeHex: String?
+    var expenseHex: String?
+    // カードスタイル・ビジュアルスタイル
+    var homeCardStyleRaw: String?
+    var visualStyleRaw: String?
+    // 電卓設定
+    var prefersCustomKeypad: Bool?
 }
 
 extension UTType {

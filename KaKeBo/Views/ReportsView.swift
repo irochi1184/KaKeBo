@@ -31,7 +31,6 @@ struct ReportsView: View {
     @State private var excludedCategoryIds: Set<String> = []
     @State private var trendTarget: CategoryAnnual? = nil
     @State private var breakdownVersion: Int = 0
-    @State private var showPDFShare = false
     @State private var pdfExportURL: URL?
 
     private var accent: Color {
@@ -78,10 +77,8 @@ struct ReportsView: View {
                     .accessibilityLabel("年間レポートPDF")
                 }
             }
-            .sheet(isPresented: $showPDFShare) {
-                if let url = pdfExportURL {
-                    AnnualReportShareSheet(activityItems: [url])
-                }
+            .sheet(item: $pdfExportURL) { url in
+                AnnualReportShareSheet(activityItems: [url])
             }
 
             .navigationDestination(item: $trendTarget) { cat in
@@ -288,11 +285,14 @@ struct ReportsView: View {
         do {
             try data.write(to: url)
             pdfExportURL = url
-            showPDFShare = true
         } catch {
             print("PDF書き出しエラー: \(error)")
         }
     }
+}
+
+extension URL: @retroactive Identifiable {
+    public var id: String { absoluteString }
 }
 
 // MARK: - ShareSheet

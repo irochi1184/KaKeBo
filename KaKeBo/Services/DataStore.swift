@@ -233,15 +233,46 @@ final class DataStore: ObservableObject {
         AutoBackupManager.shared.performIfNeeded(
             categories: categories,
             transactions: transactions,
-            budgets: budgets
+            budgets: budgets,
+            frequentTemplates: frequentTemplates
         )
     }
 
     /// 自動バックアップからの完全復元
-    func restoreFromAutoBackup(categories: [Category], transactions: [Transaction], budgets: [Budget]) {
-        self.categories = categories
-        self.transactions = transactions
-        self.budgets = budgets
+    func restoreFromAutoBackup(payload: AutoBackupPayload) {
+        self.categories = payload.categories
+        self.transactions = payload.transactions
+        self.budgets = payload.budgets
+
+        // UserDefaults データの復元
+        let defaults = UserDefaults.appGroup
+
+        if let fixed = payload.fixedExpenses {
+            let data = try? JSONEncoder().encode(fixed)
+            defaults.set(data, forKey: DataStore.fixedTemplatesKey)
+        }
+        if let templates = payload.frequentTemplates {
+            replaceFrequentTemplatesForBackupImport(templates)
+        }
+        if let todos = payload.recurringTodos {
+            let data = try? JSONEncoder().encode(todos)
+            defaults.set(data, forKey: "kakebo.recurring.templates")
+        }
+        if let notes = payload.dayNotes {
+            let data = try? JSONEncoder().encode(notes)
+            defaults.set(data, forKey: "kakebo.daynotes.v1")
+            NotificationCenter.default.post(name: .dayNotesDidRestoreFromBackup, object: nil)
+        }
+        if let ms = payload.monthStartSettings {
+            let data = try? JSONEncoder().encode(ms)
+            let ud = UserDefaults(suiteName: AppGroup.id) ?? .standard
+            ud.set(data, forKey: "kakebo.monthStart.settings")
+        }
+        if let theme = payload.theme {
+            let data = try? JSONEncoder().encode(theme)
+            let ud = UserDefaults(suiteName: AppGroup.id) ?? .standard
+            ud.set(data, forKey: "kakebo.theme.data")
+        }
         save()
     }
 

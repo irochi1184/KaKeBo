@@ -96,7 +96,14 @@ extension DataStore {
                 accentDarkHex:  colorToHex(t.accentDarkRGBA.swiftUIColor),
                 useSameBackgroundForBoth: t.useSameBackgroundForBoth,
                 backgroundLightHex: colorToHex(t.backgroundLightRGBA.swiftUIColor),
-                backgroundDarkHex:  colorToHex(t.backgroundDarkRGBA.swiftUIColor)
+                backgroundDarkHex:  colorToHex(t.backgroundDarkRGBA.swiftUIColor),
+                keypadIncomeHex: colorToHex(t.keypadIncomeRGBA.swiftUIColor),
+                keypadExpenseHex: colorToHex(t.keypadExpenseRGBA.swiftUIColor),
+                incomeHex: colorToHex(t.incomeRGBA.swiftUIColor),
+                expenseHex: colorToHex(t.expenseRGBA.swiftUIColor),
+                homeCardStyleRaw: t.homeCardStyle.rawValue,
+                visualStyleRaw: t.visualStyle.rawValue,
+                prefersCustomKeypad: t.prefersCustomKeypad
             )
         }()
 
@@ -243,7 +250,18 @@ extension DataStore {
             working.useSameBackgroundForBoth = th.useSameBackgroundForBoth
             if let c = hexToColor(th.backgroundLightHex) { working.backgroundLightRGBA = .init(c) }
             if let c = hexToColor(th.backgroundDarkHex)  { working.backgroundDarkRGBA  = .init(c) }
-            
+            // 電卓キーパッドカラー
+            if let hex = th.keypadIncomeHex, let c = hexToColor(hex) { working.keypadIncomeRGBA = .init(c) }
+            if let hex = th.keypadExpenseHex, let c = hexToColor(hex) { working.keypadExpenseRGBA = .init(c) }
+            // 収支表示カラー
+            if let hex = th.incomeHex, let c = hexToColor(hex) { working.incomeRGBA = .init(c) }
+            if let hex = th.expenseHex, let c = hexToColor(hex) { working.expenseRGBA = .init(c) }
+            // カードスタイル・ビジュアルスタイル
+            if let raw = th.homeCardStyleRaw, let style = AppTheme.HomeCardStyle(rawValue: raw) { working.homeCardStyle = style }
+            if let raw = th.visualStyleRaw, let style = AppTheme.VisualStyle(rawValue: raw) { working.visualStyle = style }
+            // 電卓設定
+            if let pref = th.prefersCustomKeypad { working.prefersCustomKeypad = pref }
+
             applyTheme?(working)
         }
         
