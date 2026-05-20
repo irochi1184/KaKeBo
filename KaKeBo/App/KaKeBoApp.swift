@@ -23,11 +23,14 @@ struct KaKeBoApp: App {
     @StateObject private var appRoute = AppRoute()
     
     @Environment(\.scenePhase) private var scenePhase
-    
+
     // 初回だけロックをかける制御
     @State private var didInitialAppear = false
     // iOS16向けの旧onChange用に前回フェーズも保持
     @State private var lastPhase: ScenePhase = .active
+    // データ復元提案
+    @State private var showDataRecovery = false
+    @State private var dataLossResult: DataLossCheckResult = .ok
     
     var body: some Scene {
         WindowGroup {
@@ -96,7 +99,7 @@ struct KaKeBoApp: App {
                         }
                     }
                 }
-            // 初回起動時のみ、ロック有効ならロック
+            // 初回起動時のみ、ロック有効ならロック＋データ消失チェック
                 .onAppear {
                     ReviewRequestManager.shared.registerFirstLaunchIfNeeded()
                     if !didInitialAppear {
@@ -104,7 +107,26 @@ struct KaKeBoApp: App {
                         if lock.isEnabled {
                             lock.isLocked = true
                         }
+                        // データ消失チェック
+                        let result = AutoBackupManager.shared.detectDataLoss(
+                            currentTransactionCount: dataStore.transactions.count
+                        )
+                        if result.needsRecovery {
+                            dataLossResult = result
+                            showDataRecovery = true
+                        }
                     }
+                }
+                .fullScreenCover(isPresented: $showDataRecovery) {
+                    DataRecoveryView(
+                        lossResult: dataLossResult,
+                        onRestore: { backupInfo in
+                            restoreFromAutoBackup(backupInfo)
+                        },
+                        onSkip: {
+                            showDataRecovery = false
+                        }
+                    )
                 }
             // iOS 17 以降は2引数 onChange を使い、background→active のみでロック
                 .modifier(ScenePhaseLockGate(scenePhase: scenePhase, lock: lock, lastPhase: $lastPhase))
@@ -120,6 +142,19 @@ struct KaKeBoApp: App {
                         .interactiveDismissDisabled(true)
                 }
         }
+    }
+
+    private func restoreFromAutoBackup(_ info: BackupFileInfo) {
+        guard let payload = AutoBackupManager.shared.restore(from: info) else {
+            showDataRecovery = false
+            return
+        }
+        dataStore.restoreFromAutoBackup(
+            categories: payload.categories,
+            transactions: payload.transactions,
+            budgets: payload.budgets
+        )
+        showDataRecovery = false
     }
 }
 
