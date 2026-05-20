@@ -36,9 +36,62 @@ final class DataStore: ObservableObject {
         // 旧ドキュメントからの一度きりの移行（既存ユーザー救済）
         migrateFromDocumentsIfNeeded(to: base)
 
+        // v2.3.1 で誤った AppGroup コンテナに書き込まれたデータの復旧
+        recoverFromWrongAppGroup(correctBase: base)
+
         load()
         if categories.isEmpty { seed() }
         loadFrequentTemplates()
+    }
+
+    /// v2.3.1 で誤って使用された AppGroup コンテナからデータを復旧
+    private func recoverFromWrongAppGroup(correctBase: URL) {
+        let recoveredKey = "kakebo.v231.recovery.done"
+        let defaults = UserDefaults.appGroup
+        if defaults.bool(forKey: recoveredKey) { return }
+
+        // 誤った AppGroup ID（v2.3.1 で一時的に使用されたもの）
+        let wrongGroupId = "group.com.irochi.KaKeBo"
+        guard let wrongBase = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: wrongGroupId) else {
+            defaults.set(true, forKey: recoveredKey)
+            return
+        }
+
+        let fm = FileManager.default
+        let txCorrect = correctBase.appendingPathComponent("transactions.json")
+        let txWrong = wrongBase.appendingPathComponent("transactions.json")
+
+        // 誤ったコンテナに取引データがなければ復旧不要
+        guard fm.fileExists(atPath: txWrong.path),
+              let wrongData = try? Data(contentsOf: txWrong),
+              wrongData.count > 10 else {
+            defaults.set(true, forKey: recoveredKey)
+            return
+        }
+
+        // 誤ったコンテナのほうが取引データが大きい（＝実データがある）場合に復旧
+        let correctSize = (try? fm.attributesOfItem(atPath: txCorrect.path)[.size] as? Int) ?? 0
+        let wrongSize = (try? fm.attributesOfItem(atPath: txWrong.path)[.size] as? Int) ?? 0
+
+        if wrongSize > correctSize {
+            let files = ["categories.json", "transactions.json", "budgets.json"]
+            for name in files {
+                let src = wrongBase.appendingPathComponent(name)
+                let dest = correctBase.appendingPathComponent(name)
+                guard fm.fileExists(atPath: src.path) else { continue }
+                do {
+                    if fm.fileExists(atPath: dest.path) {
+                        try fm.removeItem(at: dest)
+                    }
+                    try fm.copyItem(at: src, to: dest)
+#if DEBUG
+                    print("✅ Recovered \(name) from wrong AppGroup container.")
+#endif
+                } catch { print("Recovery error(\(name)):", error) }
+            }
+        }
+
+        defaults.set(true, forKey: recoveredKey)
     }
 
     private func migrateFromDocumentsIfNeeded(to appGroupBase: URL) {
@@ -143,21 +196,23 @@ final class DataStore: ObservableObject {
 
     public func save() {
         saveJSON(categories, to: categoriesURL)
-        
+
         let dtos: [TransactionDTO] = transactions.map { tx in
             let typeStr: String
             switch tx.type { case .income: typeStr = "income"; case .expense: typeStr = "expense" }
             return TransactionDTO(id: tx.id, date: tx.date, amount: tx.amount, type: typeStr, categoryId: tx.categoryId, memo: tx.memo, tags: tx.tags)
         }
         saveJSON(dtos, to: transactionsURL)
-        
+
         saveJSON(budgets, to: budgetsURL)
         WidgetCenter.shared.reloadAllTimelines()
+        triggerAutoBackup()
     }
 
     private func saveCategories() {
         saveJSON(categories, to: categoriesURL)
         WidgetCenter.shared.reloadAllTimelines()
+        triggerAutoBackup()
     }
     private func saveTransactions() {
         let dtos: [TransactionDTO] = transactions.map { tx in
@@ -167,10 +222,27 @@ final class DataStore: ObservableObject {
         }
         saveJSON(dtos, to: transactionsURL)
         WidgetCenter.shared.reloadAllTimelines()
+        triggerAutoBackup()
     }
     private func saveBudgets() {
         saveJSON(budgets, to: budgetsURL)
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    private func triggerAutoBackup() {
+        AutoBackupManager.shared.performIfNeeded(
+            categories: categories,
+            transactions: transactions,
+            budgets: budgets
+        )
+    }
+
+    /// 自動バックアップからの完全復元
+    func restoreFromAutoBackup(categories: [Category], transactions: [Transaction], budgets: [Budget]) {
+        self.categories = categories
+        self.transactions = transactions
+        self.budgets = budgets
+        save()
     }
 
     private func loadJSON<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
