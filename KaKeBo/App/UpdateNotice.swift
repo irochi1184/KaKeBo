@@ -73,22 +73,22 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "自動バックアップ",
-            message: "データ保存時に自動でバックアップを作成。万が一のデータトラブルにも安心です。",
-            symbol: "shield.checkered",
+            title: "ロック画面ウィジェット",
+            message: "ロック画面から今月の収支をサッと確認。円形ゲージ・横長・インラインの3種類に対応しました。",
+            symbol: "lock.square",
             tint: .blue
         ),
         Highlight(
-            title: "データ復元アシスト",
-            message: "起動時にデータの消失を自動検知し、バックアップからの復元を提案します。",
-            symbol: "arrow.counterclockwise",
-            tint: .orange
+            title: "iCloud自動バックアップ",
+            message: "iCloud Driveに自動バックアップ。機種変更時にも復元を提案し、大切なデータを守ります。",
+            symbol: "icloud.fill",
+            tint: .cyan
         ),
         Highlight(
-            title: "バックアップ範囲の拡大",
-            message: "電卓カラー・収支カラー・テーマスタイルなど、すべての設定がバックアップに含まれるようになりました。",
-            symbol: "paintpalette",
-            tint: .purple
+            title: "カテゴリ削除の改善",
+            message: "カテゴリ削除時に取引を「未分類」に移動できるようになりました。大切な記録を失いません。",
+            symbol: "folder.badge.minus",
+            tint: .orange
         )
     ]
     /*
@@ -135,6 +135,14 @@ private struct UpdateNoticeContent: View {
      - バックアップ範囲を拡大（電卓カラー・収支カラー・テーマスタイル等）
      - AppGroup ID誤変更防止ガードを追加
      - レポート画面のPDF共有シートが空白になる問題を修正
+     アップデート 2.3.4
+     - ロック画面ウィジェット対応（円形ゲージ・横長・インライン）
+     - iCloud Drive自動バックアップ機能を追加
+     - 機種変更時のiCloudからの自動復元提案を追加
+     - カテゴリ削除時に取引を「未分類」に移動するオプションを追加
+     - 自動バックアップ処理をバックグラウンドキュー化
+     - データ復元画面にiCloudバックアップを統合表示
+     - デバッグコードを#if DEBUGガードで保護
      */
 
     let accent: Color
@@ -212,7 +220,7 @@ private struct UpdateNoticeContent: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("自動バックアップとデータ復元機能で、大切な家計データをしっかり守ります。")
+            Text("ロック画面ウィジェットとiCloudバックアップで、いつでもどこでも家計管理。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

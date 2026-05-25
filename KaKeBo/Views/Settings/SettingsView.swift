@@ -612,12 +612,47 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // iCloud 自動バックアップ
+            HStack {
+                Label {
+                    Text("iCloud自動バックアップ")
+                } icon: {
+                    Image(systemName: "icloud.fill")
+                        .foregroundStyle(accent)
+                }
+                Spacer()
+                if ICloudBackupManager.shared.isAvailable {
+                    Toggle("", isOn: Binding(
+                        get: { ICloudBackupManager.shared.isEnabled },
+                        set: { ICloudBackupManager.shared.isEnabled = $0 }
+                    ))
+                    .labelsHidden()
+                } else {
+                    Text("利用不可")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if ICloudBackupManager.shared.isEnabled, let lastDate = ICloudBackupManager.shared.lastBackupDate {
+                HStack {
+                    Spacer()
+                    Text("最終: \(lastDate.formatted(.dateTime.month().day().hour().minute()))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
         } header: {
             Text("バックアップ・書き出し")
         } footer: {
-            Text("バックアップの作成・復元、またはCSV/PDFでデータを書き出せます。")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            if ICloudBackupManager.shared.isAvailable {
+                Text("iCloud自動バックアップをONにすると、Filesアプリの「iCloud Drive > KaKeBo > Backups」に定期保存されます。機種変更時にも自動で復元を提案します。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("バックアップの作成・復元、またはCSV/PDFでデータを書き出せます。iCloudバックアップを使うにはiCloudにサインインしてください。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
     }

@@ -207,6 +207,7 @@ final class DataStore: ObservableObject {
         saveJSON(budgets, to: budgetsURL)
         WidgetCenter.shared.reloadAllTimelines()
         triggerAutoBackup()
+        PhoneSessionManager.shared.pushUpdate()
     }
 
     private func saveCategories() {
@@ -347,6 +348,25 @@ extension DataStore {
         transactions.removeAll { ids.contains($0.categoryId) }
         frequentTemplates.removeAll { ids.contains($0.categoryId) }
         save()
+    }
+
+    /// 未分類カテゴリを表す固定UUID（どのカテゴリにも一致しないため「未分類」として表示される）
+    static let uncategorizedID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+
+    /// カテゴリを削除し、紐づく取引は未分類（固定ID）に移動
+    func deleteCategoriesMovingTransactions(with ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        for i in transactions.indices where ids.contains(transactions[i].categoryId) {
+            transactions[i].categoryId = Self.uncategorizedID
+        }
+        categories.removeAll { ids.contains($0.id) }
+        frequentTemplates.removeAll { ids.contains($0.categoryId) }
+        save()
+    }
+
+    /// 指定カテゴリIDに紐づく取引の件数を返す
+    func transactionCount(for categoryIDs: [UUID]) -> Int {
+        transactions.filter { categoryIDs.contains($0.categoryId) }.count
     }
     
     /// 固定費テンプレートの保存領域（SettingsView でも使う）

@@ -402,6 +402,12 @@ struct KaKeBoWidgetEntryView: View {
                 mediumLayout
             case .systemLarge:
                 largeLayout
+            case .accessoryCircular:
+                accessoryCircularLayout
+            case .accessoryRectangular:
+                accessoryRectangularLayout
+            case .accessoryInline:
+                accessoryInlineLayout
             default:
                 regularLayout
             }
@@ -516,6 +522,64 @@ struct KaKeBoWidgetEntryView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .padding(3)
+    }
+
+    // MARK: - ロック画面ウィジェット
+
+    /// 円形ゲージ: 今月の支出額をリング表示
+    private var accessoryCircularLayout: some View {
+        let expense = entry.payload.summary.expense
+        let income = entry.payload.summary.income
+        // 収入に対する支出割合（収入0の場合は支出があれば100%）
+        let ratio: Double = income > 0 ? min(Double(expense) / Double(income), 1.0) : (expense > 0 ? 1.0 : 0.0)
+
+        return Gauge(value: ratio) {
+            Image(systemName: "yensign")
+        } currentValueLabel: {
+            Text(compactCurrency(expense))
+                .font(.system(.caption2, design: .rounded).weight(.semibold))
+        }
+        .gaugeStyle(.accessoryCircular)
+    }
+
+    /// 横長: 支出/収入/収支の3行表示
+    private var accessoryRectangularLayout: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("今月の収支")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .widgetAccentable()
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.down.left")
+                    .font(.caption2)
+                Text(compactCurrency(entry.payload.summary.expense))
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .monospacedDigit()
+            }
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.right")
+                    .font(.caption2)
+                Text(compactCurrency(entry.payload.summary.income))
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    /// インライン: 1行テキスト
+    private var accessoryInlineLayout: some View {
+        let balance = entry.payload.summary.balance
+        let sign = balance >= 0 ? "+" : ""
+        return Text("収支 \(sign)\(compactCurrency(balance))")
+    }
+
+    /// ロック画面向けのコンパクト通貨フォーマット
+    private func compactCurrency(_ n: Int) -> String {
+        if abs(n) >= 10000 {
+            let man = Double(n) / 10000.0
+            return String(format: "%.1f万", man)
+        }
+        return "¥\(n)"
     }
 
     private var weekdayHeader: some View {
@@ -672,6 +736,6 @@ struct KaKeBoWidget: Widget {
         }
         .configurationDisplayName("家計簿サマリー")
         .description("今月の支出/収入/収支やカレンダーを表示します。")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }

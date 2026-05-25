@@ -119,8 +119,18 @@ struct DataRecoveryView: View {
                 .padding(.bottom, 24)
             }
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                backups = AutoBackupManager.shared.availableBackups()
+            .task {
+                // ローカルバックアップ + iCloud バックアップを統合（新しい順）
+                let localBackups = AutoBackupManager.shared.availableBackups()
+                let cloudBackups = ICloudBackupManager.shared.availableBackups()
+                var allBackups = localBackups
+                // 重複回避: 同じ日時のバックアップは除外
+                for cb in cloudBackups {
+                    if !allBackups.contains(where: { abs($0.date.timeIntervalSince(cb.date)) < 60 }) {
+                        allBackups.append(cb)
+                    }
+                }
+                backups = allBackups.sorted { $0.date > $1.date }
                 selectedBackup = backups.first
             }
         }

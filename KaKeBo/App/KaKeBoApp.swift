@@ -51,8 +51,8 @@ struct KaKeBoApp: App {
                     }
                 }
                 .task {
-//                    debugAppGroupFiles()
                     await purchase.load()
+                    PhoneSessionManager.shared.configure(with: dataStore)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .cloudKitShareAccepted)) { _ in
                     let metadatas = CloudKitShareAcceptanceQueue.shared.drain()
@@ -113,6 +113,13 @@ struct KaKeBoApp: App {
                         )
                         if result.needsRecovery {
                             dataLossResult = result
+                            showDataRecovery = true
+                        }
+                        // iCloud からの復元チェック（ローカルが空で iCloud にバックアップがある場合）
+                        else if let cloudBackup = ICloudBackupManager.shared.checkForCloudRestore(
+                            currentTransactionCount: dataStore.transactions.count
+                        ) {
+                            dataLossResult = .totalLoss(lastKnownCount: cloudBackup.transactionCount)
                             showDataRecovery = true
                         }
                     }
@@ -187,24 +194,23 @@ private struct ScenePhaseLockGate: ViewModifier {
     }
 }
 
+#if DEBUG
 func debugAppGroups() {
     let groups = [
         "group.com.irochiTech.KaKeBo",
         "group.com.irochi.KaKeBo"
     ]
-    
+
     for id in groups {
         let ud = UserDefaults(suiteName: id)
-        
+
         let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id)
-        print("✅ AppGroup:", id)
+        print("AppGroup:", id)
         print("  - containerURL:", url?.path ?? "nil")
-        
-        // 目印キーを書いて読めるか（アクセス可否確認）
+
         ud?.set(Date().description, forKey: "debug_group_probe")
         print("  - probe:", ud?.string(forKey: "debug_group_probe") ?? "nil")
-        
-        // そのグループの UserDefaults に何個キーがあるか（どっちに実データが居そうかのヒント）
+
         let count = ud?.dictionaryRepresentation().keys.count ?? -1
         print("  - keys:", count)
     }
@@ -215,16 +221,16 @@ func debugAppGroupsDeep() {
         "group.com.irochiTech.KaKeBo",
         "group.com.irochi.KaKeBo"
     ]
-    
+
     for id in groups {
-        let ud = UserDefaults(suiteName: id)!
+        guard let ud = UserDefaults(suiteName: id) else { continue }
         let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id)
-        
+
         let keys = ud.dictionaryRepresentation().keys
             .filter { $0 != "debug_group_probe" }
             .sorted()
-        
-        print("✅ AppGroup:", id)
+
+        print("AppGroup:", id)
         print("  - containerURL:", url?.path ?? "nil")
         print("  - keys(\(keys.count)):", keys)
     }
@@ -235,19 +241,18 @@ func debugAppGroupFiles() {
         "group.com.irochiTech.KaKeBo",
         "group.com.irochi.KaKeBo"
     ]
-    
+
     let fm = FileManager.default
-    
+
     for id in groups {
         guard let base = fm.containerURL(forSecurityApplicationGroupIdentifier: id) else {
-            print("❌ AppGroup:", id, "containerURL nil")
+            print("AppGroup:", id, "containerURL nil")
             continue
         }
-        
-        print("✅ AppGroup:", id)
+
+        print("AppGroup:", id)
         print("  - base:", base.path)
-        
-        // 直下を一覧
+
         if let items = try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey], options: []) {
             for u in items.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
                 let values = try? u.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])
@@ -256,8 +261,7 @@ func debugAppGroupFiles() {
                 print("  -", isDir ? "[DIR]" : "[FILE]", u.lastPathComponent, "size:", size)
             }
         }
-        
-        // よくある保存先もざっくり探す
+
         let candidates = [
             base.appendingPathComponent("Library"),
             base.appendingPathComponent("Documents"),
@@ -270,3 +274,4 @@ func debugAppGroupFiles() {
         }
     }
 }
+#endif
