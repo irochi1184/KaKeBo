@@ -31,6 +31,7 @@ struct CategoryListView: View {
     
     // 個人用カテゴリ削除確認
     @State private var pendingDeleteIDs: [UUID] = []
+    @State private var pendingDeleteTxCount: Int = 0
     @State private var showDeleteConfirm = false
     
     // 共有カテゴリ削除確認
@@ -130,7 +131,13 @@ struct CategoryListView: View {
                 isPresented: $showDeleteConfirm,
                 titleVisibility: .visible
             ) {
-                Button("削除（家計簿データも削除）", role: .destructive) {
+                if pendingDeleteTxCount > 0 {
+                    Button("取引を未分類に移動してカテゴリのみ削除") {
+                        store.deleteCategoriesMovingTransactions(with: pendingDeleteIDs)
+                        pendingDeleteIDs.removeAll()
+                    }
+                }
+                Button("カテゴリと取引をすべて削除（\(pendingDeleteTxCount)件）", role: .destructive) {
                     store.deleteCategories(with: pendingDeleteIDs)
                     pendingDeleteIDs.removeAll()
                 }
@@ -138,7 +145,11 @@ struct CategoryListView: View {
                     pendingDeleteIDs.removeAll()
                 }
             } message: {
-                Text("選択したカテゴリに紐づく家計簿の記録もすべて削除されます。よろしいですか？")
+                if pendingDeleteTxCount > 0 {
+                    Text("このカテゴリには \(pendingDeleteTxCount) 件の取引があります。取引を未分類に移動するか、カテゴリと一緒に削除するか選んでください。")
+                } else {
+                    Text("このカテゴリを削除します。紐づく取引はありません。")
+                }
             }
             
             // 共有用削除確認
@@ -286,6 +297,7 @@ private extension CategoryListView {
             }
             .onDelete { idx in
                 pendingDeleteIDs = idx.map { store.categories[$0].id }
+                pendingDeleteTxCount = store.transactionCount(for: pendingDeleteIDs)
                 showDeleteConfirm = true
             }
             .onMove(perform: store.moveCategories)

@@ -18,6 +18,7 @@ final class AutoBackupManager {
     private let minimumInterval: TimeInterval = 3600 // 1時間
     private let backupDirName = "backups"
     private let metadataFileName = "backup_metadata.json"
+    private let backupQueue = DispatchQueue(label: "com.irochi.KaKeBo.autoBackup", qos: .utility)
 
     private var backupDir: URL? {
         guard let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.id) else { return nil }
@@ -40,71 +41,48 @@ final class AutoBackupManager {
             return
         }
 
-        let metadata = BackupMetadata(
-            date: Date(),
-            transactionCount: transactions.count,
-            categoryCount: categories.count
-        )
-
-        // UserDefaults から追加データを収集
-        let defaults = UserDefaults.appGroup
-        let fixedExpenses: [FixedExpenseTemplate]? = {
-            defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
-            guard let data = defaults.migratedData(forKey: DataStore.fixedTemplatesKey) else { return nil }
-            return try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data)
-        }()
-        let recurringTodos: [RecurringTodoTemplate]? = {
-            guard let data = defaults.migratedData(forKey: "kakebo.recurring.templates") else { return nil }
-            return try? JSONDecoder().decode([RecurringTodoTemplate].self, from: data)
-        }()
-        let dayNotes: [String: String]? = {
-            guard let data = defaults.migratedData(forKey: "kakebo.daynotes.v1") else { return nil }
-            return try? JSONDecoder().decode([String: String].self, from: data)
-        }()
-        let monthStartSettings: MonthStartSettings? = {
-            let ud = UserDefaults(suiteName: AppGroup.id) ?? .standard
-            guard let data = ud.data(forKey: "kakebo.monthStart.settings") else { return nil }
-            return try? JSONDecoder().decode(MonthStartSettings.self, from: data)
-        }()
-        let theme: AppTheme? = {
-            let ud = UserDefaults(suiteName: AppGroup.id) ?? .standard
-            guard let data = ud.data(forKey: "kakebo.theme.data") else { return nil }
-            return try? JSONDecoder().decode(AppTheme.self, from: data)
-        }()
-
-        // バックアップデータ作成
-        let backup = AutoBackupPayload(
-            metadata: metadata,
+        // 共通ビルダーでペイロード作成（メインスレッドでデータ取得）
+        let backup = AutoBackupPayload.buildFromCurrent(
             categories: categories,
             transactions: transactions,
             budgets: budgets,
-            fixedExpenses: fixedExpenses,
-            frequentTemplates: frequentTemplates.isEmpty ? nil : frequentTemplates,
-            recurringTodos: recurringTodos,
-            dayNotes: dayNotes,
-            monthStartSettings: monthStartSettings,
-            theme: theme
+            frequentTemplates: frequentTemplates
         )
 
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(backup) else { return }
+        // ファイルI/Oはバックグラウンドキューで実行
+        backupQueue.async { [weak self] in
+            guard let self else { return }
 
-        // ファイル名にタイムスタンプ
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let fileName = "auto_\(formatter.string(from: Date())).json"
-        let fileURL = dir.appendingPathComponent(fileName)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            guard let data = try? encoder.encode(backup) else { return }
 
-        do {
-            try data.write(to: fileURL, options: .atomic)
-            pruneOldBackups()
-            saveMetadata(metadata)
-        } catch {
-            #if DEBUG
-            print("AutoBackup write error: \(error)")
-            #endif
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyyMMdd_HHmmss"
+            let fileName = "auto_\(formatter.string(from: Date())).json"
+            let fileURL = dir.appendingPathComponent(fileName)
+
+            do {
+                try data.write(to: fileURL, options: .atomic)
+                self.pruneOldBackups()
+                // メタデータはメインスレッドから読まれるため、書き込みもメインで行い競合を防ぐ
+                DispatchQueue.main.async {
+                    self.saveMetadata(backup.metadata)
+                }
+            } catch {
+                #if DEBUG
+                print("AutoBackup write error: \(error)")
+                #endif
+            }
         }
+
+        // iCloud Drive にも保存
+        ICloudBackupManager.shared.performIfNeeded(
+            categories: categories,
+            transactions: transactions,
+            budgets: budgets,
+            frequentTemplates: frequentTemplates
+        )
     }
 
     // MARK: - バックアップ一覧・復元
@@ -170,7 +148,7 @@ final class AutoBackupManager {
     }
 
     private func latestBackupDate() -> Date? {
-        availableBackups().first?.date
+        loadMetadata()?.date
     }
 
     private func pruneOldBackups() {
@@ -227,6 +205,51 @@ struct AutoBackupPayload: Codable {
     var dayNotes: [String: String]?
     var monthStartSettings: MonthStartSettings?
     var theme: AppTheme?
+
+    /// 現在のデータからバックアップペイロードを構築
+    static func buildFromCurrent(categories: [Category], transactions: [Transaction], budgets: [Budget], frequentTemplates: [FrequentTransactionTemplate]) -> AutoBackupPayload {
+        let defaults = UserDefaults.appGroup
+        let fixedExpenses: [FixedExpenseTemplate]? = {
+            defaults.migrateIfNeeded(keys: [DataStore.fixedTemplatesKey])
+            guard let data = defaults.migratedData(forKey: DataStore.fixedTemplatesKey) else { return nil }
+            return try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data)
+        }()
+        let recurringTodos: [RecurringTodoTemplate]? = {
+            guard let data = defaults.migratedData(forKey: "kakebo.recurring.templates") else { return nil }
+            return try? JSONDecoder().decode([RecurringTodoTemplate].self, from: data)
+        }()
+        let dayNotes: [String: String]? = {
+            guard let data = defaults.migratedData(forKey: "kakebo.daynotes.v1") else { return nil }
+            return try? JSONDecoder().decode([String: String].self, from: data)
+        }()
+        let monthStartSettings: MonthStartSettings? = {
+            let ud = UserDefaults(suiteName: AppGroup.id) ?? .standard
+            guard let data = ud.data(forKey: "kakebo.monthStart.settings") else { return nil }
+            return try? JSONDecoder().decode(MonthStartSettings.self, from: data)
+        }()
+        let theme: AppTheme? = {
+            let ud = UserDefaults(suiteName: AppGroup.id) ?? .standard
+            guard let data = ud.data(forKey: "kakebo.theme.data") else { return nil }
+            return try? JSONDecoder().decode(AppTheme.self, from: data)
+        }()
+
+        return AutoBackupPayload(
+            metadata: BackupMetadata(
+                date: Date(),
+                transactionCount: transactions.count,
+                categoryCount: categories.count
+            ),
+            categories: categories,
+            transactions: transactions,
+            budgets: budgets,
+            fixedExpenses: fixedExpenses,
+            frequentTemplates: frequentTemplates.isEmpty ? nil : frequentTemplates,
+            recurringTodos: recurringTodos,
+            dayNotes: dayNotes,
+            monthStartSettings: monthStartSettings,
+            theme: theme
+        )
+    }
 }
 
 struct BackupFileInfo: Identifiable {
