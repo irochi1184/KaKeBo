@@ -417,7 +417,7 @@ extension DataStore {
         // テンプレ取得
         let defaults = UserDefaults.appGroup
         defaults.migrateIfNeeded(keys: [Self.fixedTemplatesKey])
-        let templates = (try? JSONDecoder().decode([FixedExpenseTemplate].self,
+        var templates = (try? JSONDecoder().decode([FixedExpenseTemplate].self,
                                                    from: defaults.migratedData(forKey: Self.fixedTemplatesKey) ?? Data())) ?? []
 
         guard templates.contains(where: { $0.isActive }) else { return }
