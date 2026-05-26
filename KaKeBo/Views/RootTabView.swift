@@ -59,7 +59,7 @@ struct RootTabView: View {
         .environment(\.appHomeCardStyle, themeStore.theme.homeCardStyle)
         .environment(\.appIncomeColor, themeStore.theme.transactionColor(isIncome: true))
         .environment(\.appExpenseColor, themeStore.theme.transactionColor(isIncome: false))
-        .fontDesign(themeStore.theme.visualStyle == .business ? .default : .rounded)
+        .modifier(AppFontModifier(fontFamily: themeStore.theme.resolvedFontFamily))
         .tint(themeStore.theme.accentColor(for: scheme))
     }
 

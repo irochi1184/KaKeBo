@@ -114,10 +114,24 @@ struct FixedExpenseSettingsView: View {
                                         Text("無効").font(.caption2).padding(.horizontal,6).padding(.vertical,2)
                                             .background(Capsule().fill(Color.secondary.opacity(0.15)))
                                     }
+                                    if t.isRepeatLimitReached {
+                                        Text("完了").font(.caption2).padding(.horizontal,6).padding(.vertical,2)
+                                            .foregroundStyle(.white)
+                                            .background(Capsule().fill(Color.green))
+                                    }
                                 }
                                 HStack(spacing:6) {
                                     Text("金額 \(yen(t.amount))").font(.caption).foregroundStyle(.secondary)
                                     Text("毎月 \(dayText(t.dayOfMonth))").font(.caption).foregroundStyle(.secondary)
+                                }
+                                if !t.repeatStatusText.isEmpty {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.triangle.2.circlepath")
+                                            .font(.caption2)
+                                        Text(t.repeatStatusText)
+                                            .font(.caption2)
+                                    }
+                                    .foregroundStyle(.secondary)
                                 }
                             }
                             Spacer()

@@ -65,6 +65,143 @@ struct RGBAColor: Codable, Equatable {
     var swiftUIColor: Color { Color(.sRGB, red: r, green: g, blue: b, opacity: a) }
 }
 
+// MARK: - フォントファミリー
+enum AppFontFamily: String, Codable, CaseIterable, Identifiable {
+    // 無料（3種）
+    case systemDefault = "systemDefault"
+    case rounded = "rounded"
+    case serif = "serif"
+
+    // プレミアム - システム
+    case monospaced = "monospaced"
+
+    // プレミアム - 日本語フォント
+    case hiraginoSans = "hiraginoSans"
+    case hiraginoMincho = "hiraginoMincho"
+    case kleeOne = "kleeOne"
+    case tsukushiAMaru = "tsukushiAMaru"
+    case tsukushiBMaru = "tsukushiBMaru"
+    case toppanBunkyuGothic = "toppanBunkyuGothic"
+    case toppanBunkyuMincho = "toppanBunkyuMincho"
+    case yuGothic = "yuGothic"
+    case yuMincho = "yuMincho"
+
+    // プレミアム - 欧文フォント
+    case avenirNext = "avenirNext"
+    case futura = "futura"
+    case georgia = "georgia"
+    case didot = "didot"
+    case copperplate = "copperplate"
+    case americanTypewriter = "americanTypewriter"
+    case helveticaNeue = "helveticaNeue"
+    case palatino = "palatino"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .systemDefault:        return "システム標準"
+        case .rounded:              return "丸ゴシック"
+        case .serif:                return "セリフ"
+        case .monospaced:           return "等幅"
+        case .hiraginoSans:         return "ヒラギノ角ゴ"
+        case .hiraginoMincho:       return "ヒラギノ明朝"
+        case .kleeOne:              return "クレー"
+        case .tsukushiAMaru:        return "筑紫A丸ゴシック"
+        case .tsukushiBMaru:        return "筑紫B丸ゴシック"
+        case .toppanBunkyuGothic:   return "凸版文久ゴシック"
+        case .toppanBunkyuMincho:   return "凸版文久明朝"
+        case .yuGothic:             return "游ゴシック"
+        case .yuMincho:             return "游明朝"
+        case .avenirNext:           return "Avenir Next"
+        case .futura:               return "Futura"
+        case .georgia:              return "Georgia"
+        case .didot:                return "Didot"
+        case .copperplate:          return "Copperplate"
+        case .americanTypewriter:   return "American Typewriter"
+        case .helveticaNeue:        return "Helvetica Neue"
+        case .palatino:             return "Palatino"
+        }
+    }
+
+    var isFree: Bool {
+        switch self {
+        case .systemDefault, .rounded, .serif: return true
+        default: return false
+        }
+    }
+
+    /// .fontDesign() で適用可能なシステムデザイン
+    var fontDesign: Font.Design? {
+        switch self {
+        case .systemDefault: return .default
+        case .rounded:       return .rounded
+        case .serif:         return .serif
+        case .monospaced:    return .monospaced
+        default:             return nil
+        }
+    }
+
+    /// カスタムフォントのファミリー名（Font.custom() に渡す値）
+    var customFontName: String? {
+        switch self {
+        case .systemDefault, .rounded, .serif, .monospaced:
+            return nil
+        case .hiraginoSans:         return "Hiragino Sans"
+        case .hiraginoMincho:       return "Hiragino Mincho ProN"
+        case .kleeOne:              return "Klee One"
+        case .tsukushiAMaru:        return "Tsukushi A Round Gothic"
+        case .tsukushiBMaru:        return "Tsukushi B Round Gothic"
+        case .toppanBunkyuGothic:   return "Toppan Bunkyu Gothic"
+        case .toppanBunkyuMincho:   return "Toppan Bunkyu Mincho"
+        case .yuGothic:             return "YuGothic"
+        case .yuMincho:             return "YuMincho"
+        case .avenirNext:           return "Avenir Next"
+        case .futura:               return "Futura"
+        case .georgia:              return "Georgia"
+        case .didot:                return "Didot"
+        case .copperplate:          return "Copperplate"
+        case .americanTypewriter:   return "American Typewriter"
+        case .helveticaNeue:        return "Helvetica Neue"
+        case .palatino:             return "Palatino"
+        }
+    }
+
+    /// プレビュー用フォントを生成
+    func font(_ style: Font.TextStyle = .body) -> Font {
+        if let design = fontDesign {
+            return .system(style, design: design)
+        }
+        if let name = customFontName {
+            let size = UIFont.preferredFont(forTextStyle: style.uiKit).pointSize
+            return .custom(name, size: size, relativeTo: style)
+        }
+        return .system(style)
+    }
+
+    static var freeOptions: [AppFontFamily] { allCases.filter { $0.isFree } }
+    static var premiumOptions: [AppFontFamily] { allCases.filter { !$0.isFree } }
+}
+
+private extension Font.TextStyle {
+    var uiKit: UIFont.TextStyle {
+        switch self {
+        case .largeTitle:  return .largeTitle
+        case .title:       return .title1
+        case .title2:      return .title2
+        case .title3:      return .title3
+        case .headline:    return .headline
+        case .subheadline: return .subheadline
+        case .body:        return .body
+        case .callout:     return .callout
+        case .footnote:    return .footnote
+        case .caption:     return .caption1
+        case .caption2:    return .caption2
+        @unknown default:  return .body
+        }
+    }
+}
+
 struct AppTheme: Codable, Equatable {
     // アクセント
     enum Preset: String, Codable, CaseIterable { case `default`, green, red, orange, custom }
@@ -97,6 +234,9 @@ struct AppTheme: Codable, Equatable {
     // アプリ全体のトーン
     var visualStyle: VisualStyle = .modern
 
+    // フォントファミリー（nil = visualStyle に連動）
+    var fontFamily: AppFontFamily?
+
     enum CodingKeys: String, CodingKey {
         case activePreset
         case useSameAccentForBoth
@@ -112,6 +252,7 @@ struct AppTheme: Codable, Equatable {
         case expenseRGBA
         case homeCardStyle
         case visualStyle
+        case fontFamily
     }
 
     init() {}
@@ -132,6 +273,7 @@ struct AppTheme: Codable, Equatable {
         expenseRGBA = try c.decodeIfPresent(RGBAColor.self, forKey: .expenseRGBA) ?? .init(Color.red)
         homeCardStyle = try c.decodeIfPresent(HomeCardStyle.self, forKey: .homeCardStyle) ?? .luxe
         visualStyle = try c.decodeIfPresent(VisualStyle.self, forKey: .visualStyle) ?? .modern
+        fontFamily = try c.decodeIfPresent(AppFontFamily.self, forKey: .fontFamily)
     }
     
     mutating func apply(_ preset: Preset) {
@@ -202,5 +344,11 @@ struct AppTheme: Codable, Equatable {
 
     func transactionColor(isIncome: Bool) -> Color {
         isIncome ? incomeRGBA.swiftUIColor : expenseRGBA.swiftUIColor
+    }
+
+    /// 解決済みフォントファミリー（nil の場合は visualStyle から自動決定）
+    var resolvedFontFamily: AppFontFamily {
+        if let fontFamily { return fontFamily }
+        return visualStyle == .business ? .systemDefault : .rounded
     }
 }

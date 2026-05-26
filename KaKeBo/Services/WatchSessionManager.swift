@@ -9,7 +9,7 @@
 import Foundation
 import WatchConnectivity
 
-final class PhoneSessionManager: NSObject, ObservableObject {
+final class PhoneSessionManager: NSObject {
     static let shared = PhoneSessionManager()
 
     private weak var dataStore: DataStore?

@@ -26,6 +26,23 @@ struct FixedExpenseEditorView: View {
     @State private var tagInput: String = ""
     @FocusState private var tagFieldFocused: Bool
     @State private var showPaywall = false
+
+    // 繰り返し設定
+    enum RepeatModeSelection: Int, CaseIterable {
+        case unlimited = 0, count = 1, untilDate = 2
+        var label: String {
+            switch self {
+            case .unlimited: return "無制限"
+            case .count:     return "回数"
+            case .untilDate: return "期間"
+            }
+        }
+    }
+    @State private var repeatModeSelection: RepeatModeSelection = .unlimited
+    @State private var repeatCount: Int = 12
+    @State private var repeatEndDate: Date = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+    @State private var createdDate: Date = Date()
+    @State private var appliedCount: Int = 0
     
     // UI用：金額テキスト（フォーマット & 入力受け）
     @State private var amountText: String = ""
@@ -48,6 +65,18 @@ struct FixedExpenseEditorView: View {
             _isActive    = State(initialValue: t.isActive)
             _tags        = State(initialValue: t.tags.map { String($0.prefix(8)) })
             _amountText  = State(initialValue: Self.currency(t.amount))
+            _createdDate = State(initialValue: t.createdDate)
+            _appliedCount = State(initialValue: t.appliedCount)
+            switch t.repeatMode {
+            case .unlimited:
+                _repeatModeSelection = State(initialValue: .unlimited)
+            case .count(let n):
+                _repeatModeSelection = State(initialValue: .count)
+                _repeatCount = State(initialValue: n)
+            case .untilDate(let d):
+                _repeatModeSelection = State(initialValue: .untilDate)
+                _repeatEndDate = State(initialValue: d)
+            }
         } else {
             _categoryId  = State(initialValue: categories.first?.id)
             _amountText  = State(initialValue: "")
@@ -125,6 +154,55 @@ struct FixedExpenseEditorView: View {
                             Toggle("", isOn: $isActive).labelsHidden()
                         }
                         .padding(.vertical, 4)
+                    }
+
+                    // 繰り返し設定
+                    card {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("繰り返し")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            Picker("繰り返し", selection: $repeatModeSelection) {
+                                ForEach(RepeatModeSelection.allCases, id: \.self) {
+                                    Text($0.label).tag($0)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            switch repeatModeSelection {
+                            case .unlimited:
+                                EmptyView()
+                            case .count:
+                                HStack {
+                                    Text("回数")
+                                        .font(.subheadline)
+                                    Spacer()
+                                    Stepper("\(repeatCount)回", value: $repeatCount, in: 1...120)
+                                        .font(.subheadline.monospacedDigit())
+                                }
+                            case .untilDate:
+                                DatePicker("終了日", selection: $repeatEndDate, displayedComponents: .date)
+                                    .font(.subheadline)
+                            }
+
+                            // 適用状況の表示（編集時のみ）
+                            if initial != nil {
+                                dividerHairline
+                                HStack(spacing: 8) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text("登録日: \(formattedDate(createdDate))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text("\(appliedCount)回適用済み")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
                     }
 
                     card {
@@ -347,6 +425,13 @@ struct FixedExpenseEditorView: View {
     
     private func currentTemplate() -> FixedExpenseTemplate? {
         guard let cat = categoryId else { return nil }
+        let mode: RepeatMode = {
+            switch repeatModeSelection {
+            case .unlimited: return .unlimited
+            case .count:     return .count(repeatCount)
+            case .untilDate: return .untilDate(repeatEndDate)
+            }
+        }()
         return FixedExpenseTemplate(
             id: initial?.id ?? UUID(),
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -355,8 +440,18 @@ struct FixedExpenseEditorView: View {
             categoryId: cat,
             memo: memo.isEmpty ? nil : memo,
             isActive: isActive,
-            tags: tags
+            tags: tags,
+            createdDate: initial?.createdDate ?? Date(),
+            repeatMode: mode,
+            appliedCount: appliedCount
         )
+    }
+
+    private func formattedDate(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ja_JP")
+        f.dateFormat = "yyyy/M/d"
+        return f.string(from: date)
     }
     
     private var gradientBG: LinearGradient {

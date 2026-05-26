@@ -19,7 +19,7 @@ struct AllTransactionsView: View {
     
     // 検索テキスト
     @State private var searchText: String = ""
-    
+
     // 絞り込み条件
     @State private var selectedType: TransactionType? = nil
     @State private var selectedCategoryIDs: Set<UUID> = []
@@ -31,6 +31,7 @@ struct AllTransactionsView: View {
     @State private var editingTx: Transaction? = nil
     @State private var showFilter = false
     @State private var selectedSort: TransactionSortOption = .dateDesc
+    @State private var favoriteFilters: [FavoriteFilter] = []
 
     // 共有用の絞り込み状態
     @State private var sharedSelectedType: SharedTransactionType? = nil
@@ -98,8 +99,11 @@ struct AllTransactionsView: View {
                         text: $searchText,
                         isFiltering: isFiltering,
                         accent: accent,
+                        favorites: favoriteFilters,
+                        categories: store.categories,
                         onTapFilter: { showFilter = true },
-                        onClear: resetFilters
+                        onClear: resetFilters,
+                        onApplyFavorite: { applyFavorite($0) }
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -127,7 +131,9 @@ struct AllTransactionsView: View {
             .background(themeStore.theme.backgroundColor(for: scheme).ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
         }
-        .sheet(isPresented: $showFilter) {
+        .sheet(isPresented: $showFilter, onDismiss: {
+            favoriteFilters = FavoriteFilter.loadAll()
+        }) {
             if ledgerContext.mode == .shared,
                let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
                 SharedFilterSheet(
@@ -172,7 +178,10 @@ struct AllTransactionsView: View {
             }
         }
         .task(id: ledgerContext.selectedSharedLedgerId) { await reloadSharedLedgerDataIfNeeded() }
-        .onAppear { syncChartUsageMonth() }
+        .onAppear {
+            syncChartUsageMonth()
+            favoriteFilters = FavoriteFilter.loadAll()
+        }
         .onChange(of: displayed.count) { _, _ in
             if currentPage >= totalPages {
                 currentPage = max(0, totalPages - 1)
@@ -483,11 +492,14 @@ private struct SearchHeader: View {
     @Binding var text: String
     let isFiltering: Bool
     let accent: Color
+    let favorites: [FavoriteFilter]
+    let categories: [Category]
     let onTapFilter: () -> Void
     let onClear: () -> Void
-    
+    let onApplyFavorite: (FavoriteFilter) -> Void
+
     @Environment(\.colorScheme) private var scheme
-    
+
     var body: some View {
         HStack(spacing: 10) {
             // 擬似検索フィールド
@@ -513,7 +525,29 @@ private struct SearchHeader: View {
                     .fill(scheme == .dark ? Color.white.opacity(0.08) : .white)
                     .shadow(color: .black.opacity(scheme == .dark ? 0.25 : 0.06), radius: 8, y: 2)
             )
-            
+
+            // お気に入りメニュー（保存済みがある場合のみ表示）
+            if !favorites.isEmpty {
+                Menu {
+                    ForEach(favorites) { fav in
+                        Button {
+                            onApplyFavorite(fav)
+                        } label: {
+                            Label(fav.name, systemImage: "star.fill")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "star.fill")
+                        .imageScale(.medium)
+                        .foregroundStyle(.orange)
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle()
+                                .fill(Color.orange.opacity(0.12))
+                        )
+                }
+            }
+
             // フィルタボタン
             Button(action: onTapFilter) {
                 Image(systemName: "line.3.horizontal.decrease.circle")
@@ -527,7 +561,7 @@ private struct SearchHeader: View {
                     )
             }
             .buttonStyle(.plain)
-            
+
             // クリア
             if isFiltering {
                 Button("クリア", action: onClear)
@@ -719,6 +753,17 @@ private extension AllTransactionsView {
         return false
     }
 
+    func applyFavorite(_ fav: FavoriteFilter) {
+        selectedType = fav.transactionTypeRaw.flatMap { TransactionType(rawValue: $0) }
+        selectedCategoryIDs = Set(fav.categoryIDs)
+        selectedTags = Set(fav.tags)
+        minAmount = fav.minAmount
+        maxAmount = fav.maxAmount
+        selectedSort = TransactionSortOption(rawValue: fav.sortRaw) ?? .dateDesc
+        dateFrom = nil
+        dateTo = nil
+    }
+
     func resetFilters() {
         searchText = ""
         selectedType = nil
@@ -896,21 +941,102 @@ private struct FilterSheet: View {
     @Binding var minAmount: Int?
     @Binding var maxAmount: Int?
     @Binding var selectedSort: TransactionSortOption
-    
+
     // ★ タグ
     let allTags: [String]                    // 表示用（最大8文字）
     @Binding var selectedTags: Set<String>   // 正規化キー lowercased 8文字
-    
+
     @Environment(\.dismiss) private var dismiss
-    
+
+    @State private var favorites: [FavoriteFilter] = []
+    @State private var showSaveAlert = false
+    @State private var saveName = ""
+    @State private var showDeleteConfirm: FavoriteFilter? = nil
+
     // ★ 表示→内部キー変換
     private func key(_ display: String) -> String {
         String(display.prefix(8)).lowercased()
     }
-    
+
+    // 現在の条件をお気に入りとして保存
+    private func buildFavorite(name: String) -> FavoriteFilter {
+        FavoriteFilter(
+            name: name,
+            transactionTypeRaw: selectedType?.rawValue,
+            categoryIDs: Array(selectedCategoryIDs),
+            tags: Array(selectedTags),
+            minAmount: minAmount,
+            maxAmount: maxAmount,
+            sortRaw: selectedSort.rawValue
+        )
+    }
+
+    // お気に入りを適用
+    private func applyFavorite(_ fav: FavoriteFilter) {
+        selectedType = fav.transactionTypeRaw.flatMap { TransactionType(rawValue: $0) }
+        selectedCategoryIDs = Set(fav.categoryIDs)
+        selectedTags = Set(fav.tags)
+        minAmount = fav.minAmount
+        maxAmount = fav.maxAmount
+        selectedSort = TransactionSortOption(rawValue: fav.sortRaw) ?? .dateDesc
+        // 期間はリセット（お気に入りに含めない）
+        dateFrom = nil
+        dateTo = nil
+    }
+
+    // 現在フィルター条件が設定されているか
+    private var hasAnyCondition: Bool {
+        selectedType != nil ||
+        !selectedCategoryIDs.isEmpty ||
+        !selectedTags.isEmpty ||
+        minAmount != nil ||
+        maxAmount != nil
+    }
+
     var body: some View {
         NavigationStack {
             Form {
+                // お気に入りセクション
+                if !favorites.isEmpty {
+                    Section {
+                        ForEach(favorites) { fav in
+                            Button {
+                                applyFavorite(fav)
+                                dismiss()
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "star.fill")
+                                        .foregroundStyle(.orange)
+                                        .font(.caption)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(fav.name)
+                                            .font(.subheadline.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                        Text(fav.summaryText(categories: allCategories))
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    favorites.removeAll { $0.id == fav.id }
+                                    FavoriteFilter.saveAll(favorites)
+                                } label: {
+                                    Label("削除", systemImage: "trash")
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("保存した条件")
+                    }
+                }
+
                 Section("並び替え") {
                     Picker("並び替え", selection: $selectedSort) {
                         ForEach(TransactionSortOption.allCases) { option in
@@ -1020,12 +1146,37 @@ private struct FilterSheet: View {
                     }
                 }
             }
+                // 条件保存ボタン
+                if hasAnyCondition {
+                    Section {
+                        Button {
+                            saveName = ""
+                            showSaveAlert = true
+                        } label: {
+                            Label("現在の条件を保存", systemImage: "star.fill")
+                        }
+                    }
+                }
+            }
             .navigationTitle("絞り込み")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("完了") { dismiss() }
                 }
+            }
+            .onAppear { favorites = FavoriteFilter.loadAll() }
+            .alert("条件の保存", isPresented: $showSaveAlert) {
+                TextField("名前を入力", text: $saveName)
+                Button("保存") {
+                    let name = saveName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !name.isEmpty else { return }
+                    favorites.append(buildFavorite(name: name))
+                    FavoriteFilter.saveAll(favorites)
+                }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("この絞り込み条件に名前をつけて保存します")
             }
         }
     }

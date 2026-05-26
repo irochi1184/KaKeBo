@@ -660,6 +660,23 @@ struct SettingsView: View {
     @ViewBuilder
     private func supportSection(accent: Color) -> some View {
         Section {
+            NavigationLink {
+                UpdateHistoryView()
+                    .environmentObject(themeStore)
+                    .navigationTitle("アップデート履歴")
+                    .navigationBarTitleDisplayMode(.inline)
+            } label: {
+                HStack {
+                    Label {
+                        Text("アップデート履歴")
+                    } icon: {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .foregroundStyle(accent)
+                    }
+                    Spacer()
+                }
+            }
+
             SettingsRowButton(
                 title: "使い方・よくある質問",
                 systemImage: "questionmark.circle",
