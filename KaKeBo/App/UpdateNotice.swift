@@ -73,22 +73,28 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "ロック画面ウィジェット",
-            message: "ロック画面から今月の収支をサッと確認。円形ゲージ・横長・インラインの3種類に対応しました。",
-            symbol: "lock.square",
+            title: "フォント変更",
+            message: "アプリ全体のフォントを好みに合わせて変更できます。無料3種＋プレミアム18種から選べます。",
+            symbol: "textformat",
+            tint: .purple
+        ),
+        Highlight(
+            title: "固定費の繰り返し設定",
+            message: "固定費に回数制限や期日を設定できます。契約期間が終わると自動で無効化されます。",
+            symbol: "repeat.circle",
             tint: .blue
         ),
         Highlight(
-            title: "iCloud自動バックアップ",
-            message: "iCloud Driveに自動バックアップ。機種変更時にも復元を提案し、大切なデータを守ります。",
-            symbol: "icloud.fill",
-            tint: .cyan
+            title: "お気に入りフィルター",
+            message: "よく使う絞り込み条件を保存して、ワンタップで呼び出せます。",
+            symbol: "star",
+            tint: .orange
         ),
         Highlight(
-            title: "カテゴリ削除の改善",
-            message: "カテゴリ削除時に取引を「未分類」に移動できるようになりました。大切な記録を失いません。",
-            symbol: "folder.badge.minus",
-            tint: .orange
+            title: "アップデート履歴",
+            message: "設定画面からこれまでのアップデート内容を時系列で確認できるようになりました。",
+            symbol: "clock.arrow.circlepath",
+            tint: .green
         )
     ]
     /*
@@ -143,6 +149,12 @@ private struct UpdateNoticeContent: View {
      - 自動バックアップ処理をバックグラウンドキュー化
      - データ復元画面にiCloudバックアップを統合表示
      - デバッグコードを#if DEBUGガードで保護
+     アップデート 2.4
+     - アプリ全体のフォント変更機能を追加（無料3種＋プレミアム18種）
+     - 固定費の繰り返し回数・期日設定を追加（自動無効化対応）
+     - お気に入り絞り込み条件の保存・呼び出し機能を追加
+     - 固定費のタグをバックアップに含めるよう改善
+     - アップデート履歴を設定画面から閲覧可能に
      */
 
     let accent: Color
@@ -220,7 +232,7 @@ private struct UpdateNoticeContent: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("ロック画面ウィジェットとiCloudバックアップで、いつでもどこでも家計管理。")
+            Text("フォント変更・固定費の繰り返し設定・お気に入りフィルターで、もっと使いやすく。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -272,6 +284,83 @@ private struct UpdateNoticeContent: View {
         .tint(accent)
     }
 }
+
+// MARK: - バージョン履歴データ
+struct VersionEntry: Identifiable {
+    let id = UUID()
+    let version: String
+    let items: [String]
+}
+
+/// 過去のアップデート履歴（新しい順）
+let versionHistory: [VersionEntry] = [
+    VersionEntry(version: "2.4", items: [
+        "アプリ全体のフォント変更機能を追加（無料3種＋プレミアム18種）",
+        "固定費の繰り返し回数・期日設定を追加（自動無効化対応）",
+        "お気に入り絞り込み条件の保存・呼び出し機能を追加",
+        "固定費のタグをバックアップに含めるよう改善",
+        "アップデート履歴を設定画面から閲覧可能に",
+    ]),
+    VersionEntry(version: "2.3.4", items: [
+        "ロック画面ウィジェット対応（円形ゲージ・横長・インライン）",
+        "iCloud Drive自動バックアップ機能を追加",
+        "機種変更時のiCloudからの自動復元提案を追加",
+        "カテゴリ削除時に取引を「未分類」に移動するオプションを追加",
+        "自動バックアップ処理をバックグラウンドキュー化",
+        "データ復元画面にiCloudバックアップを統合表示",
+    ]),
+    VersionEntry(version: "2.3.3", items: [
+        "自動バックアップ機能を追加（最大5世代、1時間間隔）",
+        "起動時データ消失検知＋復元提案UIを追加",
+        "バックアップ範囲を拡大（電卓カラー・収支カラー・テーマスタイル等）",
+        "AppGroup ID誤変更防止ガードを追加",
+        "レポート画面のPDF共有シートが空白になる問題を修正",
+    ]),
+    VersionEntry(version: "2.3.1", items: [
+        "CSV/PDFデータ書き出し機能を追加",
+        "年間レポートPDF書き出し機能を追加",
+        "週間サマリーカードをホーム画面に追加",
+        "PDF出力をアプリ内テーマカラーに統一",
+        "アップデート時の不要な画面表示を修正",
+        "複数箇所の文字化けを修正",
+    ]),
+    VersionEntry(version: "2.3.0", items: [
+        "支出予測・予算アラート機能を追加",
+        "レシートOCR精度を大幅に向上",
+        "PayPay等の決済アプリスクリーンショットからの自動入力に対応",
+        "繰り返し支出の自動検出機能を追加",
+    ]),
+    VersionEntry(version: "2.2.0", items: [
+        "テーマ管理に「フラット」を追加",
+        "収支カラーのカスタムに対応（プレミアム）",
+        "日別推移の詳細を確認しやすく",
+    ]),
+    VersionEntry(version: "2.1.5", items: [
+        "招待リンクをアプリ内で開けるように改善",
+        "共有家計簿に参加できない問題を修正",
+    ]),
+    VersionEntry(version: "2.1.4", items: [
+        "日別推移がカテゴリの色でひと目で分かる",
+        "大きいウィジェットでカレンダーを確認",
+        "固定費の合計をひと目で確認",
+        "バックアップの家計簿選択を改善",
+        "設定画面の下にバージョンを表示",
+    ]),
+    VersionEntry(version: "2.1.1", items: [
+        "カレンダーの下部に表示する内容を好みに合わせて切り替えられるようになりました",
+        "フィルターした結果をそのままグラフに出力できます（無料プランは毎月3回まで）",
+        "参加画面の案内や配置を調整し、スムーズに入れるようになりました",
+    ]),
+    VersionEntry(version: "2.1.0", items: [
+        "共有招待の参加を改善",
+        "共有家計簿での削除・整理",
+        "固定費へのタグ付け（プレミアム）",
+        "バックアップ範囲を拡大",
+        "テーマ設定の維持",
+        "Todo テンプレートの追加タイミングを調整",
+        "よく使う取引ショートカット",
+    ]),
+]
 
 // MARK: - ユーティリティ
 enum AppVersion {

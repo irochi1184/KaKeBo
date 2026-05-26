@@ -435,9 +435,18 @@ extension DataStore {
         }()
         
         var didAppend = false
-        
-        for t in templates where t.isActive && !posted.contains(t.id) {
-            // 当月の“計上日”
+        var templatesModified = false
+
+        for (idx, t) in templates.enumerated() {
+            guard t.isActive && !posted.contains(t.id) else { continue }
+            // 繰り返し上限チェック
+            guard !t.isRepeatLimitReached else {
+                // 上限到達 → 自動で無効化
+                templates[idx].isActive = false
+                templatesModified = true
+                continue
+            }
+            // 当月の”計上日”
             let due = computeDue(for: t, in: start)
             // 今日までに到来したものだけ自動計上（＝未来日はまだ）
             if due <= today && due >= start && due < end {
@@ -454,10 +463,17 @@ extension DataStore {
                 )
                 transactions.insert(tx, at: 0)
                 posted.insert(t.id)
+                templates[idx].appliedCount += 1
+                templatesModified = true
                 didAppend = true
             }
         }
-        
+
+        // テンプレートの更新を保存（appliedCount や isActive の変更）
+        if templatesModified {
+            defaults.set(try? JSONEncoder().encode(templates), forKey: Self.fixedTemplatesKey)
+        }
+
         if didAppend {
             saveTransactions()
             // 計上済み更新
@@ -467,12 +483,12 @@ extension DataStore {
         }
     }
     
-    /// 指定テンプレートを“今月”で即時計上（手動ボタン用）
+    /// 指定テンプレートを”今月”で即時計上（手動ボタン用）
     func postFixedExpenseNow(_ t: FixedExpenseTemplate) {
         let cal = Calendar.current
         let start = cal.date(from: cal.dateComponents([.year, .month], from: Date()))!
         let due = computeDue(for: t, in: start)
-        
+
         guard let _ = categories.first(where: { $0.id == t.categoryId }) else { return }
         let tx = Transaction(
             date: due,
@@ -484,10 +500,10 @@ extension DataStore {
         )
         transactions.insert(tx, at: 0)
         saveTransactions()
-        
+
         // 当月の posted 印も付ける
-        let monthKey = monthKeyString(for: start)
         let defaults = UserDefaults.appGroup
+        let monthKey = monthKeyString(for: start)
         let postedKey = Self.fixedPostedKeyPrefix + monthKey
         defaults.migrateIfNeeded(keys: [postedKey])
         var posted: Set<UUID> = {
@@ -500,6 +516,16 @@ extension DataStore {
         posted.insert(t.id)
         let data = try? JSONEncoder().encode(Array(posted))
         defaults.set(data, forKey: postedKey)
+
+        // appliedCount を更新
+        defaults.migrateIfNeeded(keys: [Self.fixedTemplatesKey])
+        if let tplData = defaults.migratedData(forKey: Self.fixedTemplatesKey),
+           var templates = try? JSONDecoder().decode([FixedExpenseTemplate].self, from: tplData),
+           let idx = templates.firstIndex(where: { $0.id == t.id }) {
+            templates[idx].appliedCount += 1
+            defaults.set(try? JSONEncoder().encode(templates), forKey: Self.fixedTemplatesKey)
+        }
+
         WidgetCenter.shared.reloadAllTimelines()
     }
 

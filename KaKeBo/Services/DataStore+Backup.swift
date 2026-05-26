@@ -45,7 +45,11 @@ extension DataStore {
             return arr.map {
                 .init(id: $0.id, title: $0.title, amount: $0.amount,
                       dayOfMonth: $0.dayOfMonth, categoryId: $0.categoryId,
-                      memo: $0.memo ?? "", isActive: $0.isActive)
+                      memo: $0.memo ?? "", isActive: $0.isActive,
+                      tags: $0.tags.isEmpty ? nil : $0.tags,
+                      createdDate: $0.createdDate,
+                      repeatMode: $0.repeatMode == .unlimited ? nil : $0.repeatMode,
+                      appliedCount: $0.appliedCount > 0 ? $0.appliedCount : nil)
             }
         }()
         let frequent: [BackupFrequentTransaction]? = {
@@ -192,7 +196,11 @@ extension DataStore {
                     dayOfMonth: tpl.dayOfMonth,
                     categoryId: mappedCategory,
                     memo: tpl.memo,
-                    isActive: tpl.isActive
+                    isActive: tpl.isActive,
+                    tags: tpl.tags ?? [],
+                    createdDate: tpl.createdDate ?? Date(),
+                    repeatMode: tpl.repeatMode ?? .unlimited,
+                    appliedCount: tpl.appliedCount ?? 0
                 )
             }
             let data = try JSONEncoder().encode(templates)

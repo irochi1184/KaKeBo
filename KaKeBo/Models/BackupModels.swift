@@ -58,6 +58,11 @@ struct BackupFixedExpense: Codable, Identifiable {
     var categoryId: UUID?
     var memo: String
     var isActive: Bool
+    // v2.3.4 で追加（旧バックアップとの互換性のためオプショナル）
+    var tags: [String]?
+    var createdDate: Date?
+    var repeatMode: RepeatMode?
+    var appliedCount: Int?
 }
 
 struct BackupFrequentTransaction: Codable, Identifiable {
