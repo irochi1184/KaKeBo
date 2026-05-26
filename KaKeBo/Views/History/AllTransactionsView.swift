@@ -1145,7 +1145,7 @@ private struct FilterSheet: View {
                             .font(.footnote)
                     }
                 }
-            }
+
                 // 条件保存ボタン
                 if hasAnyCondition {
                     Section {
