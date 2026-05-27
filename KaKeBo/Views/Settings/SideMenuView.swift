@@ -327,23 +327,38 @@ struct SideMenuView: View {
             sheet = .exportData
         }
         // iCloud自動バックアップ
-        HStack(spacing: 12) {
-            Image(systemName: "icloud.fill")
-                .foregroundStyle(accent)
-                .frame(width: 24)
-            Text("iCloud自動バックアップ")
-                .font(.subheadline)
-            Spacer()
-            if ICloudBackupManager.shared.isAvailable {
-                Toggle("", isOn: Binding(
-                    get: { ICloudBackupManager.shared.isEnabled },
-                    set: { ICloudBackupManager.shared.isEnabled = $0 }
-                ))
-                .labelsHidden()
-            } else {
-                Text("利用不可")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Image(systemName: "icloud.fill")
+                    .foregroundStyle(accent)
+                    .frame(width: 24)
+                Text("iCloud自動バックアップ")
+                    .font(.subheadline)
+                Spacer()
+                if ICloudBackupManager.shared.isAvailable {
+                    Toggle("", isOn: Binding(
+                        get: { ICloudBackupManager.shared.isEnabled },
+                        set: { ICloudBackupManager.shared.isEnabled = $0 }
+                    ))
+                    .labelsHidden()
+                } else {
+                    Text("利用不可")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if ICloudBackupManager.shared.isEnabled {
+                if let error = ICloudBackupManager.shared.lastError {
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .padding(.leading, 36)
+                } else if let lastDate = ICloudBackupManager.shared.lastBackupDate {
+                    Text("最終: \(lastDate.formatted(.dateTime.month().day().hour().minute()))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 36)
+                }
             }
         }
         .padding(.horizontal, 20)

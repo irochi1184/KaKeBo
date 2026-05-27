@@ -633,12 +633,21 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            if ICloudBackupManager.shared.isEnabled, let lastDate = ICloudBackupManager.shared.lastBackupDate {
-                HStack {
-                    Spacer()
-                    Text("最終: \(lastDate.formatted(.dateTime.month().day().hour().minute()))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+            if ICloudBackupManager.shared.isEnabled {
+                if let error = ICloudBackupManager.shared.lastError {
+                    HStack {
+                        Spacer()
+                        Text(error)
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                    }
+                } else if let lastDate = ICloudBackupManager.shared.lastBackupDate {
+                    HStack {
+                        Spacer()
+                        Text("最終: \(lastDate.formatted(.dateTime.month().day().hour().minute()))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         } header: {
