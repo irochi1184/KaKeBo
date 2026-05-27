@@ -62,29 +62,15 @@ struct ThemeSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            // === フォントサンプル ===
-            Section("フォントサンプル") {
-                FontSamplePreview(fontFamily: working.resolvedFontFamily, accent: accent)
-            }
-
             // === フォント選択 ===
-            Section {
+            Section("フォント") {
                 FontPickerSection(
                     selected: Binding(
-                        get: { working.fontFamily },
+                        get: { working.resolvedFontFamily },
                         set: { working.fontFamily = $0 }
                     ),
-                    isPremium: purchase.isPremiumActive,
                     accent: accent
                 )
-            } header: {
-                Text("フォント")
-            } footer: {
-                if !purchase.isPremiumActive {
-                    Text("プレミアムプランで21種類のフォントからお選びいただけます。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             // === プレビュー ===
@@ -438,149 +424,37 @@ private struct HomePreviewCardStyle: ViewModifier {
     }
 }
 
-// MARK: - フォントサンプルプレビュー
-private struct FontSamplePreview: View {
-    let fontFamily: AppFontFamily
-    let accent: Color
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // ヘッダー行
-            HStack {
-                Text("今月の支出")
-                    .font(fontFamily.font(.caption))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("5月")
-                    .font(fontFamily.font(.caption))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-
-            // 金額
-            Text("¥128,450")
-                .font(fontFamily.font(.title))
-                .fontWeight(.bold)
-                .padding(.top, 8)
-
-            // 収支行
-            HStack(spacing: 16) {
-                Label {
-                    Text("¥285,000")
-                        .font(fontFamily.font(.subheadline))
-                        .fontWeight(.medium)
-                } icon: {
-                    Image(systemName: "arrow.up.right")
-                        .font(.caption2)
-                        .foregroundStyle(.green)
-                }
-
-                Label {
-                    Text("¥128,450")
-                        .font(fontFamily.font(.subheadline))
-                        .fontWeight(.medium)
-                } icon: {
-                    Image(systemName: "arrow.down.left")
-                        .font(.caption2)
-                        .foregroundStyle(.red)
-                }
-            }
-            .padding(.top, 6)
-
-            Divider().padding(.vertical, 10)
-
-            // 取引サンプル行
-            VStack(spacing: 8) {
-                sampleRow(icon: "cart.fill", category: "食料品", amount: "¥3,280", color: .orange)
-                sampleRow(icon: "tram.fill", category: "交通費", amount: "¥1,200", color: .blue)
-                sampleRow(icon: "cup.and.saucer.fill", category: "カフェ", amount: "¥580", color: .brown)
-            }
-            .padding(.bottom, 14)
-        }
-        .padding(.horizontal, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(scheme == .dark ? Color.white.opacity(0.06) : Color(.systemBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(scheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.06), lineWidth: 1)
-        )
-    }
-
-    private func sampleRow(icon: String, category: String, amount: String, color: Color) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(color))
-            Text(category)
-                .font(fontFamily.font(.subheadline))
-            Spacer()
-            Text(amount)
-                .font(fontFamily.font(.subheadline))
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 16)
-    }
-}
-
 // MARK: - フォント選択セクション
 private struct FontPickerSection: View {
-    @Binding var selected: AppFontFamily?
-    let isPremium: Bool
+    @Binding var selected: AppFontFamily
     let accent: Color
 
     var body: some View {
-        // 自動（visualStyle 連動）
-        fontRow(label: "自動（デザインに連動）", sample: nil, isSelected: selected == nil) {
-            selected = nil
-        }
-
-        // 無料フォント
-        ForEach(AppFontFamily.freeOptions) { font in
-            fontRow(label: font.displayName, sample: font, isSelected: selected == font) {
+        ForEach(AppFontFamily.allCases) { font in
+            Button {
                 selected = font
-            }
-        }
-
-        if isPremium {
-            ForEach(AppFontFamily.premiumOptions) { font in
-                fontRow(label: font.displayName, sample: font, isSelected: selected == font) {
-                    selected = font
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(font.displayName)
+                            .font(.system(.body, design: font.fontDesign))
+                            .fontDesign(font.fontDesign)
+                            .foregroundStyle(.primary)
+                        Text("¥12,345 あいうえお ABC")
+                            .font(.system(.caption, design: font.fontDesign))
+                            .fontDesign(font.fontDesign)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if selected == font {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(accent)
+                    }
                 }
+                .contentShape(Rectangle())
             }
-        } else {
-            LockedCustomSection(
-                accent: accent,
-                message: "プレミアムプランで18種類のフォントが追加されます。"
-            )
+            .buttonStyle(.plain)
         }
-    }
-
-    private func fontRow(label: String, sample: AppFontFamily?, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(label)
-                        .font(sample?.font(.body) ?? .body)
-                        .foregroundStyle(.primary)
-                    Text("¥12,345 あいうえお ABC")
-                        .font(sample?.font(.caption) ?? .caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(accent)
-                }
-            }
-        }
-        .buttonStyle(.plain)
     }
 }
 
