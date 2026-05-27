@@ -230,6 +230,35 @@ final class DataStore: ObservableObject {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
+    // MARK: - 予算 CRUD
+
+    /// 指定月・カテゴリの予算を設定（0以下なら削除）
+    func setBudget(monthId: String, categoryId: UUID, limitAmount: Int) {
+        if limitAmount <= 0 {
+            budgets.removeAll { $0.monthId == monthId && $0.categoryId == categoryId }
+        } else if let idx = budgets.firstIndex(where: { $0.monthId == monthId && $0.categoryId == categoryId }) {
+            budgets[idx].limitAmount = limitAmount
+        } else {
+            budgets.append(Budget(monthId: monthId, categoryId: categoryId, limitAmount: limitAmount))
+        }
+        saveBudgets()
+    }
+
+    /// 指定月の全予算を前月からコピー
+    func copyBudgetsFromPreviousMonth(to monthId: String, from previousMonthId: String) {
+        let existing = Set(budgets.filter { $0.monthId == monthId }.map { $0.categoryId })
+        let source = budgets.filter { $0.monthId == previousMonthId }
+        for b in source where !existing.contains(b.categoryId) {
+            budgets.append(Budget(monthId: monthId, categoryId: b.categoryId, limitAmount: b.limitAmount))
+        }
+        saveBudgets()
+    }
+
+    /// 指定月の予算合計
+    func totalBudget(for monthId: String) -> Int {
+        budgets.filter { $0.monthId == monthId }.reduce(0) { $0 + $1.limitAmount }
+    }
+
     private func triggerAutoBackup() {
         AutoBackupManager.shared.performIfNeeded(
             categories: categories,

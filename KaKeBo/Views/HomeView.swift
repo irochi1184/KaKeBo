@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 import CloudKit
 
 struct HomeView: View {
+    @Binding var showSideMenu: Bool
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
@@ -70,7 +71,12 @@ struct HomeView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    LedgerModePicker()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) { showSideMenu = true }
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
                 }
                 ToolbarItem(placement: .principal) {
                     YearMonthHeader(

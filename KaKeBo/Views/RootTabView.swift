@@ -23,21 +23,21 @@ struct RootTabView: View {
     var body: some View {
         ZStack {
             TabView(selection: tabSelection) {
-                HomeView()
+                HomeView(showSideMenu: $showSettings)
                     .tabItem { Label("ホーム", systemImage: "house.fill") }
                     .tag(AppRoute.Tab.home)
-                CalendarScreen()
+                CalendarScreen(showSideMenu: $showSettings)
                     .tabItem { Label("カレンダー", systemImage: "calendar") }
                     .tag(AppRoute.Tab.calendar)
-                ReportsView()
+                ReportsView(showSideMenu: $showSettings)
                     .tabItem { Label("レポート", systemImage: "chart.pie.fill") }
                     .tag(AppRoute.Tab.reports)
-                AllTransactionsView()
+                AllTransactionsView(showSideMenu: $showSettings)
                     .tabItem { Label("履歴", systemImage: "magnifyingglass") }
                     .tag(AppRoute.Tab.history)
-                SettingsView()
-                    .tabItem { Label("設定", systemImage: "gearshape.fill") }
-                    .tag(AppRoute.Tab.settings)
+                BudgetTabView(showSideMenu: $showSettings)
+                    .tabItem { Label("予算", systemImage: "yensign.circle") }
+                    .tag(AppRoute.Tab.budget)
             }
             .opacity(showLaunchScreen ? 0 : 1)
             .allowsHitTesting(!showLaunchScreen)
@@ -46,6 +46,10 @@ struct RootTabView: View {
                 LedgerLoadingView()
                     .transition(.opacity)
             }
+
+            // サイドメニュー
+            SideMenuView(isOpen: $showSettings)
+                .allowsHitTesting(showSettings)
         }
         .task { await startLaunchSequence() }
         .toolbar(showLaunchScreen ? .hidden : .visible, for: .tabBar)
@@ -91,7 +95,7 @@ struct RootTabView: View {
                     inner.addTask {
                         try? await Task.sleep(nanoseconds: launchScreenTimeout)
                         // タイムアウト到達時、まだ復元が終わっていなければ強制完了
-                        if !ledgerContext.isRestored {
+                        if await !ledgerContext.isRestored {
                             await MainActor.run {
                                 ledgerContext.forceRestoreAsPersonal()
                             }

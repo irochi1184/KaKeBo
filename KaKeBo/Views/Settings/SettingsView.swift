@@ -839,49 +839,7 @@ struct SettingsView: View {
 
 // ======================================================
 
-private struct CalendarBottomDisplaySettingsView: View {
-    @Binding var selection: CalendarBottomDisplayMode
-    let accent: Color
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        List {
-            Section {
-                ForEach(CalendarBottomDisplayMode.allCases) { mode in
-                    Button {
-                        selection = mode
-                    } label: {
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(mode.title)
-                                    .foregroundStyle(.primary)
-                                Text(mode.description)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if selection == mode {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(accent)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-         .listStyle(.insetGrouped)
-        .listRowBackground(FlatListRowBackground(appliesFlatBorder: false))
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("閉じる") { dismiss() }
-            }
-        }
-    }
-}
-
-private struct SettingsRowButton: View {
+struct SettingsRowButton: View {
     let title: String
     let systemImage: String
     let accent: Color

@@ -10,6 +10,7 @@ import CloudKit
 import Charts
 
 struct AllTransactionsView: View {
+    @Binding var showSideMenu: Bool
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
@@ -91,9 +92,20 @@ struct AllTransactionsView: View {
             VStack(spacing: 0) {
                 // 検索バー + フィルタを横並び
                 HStack(alignment: .center, spacing: 12) {
-                    LedgerModePicker(style: .circleIcon)
-                        .tint(accent)
-                        .padding(.leading, 4)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) { showSideMenu = true }
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(accent)
+                            .frame(width: 44, height: 44)
+                            .background(
+                                Circle()
+                                    .fill(accent.opacity(0.12))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 4)
 
                     SearchHeader(
                         text: $searchText,

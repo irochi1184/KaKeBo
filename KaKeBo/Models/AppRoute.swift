@@ -15,7 +15,7 @@ final class AppRoute: ObservableObject {
         case calendar
         case reports
         case history
-        case settings
+        case budget
     }
 
     @Published var tab: Tab = .home

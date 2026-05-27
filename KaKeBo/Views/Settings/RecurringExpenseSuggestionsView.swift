@@ -108,7 +108,7 @@ struct RecurringExpenseSuggestionsView: View {
     }
 
     private func dismissPattern(_ pattern: RecurringExpenseDetector.DetectedPattern) {
-        withAnimation {
+        _ = withAnimation {
             dismissed.insert(pattern.id)
         }
         saveDismissed(dismissed)

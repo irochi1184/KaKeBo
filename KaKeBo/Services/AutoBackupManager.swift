@@ -49,13 +49,14 @@ final class AutoBackupManager {
             frequentTemplates: frequentTemplates
         )
 
+        // エンコードはメインスレッドで実行（MainActor 隔離型の Encodable 準拠のため）
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(backup) else { return }
+
         // ファイルI/Oはバックグラウンドキューで実行
         backupQueue.async { [weak self] in
             guard let self else { return }
-
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            guard let data = try? encoder.encode(backup) else { return }
 
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyyMMdd_HHmmss"

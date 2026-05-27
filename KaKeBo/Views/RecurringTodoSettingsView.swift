@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct RecurringTodoSettingsView: View {
-    @AppStorage("kakebo.recurring.templates") private var templatesData: Data = Data()
+    @AppStorage("kakebo.recurring.templates", store: UserDefaults.appGroup) private var templatesData: Data = Data()
     
     @State private var templates: [RecurringTodoTemplate] = []
     @State private var newTitle: String = ""

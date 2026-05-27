@@ -112,6 +112,14 @@ final class TodoStore: ObservableObject {
 
     private func ensureRecurringTodos(for month: Date) {
         let active = templates.filter { $0.isActive }
+        let activeIds = Set(active.map { $0.id })
+
+        // 削除済み or 停止中のテンプレートに紐づくToDoを除去
+        todos.removeAll { todo in
+            guard let tid = todo.templateId else { return false }
+            return !activeIds.contains(tid)
+        }
+
         for t in active {
             let due = computeDue(for: t, in: month)
             if let idx = todos.firstIndex(where: { $0.templateId == t.id }) {
