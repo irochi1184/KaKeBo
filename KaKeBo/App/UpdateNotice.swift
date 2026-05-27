@@ -73,6 +73,18 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
+            title: "ロック画面ウィジェット",
+            message: "ロック画面から今月の収支をサッと確認。円形ゲージ・横長・インラインの3種類に対応しました。",
+            symbol: "lock.square",
+            tint: .blue
+        ),
+        Highlight(
+            title: "iCloud自動バックアップ",
+            message: "iCloud Driveに自動バックアップ。機種変更時にも復元を提案し、大切なデータを守ります。",
+            symbol: "icloud.fill",
+            tint: .cyan
+        ),
+        Highlight(
             title: "フォント変更",
             message: "アプリ全体のフォントを好みに合わせて変更できます。無料3種＋プレミアム18種から選べます。",
             symbol: "textformat",
@@ -82,7 +94,7 @@ private struct UpdateNoticeContent: View {
             title: "固定費の繰り返し設定",
             message: "固定費に回数制限や期日を設定できます。契約期間が終わると自動で無効化されます。",
             symbol: "repeat.circle",
-            tint: .blue
+            tint: .green
         ),
         Highlight(
             title: "お気に入りフィルター",
@@ -94,7 +106,7 @@ private struct UpdateNoticeContent: View {
             title: "アップデート履歴",
             message: "設定画面からこれまでのアップデート内容を時系列で確認できるようになりました。",
             symbol: "clock.arrow.circlepath",
-            tint: .green
+            tint: .mint
         )
     ]
     /*
@@ -141,20 +153,19 @@ private struct UpdateNoticeContent: View {
      - バックアップ範囲を拡大（電卓カラー・収支カラー・テーマスタイル等）
      - AppGroup ID誤変更防止ガードを追加
      - レポート画面のPDF共有シートが空白になる問題を修正
-     アップデート 2.3.4
+     アップデート 2.4（2.3.4 の内容を統合）
      - ロック画面ウィジェット対応（円形ゲージ・横長・インライン）
      - iCloud Drive自動バックアップ機能を追加
      - 機種変更時のiCloudからの自動復元提案を追加
      - カテゴリ削除時に取引を「未分類」に移動するオプションを追加
      - 自動バックアップ処理をバックグラウンドキュー化
      - データ復元画面にiCloudバックアップを統合表示
-     - デバッグコードを#if DEBUGガードで保護
-     アップデート 2.4
      - アプリ全体のフォント変更機能を追加（無料3種＋プレミアム18種）
      - 固定費の繰り返し回数・期日設定を追加（自動無効化対応）
      - お気に入り絞り込み条件の保存・呼び出し機能を追加
      - 固定費のタグをバックアップに含めるよう改善
      - アップデート履歴を設定画面から閲覧可能に
+     - 起動時の白画面問題を修正
      */
 
     let accent: Color
@@ -232,7 +243,7 @@ private struct UpdateNoticeContent: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("バージョン \(AppVersion.current) の主な改善点")
                 .font(.title3.weight(.bold))
-            Text("フォント変更・固定費の繰り返し設定・お気に入りフィルターで、もっと使いやすく。")
+            Text("ロック画面ウィジェット・iCloudバックアップ・フォント変更など、大幅アップデート。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -295,19 +306,15 @@ struct VersionEntry: Identifiable {
 /// 過去のアップデート履歴（新しい順）
 let versionHistory: [VersionEntry] = [
     VersionEntry(version: "2.4", items: [
+        "ロック画面ウィジェット対応（円形ゲージ・横長・インライン）",
+        "iCloud Drive自動バックアップ機能を追加",
+        "機種変更時のiCloudからの自動復元提案を追加",
+        "カテゴリ削除時に取引を「未分類」に移動するオプションを追加",
         "アプリ全体のフォント変更機能を追加（無料3種＋プレミアム18種）",
         "固定費の繰り返し回数・期日設定を追加（自動無効化対応）",
         "お気に入り絞り込み条件の保存・呼び出し機能を追加",
         "固定費のタグをバックアップに含めるよう改善",
         "アップデート履歴を設定画面から閲覧可能に",
-    ]),
-    VersionEntry(version: "2.3.4", items: [
-        "ロック画面ウィジェット対応（円形ゲージ・横長・インライン）",
-        "iCloud Drive自動バックアップ機能を追加",
-        "機種変更時のiCloudからの自動復元提案を追加",
-        "カテゴリ削除時に取引を「未分類」に移動するオプションを追加",
-        "自動バックアップ処理をバックグラウンドキュー化",
-        "データ復元画面にiCloudバックアップを統合表示",
     ]),
     VersionEntry(version: "2.3.3", items: [
         "自動バックアップ機能を追加（最大5世代、1時間間隔）",
