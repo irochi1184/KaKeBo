@@ -101,13 +101,16 @@ struct KaKeBoApp: App {
                 }
             // 初回起動時のみ、ロック有効ならロック＋データ消失チェック
                 .onAppear {
+                    #if DEBUG
+                    print("ℹ️ [KaKeBoApp] onAppear transactions=\(dataStore.transactions.count) categories=\(dataStore.categories.count)")
+                    #endif
                     ReviewRequestManager.shared.registerFirstLaunchIfNeeded()
                     if !didInitialAppear {
                         didInitialAppear = true
                         if lock.isEnabled {
                             lock.isLocked = true
                         }
-                        // データ消失チェック
+                        // データ消失チェック（エラー時は安全にスキップ）
                         let result = AutoBackupManager.shared.detectDataLoss(
                             currentTransactionCount: dataStore.transactions.count
                         )
@@ -116,11 +119,14 @@ struct KaKeBoApp: App {
                             showDataRecovery = true
                         }
                         // iCloud からの復元チェック（ローカルが空で iCloud にバックアップがある場合）
-                        else if let cloudBackup = ICloudBackupManager.shared.checkForCloudRestore(
-                            currentTransactionCount: dataStore.transactions.count
-                        ) {
-                            dataLossResult = .totalLoss(lastKnownCount: cloudBackup.transactionCount)
-                            showDataRecovery = true
+                        else {
+                            // checkForCloudRestore が nil を返すケース（iCloud未ログイン等）も安全にスキップ
+                            if let cloudBackup = ICloudBackupManager.shared.checkForCloudRestore(
+                                currentTransactionCount: dataStore.transactions.count
+                            ) {
+                                dataLossResult = .totalLoss(lastKnownCount: cloudBackup.transactionCount)
+                                showDataRecovery = true
+                            }
                         }
                     }
                 }

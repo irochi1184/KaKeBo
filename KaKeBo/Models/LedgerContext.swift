@@ -79,10 +79,14 @@ final class LedgerContext: ObservableObject {
     /// 起動時に「一度だけ」呼ぶ
     func restoreIfNeeded(sharedLedgerStore: SharedLedgerStore) async {
         guard !isRestored else { return }
-        
-        // 1. 共有家計簿一覧を取得（ここが終わるまでUIを出さない）
-        await sharedLedgerStore.reloadLedgers()
-        
+
+        // 1. 共有家計簿一覧を取得（失敗しても起動を止めない）
+        let reloadSuccess = await sharedLedgerStore.reloadLedgers()
+
+        #if DEBUG
+        print("ℹ️ [LedgerContext] reloadLedgers 結果: \(reloadSuccess ? "成功" : "失敗") ledgers=\(sharedLedgerStore.ledgers.count)件")
+        #endif
+
         // 2. 前回選択していた shared ledger ID を復元
         if let data = defaults.data(forKey: sharedIdKey),
            let id = try? NSKeyedUnarchiver.unarchivedObject(
@@ -91,10 +95,18 @@ final class LedgerContext: ObservableObject {
            ) {
             selectedSharedLedgerId = id
         }
-        
+
         // 3. shared モード時の整合性チェック
         if mode == .shared {
-            if let id = selectedSharedLedgerId,
+            if !reloadSuccess {
+                // CloudKit 失敗時は個人モードにフォールバック
+                #if DEBUG
+                print("⚠️ [LedgerContext] CloudKit 読み込み失敗 → 個人モードにフォールバック")
+                #endif
+                mode = .personal
+                selectedSharedLedgerId = nil
+                persist()
+            } else if let id = selectedSharedLedgerId,
                sharedLedgerStore.ledgers.contains(where: { $0.id == id }) {
                 // OK（そのまま）
             } else if let first = sharedLedgerStore.ledgers.first {
@@ -108,8 +120,20 @@ final class LedgerContext: ObservableObject {
                 persist()
             }
         }
-        
+
         // この瞬間に HomeView が切り替わる
+        isRestored = true
+    }
+
+    /// タイムアウト時に強制的に個人モードで復元完了にする
+    func forceRestoreAsPersonal() {
+        guard !isRestored else { return }
+        #if DEBUG
+        print("⚠️ [LedgerContext] forceRestoreAsPersonal 呼び出し")
+        #endif
+        mode = .personal
+        selectedSharedLedgerId = nil
+        persist()
         isRestored = true
     }
     

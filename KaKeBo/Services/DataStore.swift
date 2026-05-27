@@ -410,10 +410,12 @@ extension DataStore {
     /// - すでに当月分を計上済みのテンプレートはスキップ（Settings の手動計上からも共通利用可）
     func applyFixedExpensesForCurrentMonth() {
         let cal = Calendar.current
-        let start = cal.date(from: cal.dateComponents([.year, .month], from: Date()))!
-        let end = cal.date(byAdding: .month, value: 1, to: start)!   // 翌月初
+        guard let start = cal.date(from: cal.dateComponents([.year, .month], from: Date())),
+              let end = cal.date(byAdding: .month, value: 1, to: start) else {
+            return
+        }
         let today = cal.startOfDay(for: Date())
-        
+
         // テンプレ取得
         let defaults = UserDefaults.appGroup
         defaults.migrateIfNeeded(keys: [Self.fixedTemplatesKey])
@@ -486,7 +488,7 @@ extension DataStore {
     /// 指定テンプレートを”今月”で即時計上（手動ボタン用）
     func postFixedExpenseNow(_ t: FixedExpenseTemplate) {
         let cal = Calendar.current
-        let start = cal.date(from: cal.dateComponents([.year, .month], from: Date()))!
+        guard let start = cal.date(from: cal.dateComponents([.year, .month], from: Date())) else { return }
         let due = computeDue(for: t, in: start)
 
         guard let _ = categories.first(where: { $0.id == t.categoryId }) else { return }
@@ -544,10 +546,14 @@ extension DataStore {
     private func computeDue(for tpl: FixedExpenseTemplate, in monthStart: Date) -> Date {
         let cal = Calendar.current
         if tpl.dayOfMonth == 0 {
-            let end = cal.date(byAdding: DateComponents(month: 1, day: -1), to: monthStart)!
+            guard let end = cal.date(byAdding: DateComponents(month: 1, day: -1), to: monthStart) else {
+                return monthStart
+            }
             return cal.startOfDay(for: end)
         } else {
-            let range = cal.range(of: .day, in: .month, for: monthStart)!
+            guard let range = cal.range(of: .day, in: .month, for: monthStart) else {
+                return monthStart
+            }
             let day = min(tpl.dayOfMonth, range.count)
             return cal.startOfDay(for:
                                     cal.date(from: DateComponents(year: cal.component(.year, from: monthStart),

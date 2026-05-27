@@ -17,7 +17,8 @@ struct RootTabView: View {
     @State private var showSettings = false
     @State private var showLaunchScreen = true
 
-    private let launchScreenMinDuration: UInt64 = 600_000_000
+    private let launchScreenMinDuration: UInt64 = 600_000_000  // 0.6秒
+    private let launchScreenTimeout: UInt64 = 5_000_000_000    // 5秒タイムアウト
     
     var body: some View {
         ZStack {
@@ -72,22 +73,54 @@ struct RootTabView: View {
 
     private func startLaunchSequence() async {
         if ledgerContext.isRestored {
-            showLaunchScreen = false
+            withAnimation(.easeOut(duration: 0.2)) {
+                showLaunchScreen = false
+            }
             return
         }
 
-        async let restoreTask: Void = ledgerContext.restoreIfNeeded(sharedLedgerStore: sharedLedgerStore)
+        // 最小表示時間と復元処理を並行実行し、両方の完了を待つ
+        // ただしタイムアウトを設け、CloudKit 障害時でも必ず画面を表示する
+        await withTaskGroup(of: Void.self) { group in
+            // 復元処理（タイムアウト付き）
+            group.addTask {
+                await withTaskGroup(of: Void.self) { inner in
+                    inner.addTask {
+                        await ledgerContext.restoreIfNeeded(sharedLedgerStore: sharedLedgerStore)
+                    }
+                    inner.addTask {
+                        try? await Task.sleep(nanoseconds: launchScreenTimeout)
+                        // タイムアウト到達時、まだ復元が終わっていなければ強制完了
+                        if !ledgerContext.isRestored {
+                            await MainActor.run {
+                                ledgerContext.forceRestoreAsPersonal()
+                            }
+                            #if DEBUG
+                            print("⚠️ [RootTabView] 起動タイムアウト: 個人モードにフォールバック")
+                            #endif
+                        }
+                    }
+                    // どちらか先に終わったら完了
+                    for await _ in inner.prefix(1) { }
+                    inner.cancelAll()
+                }
+            }
 
-        do {
-            try await Task.sleep(nanoseconds: launchScreenMinDuration)
-        } catch {
-            // ignore cancellation
+            // 最小表示時間
+            group.addTask {
+                try? await Task.sleep(nanoseconds: launchScreenMinDuration)
+            }
+
+            // 両方完了を待つ
+            for await _ in group { }
         }
 
         withAnimation(.easeOut(duration: 0.2)) {
             showLaunchScreen = false
         }
 
-        _ = await restoreTask
+        #if DEBUG
+        print("✅ [RootTabView] 起動シーケンス完了 mode=\(ledgerContext.mode)")
+        #endif
     }
 }
