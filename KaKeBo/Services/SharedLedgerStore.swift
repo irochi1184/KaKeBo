@@ -671,9 +671,21 @@ final class SharedLedgerStore: ObservableObject {
     func reloadLedgers(logContext: String? = nil) async -> Bool {
         isLoading = true
         defer { isLoading = false }
-        
+
         let contextPrefix = logContext.map { "[SharedLedgerStore] reloadLedgers(\($0))" } ?? "[SharedLedgerStore] reloadLedgers"
         print("ℹ️ \(contextPrefix) start")
+
+        // iCloud アカウント状態を事前チェック（未ログイン時は即座にスキップ）
+        do {
+            let status = try await container.accountStatus()
+            guard status == .available else {
+                print("⚠️ \(contextPrefix) iCloud unavailable (status=\(status.rawValue)) → スキップ")
+                return false
+            }
+        } catch {
+            print("⚠️ \(contextPrefix) iCloud status check failed: \(error) → スキップ")
+            return false
+        }
 
         do {
             ledgerSourceMap.removeAll()

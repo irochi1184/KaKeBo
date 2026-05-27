@@ -17,6 +17,10 @@ struct LedgerLoadingView: View {
     
     var body: some View {
         ZStack {
+            // フォールバック背景色（画像リソース未発見時の白画面防止）
+            Color(uiColor: scheme == .dark ? .systemBackground : .systemBackground)
+                .ignoresSafeArea()
+
             // ① 背景画像：常にフルスクリーン中央
             Image(imageName)
                 .resizable()

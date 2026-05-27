@@ -101,14 +101,24 @@ struct HomeView: View {
             .sheet(isPresented: $showAdd) {
                 AddTransactionView(defaultCategoryId: store.categories.first?.id)
                     .environmentObject(store)
+                    .environmentObject(themeStore)
+                    .environmentObject(sharedLedgerStore)
+                    .environmentObject(ledgerContext)
             }
             .sheet(item: $editingTx) { tx in
                 EditTransactionView(transaction: tx)
                     .environmentObject(store)
+                    .environmentObject(themeStore)
+                    .environmentObject(sharedLedgerStore)
+                    .environmentObject(ledgerContext)
             }
             .sheet(item: $editingSharedTx) { tx in
                 if let ledger = ledgerContext.currentSharedLedger(from: sharedLedgerStore) {
                     EditTransactionView(sharedLedger: ledger, transaction: tx)
+                        .environmentObject(store)
+                        .environmentObject(themeStore)
+                        .environmentObject(sharedLedgerStore)
+                        .environmentObject(ledgerContext)
                         .presentationDetents([.large])
                 }
             }
@@ -122,10 +132,13 @@ struct HomeView: View {
                     currentTotal: sheet.currentTotal,
                     previousTotal: sheet.previousTotal
                 )
+                .environmentObject(themeStore)
                 .presentationDetents([.large])
             }
             .sheet(item: $dailyDetailSheet) { detail in
                 DailyTrendDetailView(context: detail)
+                    .environmentObject(store)
+                    .environmentObject(themeStore)
                     .presentationDetents([.large])
             }
         }
@@ -610,7 +623,7 @@ extension HomeView {
             let fallbackHex = expenseTx.first { tx in
                 (tx.categoryId?.recordName ?? tx.categoryName) == key.categoryKey
             }?.categoryColorHex
-            let color = Color.fromHex((sharedCategory?.colorHex ?? fallbackHex)!) ?? .gray
+            let color = Color.fromHex(sharedCategory?.colorHex ?? fallbackHex ?? "808080") ?? .gray
             return DailyCategoryPoint(
                 date: key.date,
                 amount: dict[key] ?? 0,
