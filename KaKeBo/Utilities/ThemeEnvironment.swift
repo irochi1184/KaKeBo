@@ -47,22 +47,11 @@ extension EnvironmentValues {
 
 // MARK: - フォント適用モディファイア
 
-/// アプリ全体のフォントファミリーを適用する
-/// - システムデザイン（system/rounded/serif/monospaced）は .fontDesign() で完全に伝播
-/// - カスタムフォントは .font() でデフォルトフォントとして設定
+/// アプリ全体のフォントデザインを適用する（.fontDesign() で全子ビューに伝播）
 struct AppFontModifier: ViewModifier {
     let fontFamily: AppFontFamily
 
     func body(content: Content) -> some View {
-        if let design = fontFamily.fontDesign {
-            content.fontDesign(design)
-        } else if let name = fontFamily.customFontName {
-            let bodySize = UIFont.preferredFont(forTextStyle: .body).pointSize
-            content
-                .font(.custom(name, size: bodySize, relativeTo: .body))
-                .fontDesign(.default)
-        } else {
-            content
-        }
+        content.fontDesign(fontFamily.fontDesign)
     }
 }
