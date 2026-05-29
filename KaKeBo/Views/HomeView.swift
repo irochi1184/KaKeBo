@@ -17,6 +17,7 @@ struct HomeView: View {
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @EnvironmentObject var ledgerContext: LedgerContext
     @EnvironmentObject var monthStartStore: MonthStartStore
+    @EnvironmentObject var appRoute: AppRoute
     @State private var showAdd = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var hSize
@@ -40,7 +41,7 @@ struct HomeView: View {
     @State private var dailyDetailSheet: DailyTrendDetailContext?
 
     // ▼ 追加：カード順序の状態とドラッグ中のカード
-    @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .forecast, .weeklySummary, .donut, .daily, .transactions])
+    @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .budgetAlert, .forecast, .weeklySummary, .donut, .daily, .transactions])
     @State private var dragging: DashboardCard?
 
     private let dropUTIs: [UTType] = [.plainText] // onDrag のペイロード種別
@@ -291,6 +292,7 @@ struct HomeView: View {
         cardOrder.filter { c in
             switch c {
             case .header: return true
+            case .budgetAlert: return !budgetAlerts.isEmpty
             case .forecast: return true
             case .weeklySummary: return true
             case .donut:  return !expenseBreakdown.isEmpty || !incomeBreakdown.isEmpty
@@ -310,6 +312,12 @@ struct HomeView: View {
                 expense: monthExpense,
                 balance: monthBalance
             )
+            .homeCard()
+
+        case .budgetAlert:
+            BudgetAlertCard(alerts: budgetAlerts) {
+                appRoute.tab = .budget
+            }
             .homeCard()
 
         case .forecast:
@@ -411,6 +419,41 @@ extension HomeView {
             currentMonth: selectedMonth,
             resolver: monthResolver
         )
+    }
+
+    // 予算超過・警告（80%以上）のカテゴリを抽出
+    private var budgetAlerts: [BudgetAlert] {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ja_JP")
+        f.dateFormat = "yyyy-MM"
+        let monthId = f.string(from: selectedMonth)
+
+        let monthBudgets = store.budgets.filter { $0.monthId == monthId }
+        guard !monthBudgets.isEmpty else { return [] }
+
+        let range = monthResolver.monthRange(for: selectedMonth)
+        let expenseTx = store.transactions.filter {
+            $0.type == .expense && $0.date >= range.lowerBound && $0.date < range.upperBound
+        }
+        var expenseByCategory: [UUID: Int] = [:]
+        for tx in expenseTx { expenseByCategory[tx.categoryId, default: 0] += tx.amount }
+
+        return monthBudgets.compactMap { budget in
+            let expense = expenseByCategory[budget.categoryId] ?? 0
+            let ratio = Double(expense) / Double(max(1, budget.limitAmount))
+            guard ratio >= 0.8 else { return nil }
+            guard let cat = store.categories.first(where: { $0.id == budget.categoryId }) else { return nil }
+            return BudgetAlert(
+                id: cat.id,
+                categoryName: cat.name,
+                symbolName: cat.symbolName,
+                categoryColor: cat.color,
+                expense: expense,
+                budget: budget.limitAmount,
+                ratio: ratio
+            )
+        }
+        .sorted { $0.ratio > $1.ratio }
     }
 
     private var monthIncome: Int {
@@ -1020,6 +1063,7 @@ extension TransactionListCard where RowID == CKRecord.ID {
 // 並び替え対象のカード
 private enum DashboardCard: String, CaseIterable, Identifiable {
     case header         // 月次ヘッダー（収支・支出・収入）
+    case budgetAlert    // 予算超過・警告カード
     case forecast       // 支出予測・予算カード
     case weeklySummary  // 週間サマリー
     case donut          // 円グラフ（支出/収入ブレイクダウン）
