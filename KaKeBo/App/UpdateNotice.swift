@@ -73,40 +73,40 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "ロック画面ウィジェット",
-            message: "ロック画面から今月の収支をサッと確認。円形ゲージ・横長・インラインの3種類に対応しました。",
-            symbol: "lock.square",
+            title: "カテゴリ別予算タブ",
+            message: "新しい「予算」タブが登場。カテゴリごとの予算と支出を、ひと目で把握できます。",
+            symbol: "chart.pie.fill",
             tint: .blue
         ),
         Highlight(
-            title: "iCloud自動バックアップ",
-            message: "iCloud Driveに自動バックアップ。機種変更時にも復元を提案し、大切なデータを守ります。",
-            symbol: "icloud.fill",
-            tint: .cyan
-        ),
-        Highlight(
-            title: "フォント変更",
-            message: "アプリ全体のフォントを好みに合わせて変更できます。標準・丸ゴシック・セリフ・等幅の4種から選べます。",
-            symbol: "textformat",
-            tint: .purple
-        ),
-        Highlight(
-            title: "固定費の繰り返し設定",
-            message: "固定費に回数制限や期日を設定できます。契約期間が終わると自動で無効化されます。",
-            symbol: "repeat.circle",
-            tint: .green
-        ),
-        Highlight(
-            title: "お気に入りフィルター",
-            message: "よく使う絞り込み条件を保存して、ワンタップで呼び出せます。",
-            symbol: "star",
+            title: "予算アラート",
+            message: "予算の超過や使いすぎをホーム画面でいち早くお知らせ。使いすぎを未然に防げます。",
+            symbol: "exclamationmark.triangle.fill",
             tint: .orange
         ),
         Highlight(
-            title: "アップデート履歴",
-            message: "設定画面からこれまでのアップデート内容を時系列で確認できるようになりました。",
-            symbol: "clock.arrow.circlepath",
-            tint: .mint
+            title: "先月の支出から予算設定",
+            message: "ワンタップで先月の支出をそのまま予算に。ゼロから入力する手間がありません。",
+            symbol: "wand.and.stars",
+            tint: .green
+        ),
+        Highlight(
+            title: "予算のオン・オフ",
+            message: "カテゴリごとに予算を一時停止。金額はそのまま残るので、必要なときにすぐ戻せます。",
+            symbol: "switch.2",
+            tint: .purple
+        ),
+        Highlight(
+            title: "サイドメニュー",
+            message: "メニューをサイドにすっきり整理。よく使う機能へ迷わずアクセスできます。",
+            symbol: "sidebar.left",
+            tint: .teal
+        ),
+        Highlight(
+            title: "安定性の向上",
+            message: "iCloud自動バックアップが確実に保存されるよう改善し、大切なデータをより安全に守ります。",
+            symbol: "icloud.fill",
+            tint: .cyan
         )
     ]
     /*
@@ -166,6 +166,14 @@ private struct UpdateNoticeContent: View {
      - 固定費のタグをバックアップに含めるよう改善
      - アップデート履歴を設定画面から閲覧可能に
      - 起動時の白画面問題を修正
+     アップデート 3.0
+     - カテゴリ別予算管理タブを追加
+     - 予算の超過・使いすぎをホーム画面に通知する予算アラートを追加
+     - 先月の支出をワンタップで予算に設定する機能を追加
+     - カテゴリごとに予算をオン・オフできる一時停止機能を追加
+     - カテゴリ追加・編集画面から予算を設定できるように
+     - メニューをサイドメニューに整理
+     - iCloud自動バックアップが保存されない問題を修正
      */
 
     let accent: Color
@@ -173,55 +181,82 @@ private struct UpdateNoticeContent: View {
     let highlights: [Highlight]
     @Environment(\.colorScheme) private var scheme
 
-    private var title: String { "KaKeBo \(AppVersion.current) アップデート" }
-
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 0) {
             header
+                .padding(.horizontal, 22)
+                .padding(.top, 22)
+                .padding(.bottom, 16)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(spacing: 12) {
                     hero
-                    ForEach(highlights) { highlight in
-                        highlightRow(highlight)
+                    VStack(spacing: 10) {
+                        ForEach(highlights) { highlight in
+                            highlightRow(highlight)
+                        }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 4)
             }
 
             primaryButton
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .padding(.bottom, 22)
         }
-        .padding(18)
-        .background {
-            if scheme == .dark {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.white.opacity(0.08))
-            } else {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            }
-        }
+        .frame(maxWidth: 460, maxHeight: 660)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 22)
-                .stroke(accent.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            accent.opacity(0.5),
+                            accent.opacity(0.05),
+                            .white.opacity(scheme == .dark ? 0.08 : 0.45)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
         )
-        .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.15), radius: 24, y: 16)
+        .shadow(color: .black.opacity(scheme == .dark ? 0.55 : 0.18), radius: 30, y: 18)
+    }
+
+    // 高級感のあるカード背景（マテリアル＋アクセントの淡いグロー）
+    private var cardBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(scheme == .dark ? Color(white: 0.12) : Color(white: 0.99))
+
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .opacity(scheme == .dark ? 0.0 : 0.6)
+
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [accent.opacity(scheme == .dark ? 0.20 : 0.12), .clear],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                )
+        }
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "sparkles")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(accent)
-                .padding(8)
-                .background(Circle().fill(accent.opacity(0.12)))
-
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("WHAT'S NEW")
+                    .font(.caption2.weight(.bold))
+                    .tracking(2.5)
+                    .foregroundStyle(accent)
                 Text("アップデートのお知らせ")
-                    .font(.headline.weight(.semibold))
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.title3.weight(.bold))
             }
 
             Spacer()
@@ -230,52 +265,98 @@ private struct UpdateNoticeContent: View {
                 isPresented = false
             } label: {
                 Image(systemName: "xmark")
-                    .font(.body.weight(.semibold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.secondary)
-                    .padding(10)
-                    .background(Circle().fill(.secondary.opacity(0.1)))
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(.secondary.opacity(0.12)))
             }
             .accessibilityLabel("閉じる")
         }
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("バージョン \(AppVersion.current) の主な改善点")
-                .font(.title3.weight(.bold))
-            Text("ロック画面ウィジェット・iCloudバックアップ・フォント変更など、大幅アップデート。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        HStack(spacing: 14) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(
+                    Circle().fill(
+                        LinearGradient(
+                            colors: [accent, accent.opacity(0.6)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                )
+                .shadow(color: accent.opacity(0.45), radius: 8, y: 4)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("バージョン \(AppVersion.current)")
+                    .font(.title.weight(.heavy))
+                Text("予算管理が、もっと自由に。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            LinearGradient(colors: [accent.opacity(0.25), accent.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                .cornerRadius(16)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [accent.opacity(scheme == .dark ? 0.22 : 0.16), accent.opacity(0.04)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(accent.opacity(0.18), lineWidth: 1)
         )
     }
 
     private func highlightRow(_ highlight: Highlight) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 14) {
             Image(systemName: highlight.symbol)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(highlight.tint)
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(highlight.tint.opacity(0.12)))
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [highlight.tint, highlight.tint.opacity(0.65)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+                .shadow(color: highlight.tint.opacity(0.35), radius: 6, y: 3)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(highlight.title)
-                    .font(.headline)
+                    .font(.subheadline.weight(.bold))
                 Text(highlight.message)
-                    .font(.subheadline)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+
+            Spacer(minLength: 0)
         }
-        .padding(12)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.secondary.opacity(0.08))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(scheme == .dark ? Color.white.opacity(0.05) : Color.white.opacity(0.75))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(scheme == .dark ? 0.06 : 0.55), lineWidth: 1)
         )
     }
 
@@ -283,16 +364,24 @@ private struct UpdateNoticeContent: View {
         Button {
             isPresented = false
         } label: {
-            HStack {
-                Image(systemName: "hand.thumbsup.fill")
-                Text("OK")
-                    .fontWeight(.semibold)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            Text("はじめる")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [accent, accent.opacity(0.78)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+                .shadow(color: accent.opacity(0.4), radius: 12, y: 6)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(accent)
+        .buttonStyle(.plain)
     }
 }
 
@@ -305,6 +394,15 @@ struct VersionEntry: Identifiable {
 
 /// 過去のアップデート履歴（新しい順）
 let versionHistory: [VersionEntry] = [
+    VersionEntry(version: "3.0", items: [
+        "カテゴリ別予算管理タブを追加",
+        "予算の超過・使いすぎをホーム画面に通知する予算アラートを追加",
+        "先月の支出をワンタップで予算に設定する機能を追加",
+        "カテゴリごとに予算をオン・オフできる一時停止機能を追加",
+        "カテゴリ追加・編集画面から予算を設定できるように",
+        "メニューをサイドメニューに整理",
+        "iCloud自動バックアップが保存されない問題を修正",
+    ]),
     VersionEntry(version: "2.4", items: [
         "ロック画面ウィジェット対応（円形ゲージ・横長・インライン）",
         "iCloud Drive自動バックアップ機能を追加",
