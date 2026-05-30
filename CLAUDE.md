@@ -8,7 +8,7 @@ KaKeBo は iOS 向け家計簿アプリ。SwiftUI + MVVM 構成で、CoreData �
 
 - **Bundle ID**: `com.irochi.KaKeBo`
 - **Deployment Target**: iOS 17.6（iOS 26 対応）
-- **現在のバージョン**: 2.4
+- **現在のバージョン**: 3.0
 - **言語**: Swift / SwiftUI
 - **外部依存**: なし（SPM / CocoaPods 不使用）
 - **AppGroup ID**: `group.com.irochiTech.KaKeBo`（`Shared/AppGroup.swift`）
