@@ -365,7 +365,7 @@ struct AnnualReportPDFService {
     // MARK: - ハイライト
 
     private static func drawHighlights(data: ReportData, x: CGFloat, y: CGFloat, width: CGFloat) -> CGFloat {
-        var currentY = drawSectionTitle("ハイライト", x: x, y: y, accent: data.accentColor)
+        let currentY = drawSectionTitle("ハイライト", x: x, y: y, accent: data.accentColor)
 
         let boxWidth = (width - 12) / 2
         let boxHeight: CGFloat = 50

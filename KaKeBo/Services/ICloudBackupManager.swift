@@ -22,16 +22,28 @@ final class ICloudBackupManager {
     // 設定キー
     private let enabledKey = "kakebo.icloud.backup.enabled"
     private let lastBackupDateKey = "kakebo.icloud.backup.lastDate"
+    private let lastBackupErrorKey = "kakebo.icloud.backup.lastError"
 
     /// iCloud バックアップが有効かどうか
     var isEnabled: Bool {
         get { UserDefaults.appGroup.bool(forKey: enabledKey) }
-        set { UserDefaults.appGroup.set(newValue, forKey: enabledKey) }
+        set {
+            UserDefaults.appGroup.set(newValue, forKey: enabledKey)
+            if !newValue {
+                // 無効化時にエラー情報をクリア
+                UserDefaults.appGroup.removeObject(forKey: lastBackupErrorKey)
+            }
+        }
     }
 
-    /// iCloud が利用可能かどうか
+    /// iCloud が利用可能かどうか（サインイン済み かつ コンテナにアクセス可能）
     var isAvailable: Bool {
-        FileManager.default.ubiquityIdentityToken != nil
+        FileManager.default.ubiquityIdentityToken != nil && iCloudBackupDir != nil
+    }
+
+    /// 直近のバックアップエラーメッセージ（nil なら正常）
+    var lastError: String? {
+        UserDefaults.appGroup.string(forKey: lastBackupErrorKey)
     }
 
     /// iCloud Drive のバックアップフォルダ URL
@@ -51,9 +63,13 @@ final class ICloudBackupManager {
 
     /// データ保存時に呼び出す。有効 & 最小間隔超過ならバックアップ作成（バックグラウンドで実行）
     func performIfNeeded(categories: [Category], transactions: [Transaction], budgets: [Budget], frequentTemplates: [FrequentTransactionTemplate]) {
-        guard isEnabled, isAvailable else { return }
+        guard isEnabled else { return }
         guard !transactions.isEmpty else { return }
-        guard let dir = iCloudBackupDir else { return }
+
+        guard let dir = iCloudBackupDir else {
+            recordError("iCloud Driveコンテナにアクセスできません。iCloudにサインインしているか確認してください。")
+            return
+        }
 
         // 最小間隔チェック
         if let lastDate = UserDefaults.appGroup.object(forKey: lastBackupDateKey) as? Date,
@@ -65,12 +81,20 @@ final class ICloudBackupManager {
         let payload = buildPayload(categories: categories, transactions: transactions, budgets: budgets, frequentTemplates: frequentTemplates)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(payload) else { return }
+        guard let data = try? encoder.encode(payload) else {
+            recordError("バックアップデータのエンコードに失敗しました。")
+            return
+        }
 
         // iCloud ファイルI/Oはバックグラウンドキューで実行
         backupQueue.async { [weak self] in
             guard let self else { return }
-            self.ensureDirectory(dir)
+
+            // ディレクトリ作成
+            if !self.ensureDirectory(dir) {
+                self.recordError("iCloud Driveにバックアップフォルダを作成できませんでした。iCloud Driveの空き容量を確認してください。")
+                return
+            }
 
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyyMMdd_HHmmss"
@@ -79,14 +103,26 @@ final class ICloudBackupManager {
 
             do {
                 try data.write(to: fileURL, options: .atomic)
+
+                // 書き込み成功を検証（ファイルが実在するか）
+                guard FileManager.default.fileExists(atPath: fileURL.path) else {
+                    self.recordError("バックアップファイルの書き込み後、ファイルが見つかりません。")
+                    return
+                }
+
                 self.pruneOldBackups(in: dir)
+
+                // 成功 → 日時を記録、エラーをクリア
                 DispatchQueue.main.async {
                     UserDefaults.appGroup.set(Date(), forKey: self.lastBackupDateKey)
+                    UserDefaults.appGroup.removeObject(forKey: self.lastBackupErrorKey)
                 }
+
                 #if DEBUG
                 print("[iCloudBackup] 保存完了: \(fileName)")
                 #endif
             } catch {
+                self.recordError("iCloud Driveへの書き込みに失敗: \(error.localizedDescription)")
                 #if DEBUG
                 print("[iCloudBackup] 保存エラー: \(error)")
                 #endif
@@ -153,10 +189,19 @@ final class ICloudBackupManager {
 
     // MARK: - Private
 
-    private func ensureDirectory(_ dir: URL) {
+    /// ディレクトリを作成する。成功なら true、失敗なら false
+    @discardableResult
+    private func ensureDirectory(_ dir: URL) -> Bool {
         let fm = FileManager.default
-        if !fm.fileExists(atPath: dir.path) {
-            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        if fm.fileExists(atPath: dir.path) { return true }
+        do {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            return true
+        } catch {
+            #if DEBUG
+            print("[iCloudBackup] ディレクトリ作成失敗: \(error)")
+            #endif
+            return false
         }
     }
 
@@ -173,6 +218,16 @@ final class ICloudBackupManager {
                 try? fm.removeItem(at: file)
             }
         }
+    }
+
+    /// エラーを記録（メインスレッドで UserDefaults に保存）
+    private func recordError(_ message: String) {
+        DispatchQueue.main.async {
+            UserDefaults.appGroup.set(message, forKey: self.lastBackupErrorKey)
+        }
+        #if DEBUG
+        print("[iCloudBackup] エラー記録: \(message)")
+        #endif
     }
 
     private func buildPayload(categories: [Category], transactions: [Transaction], budgets: [Budget], frequentTemplates: [FrequentTransactionTemplate]) -> AutoBackupPayload {

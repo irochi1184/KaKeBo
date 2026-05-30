@@ -18,6 +18,7 @@ struct YoYSummary {
 }
 
 struct ReportsView: View {
+    @Binding var showSideMenu: Bool
     @EnvironmentObject var store: DataStore
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var ledgerContext: LedgerContext
@@ -55,7 +56,12 @@ struct ReportsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    LedgerModePicker()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) { showSideMenu = true }
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
                 }
                 ToolbarItem(placement: .principal) {
                         YearPicker(

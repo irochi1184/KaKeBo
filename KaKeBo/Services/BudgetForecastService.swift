@@ -37,11 +37,13 @@ struct BudgetForecastService {
     ///   - resolver: 月開始日の解決
     static func calculate(
         transactions: [Transaction],
-        budgets: [Budget],
+        budgets rawBudgets: [Budget],
         categories: [Category],
         currentMonth: Date,
         resolver: MonthStartResolver
     ) -> Forecast {
+        // 無効化（一時停止）された予算は未設定扱いにする
+        let budgets = rawBudgets.filter { $0.isEnabled }
         let cal = Calendar.current
         let today = Date()
 

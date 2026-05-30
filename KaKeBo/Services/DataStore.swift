@@ -230,6 +230,56 @@ final class DataStore: ObservableObject {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
+    // MARK: - 予算 CRUD
+
+    /// 指定月・カテゴリの予算を設定（0以下なら削除）
+    func setBudget(monthId: String, categoryId: UUID, limitAmount: Int) {
+        if limitAmount <= 0 {
+            budgets.removeAll { $0.monthId == monthId && $0.categoryId == categoryId }
+        } else if let idx = budgets.firstIndex(where: { $0.monthId == monthId && $0.categoryId == categoryId }) {
+            budgets[idx].limitAmount = limitAmount
+        } else {
+            budgets.append(Budget(monthId: monthId, categoryId: categoryId, limitAmount: limitAmount))
+        }
+        saveBudgets()
+    }
+
+    /// カテゴリ別の金額をまとめて指定月の予算として設定する
+    /// （先月の支出をまるまる予算にする等の一括反映に使用。金額0以下のカテゴリはスキップ）
+    func applyExpensesAsBudgets(monthId: String, expenseByCategory: [UUID: Int]) {
+        for (categoryId, amount) in expenseByCategory where amount > 0 {
+            if let idx = budgets.firstIndex(where: { $0.monthId == monthId && $0.categoryId == categoryId }) {
+                budgets[idx].limitAmount = amount
+                budgets[idx].isEnabled = true
+            } else {
+                budgets.append(Budget(monthId: monthId, categoryId: categoryId, limitAmount: amount))
+            }
+        }
+        saveBudgets()
+    }
+
+    /// カテゴリ予算の有効/無効を切り替える（金額は保持したまま一時停止）
+    func setBudgetEnabled(monthId: String, categoryId: UUID, isEnabled: Bool) {
+        guard let idx = budgets.firstIndex(where: { $0.monthId == monthId && $0.categoryId == categoryId }) else { return }
+        budgets[idx].isEnabled = isEnabled
+        saveBudgets()
+    }
+
+    /// 指定月の全予算を前月からコピー
+    func copyBudgetsFromPreviousMonth(to monthId: String, from previousMonthId: String) {
+        let existing = Set(budgets.filter { $0.monthId == monthId }.map { $0.categoryId })
+        let source = budgets.filter { $0.monthId == previousMonthId }
+        for b in source where !existing.contains(b.categoryId) {
+            budgets.append(Budget(monthId: monthId, categoryId: b.categoryId, limitAmount: b.limitAmount, isEnabled: b.isEnabled))
+        }
+        saveBudgets()
+    }
+
+    /// 指定月の予算合計（有効な予算のみ）
+    func totalBudget(for monthId: String) -> Int {
+        budgets.filter { $0.monthId == monthId && $0.isEnabled }.reduce(0) { $0 + $1.limitAmount }
+    }
+
     private func triggerAutoBackup() {
         AutoBackupManager.shared.performIfNeeded(
             categories: categories,
