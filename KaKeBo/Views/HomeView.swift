@@ -428,7 +428,7 @@ extension HomeView {
         f.dateFormat = "yyyy-MM"
         let monthId = f.string(from: selectedMonth)
 
-        let monthBudgets = store.budgets.filter { $0.monthId == monthId }
+        let monthBudgets = store.budgets.filter { $0.monthId == monthId && $0.isEnabled }
         guard !monthBudgets.isEmpty else { return [] }
 
         let range = monthResolver.monthRange(for: selectedMonth)

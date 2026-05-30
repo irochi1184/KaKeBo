@@ -20,6 +20,10 @@ struct BudgetTabView: View {
         return cal.date(from: cal.dateComponents([.year, .month], from: Date())) ?? Date()
     }()
 
+    // 一括設定の確認ダイアログ用
+    @State private var showCopyBudgetConfirm = false
+    @State private var showApplyExpenseConfirm = false
+
     private var monthResolver: MonthStartResolver { monthStartStore.resolver() }
     private var accent: Color { themeStore.theme.accentColor(for: scheme) }
 
@@ -41,21 +45,69 @@ struct BudgetTabView: View {
         return dict
     }
 
-    // 今月の予算マップ
-    private var budgetMap: [UUID: Int] {
-        var dict: [UUID: Int] = [:]
+    // 今月の予算マップ（カテゴリ → 予算）
+    private var budgetByCategory: [UUID: Budget] {
+        var dict: [UUID: Budget] = [:]
         for b in store.budgets where b.monthId == monthId {
-            dict[b.categoryId] = b.limitAmount
+            dict[b.categoryId] = b
         }
         return dict
     }
 
+    // 有効な予算のみ合計
     private var totalBudget: Int {
-        budgetMap.values.reduce(0, +)
+        budgetByCategory.values.filter { $0.isEnabled }.reduce(0) { $0 + $1.limitAmount }
     }
 
     private var totalExpense: Int {
         expenseByCategory.values.reduce(0, +)
+    }
+
+    // 先月のカテゴリ別支出（「先月の支出を予算に設定」用）
+    private var lastMonthExpenseByCategory: [UUID: Int] {
+        guard let prev = Calendar.current.date(byAdding: .month, value: -1, to: selectedMonth) else { return [:] }
+        let range = monthResolver.monthRange(for: prev)
+        var dict: [UUID: Int] = [:]
+        for tx in store.transactions where tx.type == .expense && tx.date >= range.lowerBound && tx.date < range.upperBound {
+            dict[tx.categoryId, default: 0] += tx.amount
+        }
+        return dict
+    }
+
+    private var hasLastMonthExpense: Bool {
+        lastMonthExpenseByCategory.values.contains { $0 > 0 }
+    }
+
+    // MARK: - 一括設定アクション
+
+    /// 先月の予算をコピー（既存ありなら確認）
+    private func handleCopyPreviousBudget() {
+        if budgetByCategory.isEmpty {
+            copyPreviousBudget()
+        } else {
+            showCopyBudgetConfirm = true
+        }
+    }
+
+    private func copyPreviousBudget() {
+        guard let prev = Calendar.current.date(byAdding: .month, value: -1, to: selectedMonth) else { return }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ja_JP")
+        f.dateFormat = "yyyy-MM"
+        store.copyBudgetsFromPreviousMonth(to: monthId, from: f.string(from: prev))
+    }
+
+    /// 先月の支出をまるまる予算に設定（既存ありなら確認）
+    private func handleApplyLastMonthExpense() {
+        if budgetByCategory.isEmpty {
+            applyLastMonthExpense()
+        } else {
+            showApplyExpenseConfirm = true
+        }
+    }
+
+    private func applyLastMonthExpense() {
+        store.applyExpensesAsBudgets(monthId: monthId, expenseByCategory: lastMonthExpenseByCategory)
     }
 
     var body: some View {
@@ -68,9 +120,9 @@ struct BudgetTabView: View {
                     // 全体サマリー
                     overallSummaryCard
 
-                    // 前月コピーボタン
-                    if budgetMap.isEmpty {
-                        copyFromPreviousButton
+                    // 予算未設定時のクイック設定ボタン
+                    if budgetByCategory.isEmpty {
+                        quickSetupButtons
                     }
 
                     // カテゴリ別予算リスト
@@ -91,6 +143,45 @@ struct BudgetTabView: View {
                             .font(.system(size: 16, weight: .semibold))
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            handleApplyLastMonthExpense()
+                        } label: {
+                            Label("先月の支出を予算に設定", systemImage: "arrow.down.circle")
+                        }
+                        .disabled(!hasLastMonthExpense)
+
+                        Button {
+                            handleCopyPreviousBudget()
+                        } label: {
+                            Label("先月の予算をコピー", systemImage: "doc.on.doc")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                }
+            }
+            .confirmationDialog(
+                "先月の予算で上書き",
+                isPresented: $showCopyBudgetConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("上書きする", role: .destructive) { copyPreviousBudget() }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("今月すでに設定済みの予算を、先月の予算で上書きします。")
+            }
+            .confirmationDialog(
+                "先月の支出で上書き",
+                isPresented: $showApplyExpenseConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("上書きする", role: .destructive) { applyLastMonthExpense() }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("今月すでに設定済みの予算を、先月の支出額で上書きします。")
             }
         }
     }
@@ -195,27 +286,40 @@ struct BudgetTabView: View {
 
     // MARK: - 前月コピー
 
-    private var copyFromPreviousButton: some View {
-        Button {
-            let cal = Calendar.current
-            if let prev = cal.date(byAdding: .month, value: -1, to: selectedMonth) {
-                let f = DateFormatter()
-                f.locale = Locale(identifier: "ja_JP")
-                f.dateFormat = "yyyy-MM"
-                let prevMonthId = f.string(from: prev)
-                store.copyBudgetsFromPreviousMonth(to: monthId, from: prevMonthId)
+    private var quickSetupButtons: some View {
+        VStack(spacing: 8) {
+            // 先月の支出をまるまる予算にする
+            if hasLastMonthExpense {
+                Button {
+                    applyLastMonthExpense()
+                } label: {
+                    Label("先月の支出を予算に設定", systemImage: "arrow.down.circle")
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(accent.opacity(0.15))
+                        )
+                }
+                .buttonStyle(.plain)
             }
-        } label: {
-            Label("先月の予算をコピー", systemImage: "doc.on.doc")
-                .font(.subheadline.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(accent.opacity(0.1))
-                )
+
+            // 先月の予算をコピー
+            Button {
+                copyPreviousBudget()
+            } label: {
+                Label("先月の予算をコピー", systemImage: "doc.on.doc")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(accent.opacity(0.1))
+                    )
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - カテゴリ別
@@ -223,14 +327,19 @@ struct BudgetTabView: View {
     private var categoryBudgetList: some View {
         VStack(spacing: 10) {
             ForEach(store.categories) { category in
+                let budget = budgetByCategory[category.id]
                 CategoryBudgetRow(
                     category: category,
                     expense: expenseByCategory[category.id] ?? 0,
-                    budget: budgetMap[category.id],
+                    budget: budget?.limitAmount,
+                    isEnabled: budget?.isEnabled ?? true,
                     accent: accent,
                     scheme: scheme,
                     onBudgetChanged: { newAmount in
                         store.setBudget(monthId: monthId, categoryId: category.id, limitAmount: newAmount)
+                    },
+                    onToggleEnabled: { enabled in
+                        store.setBudgetEnabled(monthId: monthId, categoryId: category.id, isEnabled: enabled)
                     }
                 )
             }
@@ -251,15 +360,20 @@ private struct CategoryBudgetRow: View {
     let category: Category
     let expense: Int
     let budget: Int?
+    let isEnabled: Bool
     let accent: Color
     let scheme: ColorScheme
     let onBudgetChanged: (Int) -> Void
+    let onToggleEnabled: (Bool) -> Void
 
     @State private var isEditing = false
     @State private var editText = ""
 
+    // 予算が設定されているか
+    private var hasBudget: Bool { (budget ?? 0) > 0 }
+
     private var ratio: Double? {
-        guard let b = budget, b > 0 else { return nil }
+        guard let b = budget, b > 0, isEnabled else { return nil }
         return Double(expense) / Double(b)
     }
 
@@ -270,10 +384,25 @@ private struct CategoryBudgetRow: View {
                 Image(systemName: category.symbolName)
                     .foregroundStyle(category.color)
                     .frame(width: 28)
+                    .opacity(hasBudget && !isEnabled ? 0.4 : 1)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(category.name)
-                        .font(.subheadline.weight(.medium))
+                    HStack(spacing: 6) {
+                        Text(category.name)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(hasBudget && !isEnabled ? .secondary : .primary)
+                        // 一時停止バッジ
+                        if hasBudget && !isEnabled {
+                            Text("停止中")
+                                .font(.caption2.weight(.medium))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule().fill(Color.secondary.opacity(0.15))
+                                )
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     HStack(spacing: 4) {
                         Text(currency(expense))
                             .font(.caption.monospacedDigit())
@@ -315,6 +444,18 @@ private struct CategoryBudgetRow: View {
                     }
                 }
                 .buttonStyle(.plain)
+
+                // ON/OFF トグル（予算設定済みのカテゴリのみ）
+                if hasBudget {
+                    Toggle("", isOn: Binding(
+                        get: { isEnabled },
+                        set: { onToggleEnabled($0) }
+                    ))
+                    .labelsHidden()
+                    .tint(accent)
+                    .scaleEffect(0.8)
+                    .frame(width: 44)
+                }
             }
 
             // プログレスバー
@@ -356,7 +497,7 @@ private struct CategoryBudgetRow: View {
     }
 
     private var overBudget: Bool {
-        guard let b = budget, b > 0 else { return false }
+        guard let b = budget, b > 0, isEnabled else { return false }
         return expense > b
     }
 

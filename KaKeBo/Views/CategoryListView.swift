@@ -21,6 +21,7 @@ struct CategoryListView: View {
 
     @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @EnvironmentObject var ledgerContext: LedgerContext
+    @EnvironmentObject var monthStartStore: MonthStartStore
 
     @Environment(\.dismiss) private var dismiss
     
@@ -181,7 +182,7 @@ struct CategoryListView: View {
             // 新規追加シート
             .sheet(isPresented: $showAdd) {
                 if isPersonalScope {
-                    CategoryEditorView(category: (nil as Category?))
+                    CategoryEditorView(category: (nil as Category?), budgetConfig: budgetConfig(for: nil))
                         .environmentObject(store)
                         .environmentObject(themeStore)
                         .environmentObject(purchase)
@@ -224,6 +225,35 @@ struct CategoryListView: View {
         }
     }
     
+    /// 今月の monthId（yyyy-MM）
+    private var currentMonthId: String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ja_JP")
+        f.dateFormat = "yyyy-MM"
+        return f.string(from: Date())
+    }
+
+    /// カテゴリ編集画面に渡す予算設定の構成を組み立てる
+    /// - Parameter category: 編集対象（新規追加時は nil）
+    private func budgetConfig(for category: Category?) -> CategoryBudgetEditConfig {
+        let monthId = currentMonthId
+        let initial = category.flatMap { c in
+            store.budgets.first(where: { $0.monthId == monthId && $0.categoryId == c.id })?.limitAmount
+        } ?? 0
+
+        // 先月の当カテゴリ支出合計（新規カテゴリは履歴がないので0）
+        let lastExpense: Int = {
+            guard let c = category,
+                  let prevMonth = Calendar.current.date(byAdding: .month, value: -1, to: Date()) else { return 0 }
+            let range = monthStartStore.resolver().monthRange(for: prevMonth)
+            return store.transactions
+                .filter { $0.type == .expense && $0.categoryId == c.id && $0.date >= range.lowerBound && $0.date < range.upperBound }
+                .reduce(0) { $0 + $1.amount }
+        }()
+
+        return CategoryBudgetEditConfig(monthId: monthId, initialAmount: initial, lastMonthExpense: lastExpense)
+    }
+
     private var ownerPicker: some View {
         Picker("対象家計簿", selection: $owner) {
             Text("個人用").tag(CategoryOwner.personal)
@@ -285,7 +315,7 @@ private extension CategoryListView {
         Section {
             ForEach(store.categories) { cat in
                 NavigationLink {
-                    CategoryEditorView(category: cat)
+                    CategoryEditorView(category: cat, budgetConfig: budgetConfig(for: cat))
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: cat.symbolName)
@@ -412,22 +442,29 @@ struct CategoryEditorView: View {
     @State private var name: String = ""
     @State private var symbolName: String = "tag.fill"
     @State private var color: Color = .blue
-    
+    @State private var budgetText: String = ""
+
     private var editingId: UUID? = nil
-    
+    /// 予算設定欄の構成（nil の場合は予算欄を表示しない＝取引追加画面からのインライン作成など）
+    private let budgetConfig: CategoryBudgetEditConfig?
+
     private let freeCategoryLimit = 12
     @EnvironmentObject var purchase: PurchaseManager
     @State private var showPaywall = false
-    
+
     var onSaved: ((Category) -> Void)? = nil
-    
-    init(category: Category?, onSaved: ((Category) -> Void)? = nil) {
+
+    init(category: Category?, budgetConfig: CategoryBudgetEditConfig? = nil, onSaved: ((Category) -> Void)? = nil) {
         self.onSaved = onSaved
+        self.budgetConfig = budgetConfig
         if let c = category {
             _name = State(initialValue: c.name)
             _symbolName = State(initialValue: c.symbolName)
             _color = State(initialValue: c.color)
             editingId = c.id
+        }
+        if let bc = budgetConfig, bc.initialAmount > 0 {
+            _budgetText = State(initialValue: "\(bc.initialAmount)")
         }
     }
     
@@ -473,6 +510,37 @@ struct CategoryEditorView: View {
                     .padding(.vertical, 6)
                 }
                 .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .black.opacity(0.02))
+
+                // 予算設定（カテゴリ管理画面からの場合のみ表示）
+                if let bc = budgetConfig {
+                    Section {
+                        HStack {
+                            Text("今月の予算")
+                            Spacer()
+                            Text("¥")
+                                .foregroundStyle(.secondary)
+                            TextField("未設定", text: $budgetText)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 140)
+                        }
+
+                        // 先月の支出をそのまま予算にするショートカット
+                        if bc.lastMonthExpense > 0 {
+                            Button {
+                                budgetText = "\(bc.lastMonthExpense)"
+                            } label: {
+                                Label("先月の支出額にする（\(currency(bc.lastMonthExpense))）", systemImage: "arrow.down.circle")
+                                    .font(.subheadline)
+                            }
+                        }
+                    } header: {
+                        Text("予算")
+                    } footer: {
+                        Text("空欄にすると今月の予算設定を解除します。")
+                    }
+                    .listRowBackground(scheme == .dark ? Color.white.opacity(0.06) : .black.opacity(0.02))
+                }
             }
             .scrollContentBackground(.hidden)
             .background(themeStore.theme.backgroundColor(for: scheme))
@@ -530,9 +598,30 @@ struct CategoryEditorView: View {
         } else {
             store.updateCategory(cat)
         }
+
+        // 予算の保存（金額0／空欄で解除）
+        if let bc = budgetConfig {
+            let amount = Int(budgetText.filter(\.isNumber)) ?? 0
+            store.setBudget(monthId: bc.monthId, categoryId: cat.id, limitAmount: amount)
+        }
+
         onSaved?(cat)
         dismiss()
     }
+
+    private func currency(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
+    }
+}
+
+/// カテゴリ編集画面で予算欄を出すための構成
+struct CategoryBudgetEditConfig {
+    let monthId: String      // 対象月（yyyy-MM）
+    let initialAmount: Int   // 既存の今月予算（0 = 未設定）
+    let lastMonthExpense: Int // 先月の当カテゴリ支出（0 = なし。0ならショートカット非表示）
 }
 
 // ========== 共有カテゴリ編集画面 ==========
