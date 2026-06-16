@@ -13,6 +13,8 @@ struct BudgetTabView: View {
     @EnvironmentObject var themeStore: ThemeStore
     @EnvironmentObject var monthStartStore: MonthStartStore
     @EnvironmentObject var ledgerContext: LedgerContext
+    @EnvironmentObject var purchase: PurchaseManager
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
     @Environment(\.colorScheme) private var scheme
 
     @State private var selectedMonth: Date = {
@@ -23,6 +25,13 @@ struct BudgetTabView: View {
     // 一括設定の確認ダイアログ用
     @State private var showCopyBudgetConfirm = false
     @State private var showApplyExpenseConfirm = false
+
+    // カテゴリ並び替え順
+    @AppStorage("budget.sortOrder") private var sortOrderRaw: String = BudgetSortOrder.custom.rawValue
+    private var sortOrder: BudgetSortOrder { BudgetSortOrder(rawValue: sortOrderRaw) ?? .custom }
+
+    // タップしたカテゴリの支出一覧シート
+    @State private var detailCategory: Category?
 
     private var monthResolver: MonthStartResolver { monthStartStore.resolver() }
     private var accent: Color { themeStore.theme.accentColor(for: scheme) }
@@ -76,6 +85,38 @@ struct BudgetTabView: View {
 
     private var hasLastMonthExpense: Bool {
         lastMonthExpenseByCategory.values.contains { $0 > 0 }
+    }
+
+    // 並び替え後のカテゴリ一覧
+    private var sortedCategories: [Category] {
+        let cats = store.categories
+        switch sortOrder {
+        case .custom:
+            return cats
+        case .budgetDesc:
+            // 予算が高い順（未設定は末尾）
+            return cats.sorted { (budgetByCategory[$0.id]?.limitAmount ?? -1) > (budgetByCategory[$1.id]?.limitAmount ?? -1) }
+        case .expenseDesc:
+            // 支出が多い順
+            return cats.sorted { (expenseByCategory[$0.id] ?? 0) > (expenseByCategory[$1.id] ?? 0) }
+        case .usageDesc:
+            // 使用率が高い順（予算未設定は末尾）
+            return cats.sorted { usageRatio(for: $0) > usageRatio(for: $1) }
+        }
+    }
+
+    /// 使用率（予算が無い／無効なら -1 として末尾に回す）
+    private func usageRatio(for category: Category) -> Double {
+        guard let b = budgetByCategory[category.id], b.isEnabled, b.limitAmount > 0 else { return -1 }
+        return Double(expenseByCategory[category.id] ?? 0) / Double(b.limitAmount)
+    }
+
+    /// 指定カテゴリの当月の支出取引（新しい順）
+    private func monthlyExpenses(for categoryId: UUID) -> [Transaction] {
+        let range = monthResolver.monthRange(for: selectedMonth)
+        return store.transactions
+            .filter { $0.type == .expense && $0.categoryId == categoryId && $0.date >= range.lowerBound && $0.date < range.upperBound }
+            .sorted { $0.date > $1.date }
     }
 
     // MARK: - 一括設定アクション
@@ -182,6 +223,23 @@ struct BudgetTabView: View {
                 Button("キャンセル", role: .cancel) {}
             } message: {
                 Text("今月すでに設定済みの予算を、先月の支出額で上書きします。")
+            }
+            .sheet(item: $detailCategory) { category in
+                CategoryBudgetDetailSheet(
+                    category: category,
+                    monthTitle: monthTitle,
+                    transactions: monthlyExpenses(for: category.id),
+                    budget: budgetByCategory[category.id]?.limitAmount,
+                    accent: accent,
+                    scheme: scheme
+                )
+                .environmentObject(store)
+                .environmentObject(themeStore)
+                .environmentObject(purchase)
+                .environmentObject(sharedLedgerStore)
+                .environmentObject(ledgerContext)
+                .presentationDetents([.large, .medium])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -326,15 +384,43 @@ struct BudgetTabView: View {
 
     private var categoryBudgetList: some View {
         VStack(spacing: 10) {
-            ForEach(store.categories) { category in
+            // 並び替えコントロール
+            HStack {
+                Spacer()
+                Menu {
+                    Picker("並び替え", selection: $sortOrderRaw) {
+                        ForEach(BudgetSortOrder.allCases) { order in
+                            Text(order.title).tag(order.rawValue)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.arrow.down")
+                        Text(sortOrder.title)
+                    }
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(accent.opacity(0.1))
+                    )
+                }
+            }
+
+            ForEach(sortedCategories) { category in
                 let budget = budgetByCategory[category.id]
+                let expense = expenseByCategory[category.id] ?? 0
                 CategoryBudgetRow(
                     category: category,
-                    expense: expenseByCategory[category.id] ?? 0,
+                    expense: expense,
                     budget: budget?.limitAmount,
                     isEnabled: budget?.isEnabled ?? true,
                     accent: accent,
                     scheme: scheme,
+                    canShowDetail: expense > 0,
+                    onSelect: { detailCategory = category },
                     onBudgetChanged: { newAmount in
                         store.setBudget(monthId: monthId, categoryId: category.id, limitAmount: newAmount)
                     },
@@ -363,6 +449,8 @@ private struct CategoryBudgetRow: View {
     let isEnabled: Bool
     let accent: Color
     let scheme: ColorScheme
+    let canShowDetail: Bool
+    let onSelect: () -> Void
     let onBudgetChanged: (Int) -> Void
     let onToggleEnabled: (Bool) -> Void
 
@@ -380,42 +468,56 @@ private struct CategoryBudgetRow: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
-                // カテゴリアイコン
-                Image(systemName: category.symbolName)
-                    .foregroundStyle(category.color)
-                    .frame(width: 28)
-                    .opacity(hasBudget && !isEnabled ? 0.4 : 1)
+                // カテゴリアイコン＋名称＋金額（タップで支出一覧へ）
+                Button(action: onSelect) {
+                    HStack(spacing: 10) {
+                        Image(systemName: category.symbolName)
+                            .foregroundStyle(category.color)
+                            .frame(width: 28)
+                            .opacity(hasBudget && !isEnabled ? 0.4 : 1)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(category.name)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(hasBudget && !isEnabled ? .secondary : .primary)
-                        // 一時停止バッジ
-                        if hasBudget && !isEnabled {
-                            Text("停止中")
-                                .font(.caption2.weight(.medium))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(
-                                    Capsule().fill(Color.secondary.opacity(0.15))
-                                )
-                                .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(category.name)
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(hasBudget && !isEnabled ? .secondary : .primary)
+                                // 一時停止バッジ
+                                if hasBudget && !isEnabled {
+                                    Text("停止中")
+                                        .font(.caption2.weight(.medium))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            Capsule().fill(Color.secondary.opacity(0.15))
+                                        )
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            HStack(spacing: 4) {
+                                Text(currency(expense))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(overBudget ? .red : .primary)
+                                if let b = budget {
+                                    Text("/ \(currency(b))")
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                }
+                                // 支出一覧を開けることを示すヒント
+                                if canShowDetail {
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
                         }
+
+                        Spacer(minLength: 0)
                     }
-                    HStack(spacing: 4) {
-                        Text(currency(expense))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(overBudget ? .red : .primary)
-                        if let b = budget {
-                            Text("/ \(currency(b))")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-
-                Spacer()
+                .buttonStyle(.plain)
+                .disabled(!canShowDetail)
 
                 // 予算設定ボタン
                 Button {
@@ -499,6 +601,140 @@ private struct CategoryBudgetRow: View {
     private var overBudget: Bool {
         guard let b = budget, b > 0, isEnabled else { return false }
         return expense > b
+    }
+
+    private func currency(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        return "¥" + (f.string(from: n as NSNumber) ?? "\(n)")
+    }
+}
+
+// MARK: - 並び替え順
+
+enum BudgetSortOrder: String, CaseIterable, Identifiable {
+    case custom      // 標準（カテゴリ順）
+    case budgetDesc  // 予算が高い順
+    case expenseDesc // 支出が多い順
+    case usageDesc   // 使用率が高い順
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .custom:      return "標準"
+        case .budgetDesc:  return "予算が高い順"
+        case .expenseDesc: return "支出が多い順"
+        case .usageDesc:   return "使用率が高い順"
+        }
+    }
+}
+
+// MARK: - カテゴリ別 支出一覧シート
+
+private struct CategoryBudgetDetailSheet: View {
+    let category: Category
+    let monthTitle: String
+    let transactions: [Transaction]
+    let budget: Int?
+    let accent: Color
+    let scheme: ColorScheme
+
+    @EnvironmentObject var store: DataStore
+    @EnvironmentObject var themeStore: ThemeStore
+    @EnvironmentObject var purchase: PurchaseManager
+    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
+    @EnvironmentObject var ledgerContext: LedgerContext
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var editingTx: Transaction?
+
+    private var total: Int { transactions.reduce(0) { $0 + $1.amount } }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    HStack {
+                        Image(systemName: category.symbolName)
+                            .foregroundStyle(category.color)
+                        Text(category.name)
+                            .font(.headline)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(currency(total))
+                                .font(.headline.monospacedDigit())
+                            if let b = budget {
+                                Text("予算 \(currency(b))")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text("\(transactions.count)件")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Section {
+                    if transactions.isEmpty {
+                        Text("この月の支出はありません")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(transactions) { tx in
+                            Button {
+                                editingTx = tx
+                            } label: {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(dateText(tx.date))
+                                            .font(.subheadline.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                        if !tx.memo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            Text(tx.memo)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(2)
+                                        }
+                                    }
+                                    Spacer()
+                                    Text(currency(tx.amount))
+                                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                } header: {
+                    Text("支出一覧")
+                }
+            }
+            .navigationTitle(monthTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+            .sheet(item: $editingTx) { tx in
+                EditTransactionView(transaction: tx)
+                    .environmentObject(store)
+                    .environmentObject(themeStore)
+                    .environmentObject(purchase)
+                    .environmentObject(sharedLedgerStore)
+                    .environmentObject(ledgerContext)
+            }
+        }
+    }
+
+    private func dateText(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ja_JP")
+        f.dateFormat = "M月d日(E)"
+        return f.string(from: date)
     }
 
     private func currency(_ n: Int) -> String {
