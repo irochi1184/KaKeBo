@@ -51,6 +51,8 @@ struct KaKeBoApp: App {
                     }
                 }
                 .task {
+                    // 友達招待プレミアム体験を付与できるよう課金マネージャを共有ストアに接続
+                    sharedLedgerStore.purchaseManager = purchase
                     await purchase.load()
                     PhoneSessionManager.shared.configure(with: dataStore)
                 }

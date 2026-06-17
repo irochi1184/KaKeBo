@@ -76,6 +76,10 @@ final class SharedLedgerStore: ObservableObject {
     private var ledgerSourceMap: [CKRecord.ID: LedgerSource] = [:]
     private let defaults = UserDefaults.appGroup
     private var toastTask: Task<Void, Never>?
+    /// 友達招待プレミアム体験を付与するための課金マネージャ参照（KaKeBoApp で注入）
+    weak var purchaseManager: PurchaseManager?
+    /// 招待報酬チェックのスロットリング用
+    private var lastReferralCheck: Date?
     private var lastFailedShareMetadata: CKShare.Metadata?
     private var shareAcceptanceRetryTasks: [String: Task<Void, Never>] = [:]
     private var shareAcceptanceRetryCounts: [String: Int] = [:]
@@ -727,6 +731,8 @@ final class SharedLedgerStore: ObservableObject {
             if shared.isEmpty {
                 print("⚠️ \(contextPrefix) shared list is empty")
             }
+            // 友達招待プレミアム体験：所有家計簿に新しい参加者が増えていないかチェック
+            Task { [weak self] in await self?.checkOwnerReferralRewards() }
             return true
             
         } catch {
@@ -741,6 +747,67 @@ final class SharedLedgerStore: ObservableObject {
         let reloadSucceeded = await reloadLedgers(logContext: "remoteChange")
         let targets = reloadSucceeded ? ledgers : existing
         await refreshCachedRecords(for: targets)
+    }
+
+    // MARK: - 友達招待プレミアム体験（オーナー付与）
+
+    /// 所有している共有家計簿に新しい参加者が増えていたら、オーナーにプレミアム体験を付与する。
+    /// CloudKit の CKShare 参加者数を前回値（ベースライン）と比較して検知する。
+    func checkOwnerReferralRewards() async {
+        // 過剰な CKShare 取得を避けるため 30 秒に1回までに制限
+        if let last = lastReferralCheck, Date().timeIntervalSince(last) < 30 { return }
+        lastReferralCheck = Date()
+
+        let owned = ownedLedgers
+        guard !owned.isEmpty else { return }
+
+        for ledger in owned {
+            guard let count = try? await acceptedParticipantCount(for: ledger) else { continue }
+
+            let initKey = "referral.participants.init.\(ledger.id.recordName)"
+            let baseKey = "referral.participants.baseline.\(ledger.id.recordName)"
+
+            // 初回観測時は既存参加者を遡及付与しないようベースラインだけ記録
+            guard defaults.bool(forKey: initKey) else {
+                defaults.set(count, forKey: baseKey)
+                defaults.set(true, forKey: initKey)
+                continue
+            }
+
+            let baseline = defaults.integer(forKey: baseKey)
+            guard count != baseline else { continue }
+
+            // ベースラインを更新（増減どちらも追従。減少時は再参加での再付与を防ぐ）
+            defaults.set(count, forKey: baseKey)
+            guard count > baseline else { continue }
+
+            // 増えた参加者の人数ぶん付与（1人 = referralTrialDaysPerJoin 日）
+            let newJoins = count - baseline
+            var grantedTotal = 0
+            for _ in 0..<newJoins {
+                grantedTotal += (purchaseManager?.grantReferralTrial() ?? 0)
+            }
+            if grantedTotal > 0 {
+                let days = purchaseManager?.referralTrialRemainingDays ?? grantedTotal
+                globalToast = ToastState(
+                    message: "友達が参加しました！プレミアムを\(grantedTotal)日間プレゼント🎉（残り\(days)日）",
+                    systemImage: "gift.fill",
+                    actionTitle: nil,
+                    action: nil
+                )
+            }
+        }
+    }
+
+    /// 指定した所有家計簿の CKShare で、オーナー以外の「承諾済み」参加者数を返す
+    private func acceptedParticipantCount(for ledger: SharedLedger) async throws -> Int {
+        let rootRecord = try await db.record(for: ledger.id)
+        guard let shareRef = rootRecord.share else { return 0 }
+        let shareRecord = try await db.record(for: shareRef.recordID)
+        guard let share = shareRecord as? CKShare else { return 0 }
+        return share.participants.filter {
+            $0.role != .owner && $0.acceptanceStatus == .accepted
+        }.count
     }
 
     private func refreshCachedRecords(for ledgers: [SharedLedger]) async {
