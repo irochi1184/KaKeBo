@@ -26,6 +26,8 @@ final class PurchaseManager: ObservableObject {
     private var updatesTask: Task<Void, Never>?   // ← 追加
     
     init() {
+        // 友達招待プレミアム体験の保存値を復元
+        loadReferralTrial()
         // 起動時にトランザクション更新を常時監視
         startListeningForTransactions()
     }
@@ -94,10 +96,66 @@ final class PurchaseManager: ObservableObject {
         await load()
     }
     
-    var isPremiumActive: Bool { !purchasedProductIDs.isEmpty }
+    // 課金（買い切り/サブスク）または友達招待プレミアム体験が有効ならプレミアム扱い
+    var isPremiumActive: Bool { !purchasedProductIDs.isEmpty || isReferralTrialActive }
     // 下の2行はテスト用
 //    var isPremiumActive = true   // プレミアムプラン加入
 //    var isPremiumActive = false  // プレミアムプラン未加入
+
+    // MARK: - 友達招待プレミアム体験（ローカル付与）
+
+    /// 友達招待で付与されたプレミアム体験の有効期限（なければ nil）
+    @Published private(set) var referralTrialUntil: Date?
+
+    private enum TrialKeys {
+        static let until = "premium.referralTrial.until"                  // Double（timeIntervalSinceReferenceDate）
+        static let totalGrantedDays = "premium.referralTrial.totalGrantedDays" // Int（不正対策の累計上限管理）
+    }
+
+    /// 招待特典で付与できる累計日数の上限（自己招待などの乱用対策）
+    nonisolated static let maxReferralTrialDays = 28
+    /// 1回の参加成立で付与する日数
+    nonisolated static let referralTrialDaysPerJoin = 7
+
+    /// 友達招待プレミアム体験が現在有効か
+    var isReferralTrialActive: Bool {
+        guard let until = referralTrialUntil else { return false }
+        return until > Date()
+    }
+
+    /// プレミアム体験の残り日数（切り上げ・有効でなければ0）
+    var referralTrialRemainingDays: Int {
+        guard let until = referralTrialUntil, until > Date() else { return 0 }
+        return max(1, Int(ceil(until.timeIntervalSinceNow / 86_400)))
+    }
+
+    private func loadReferralTrial() {
+        let raw = UserDefaults.appGroup.double(forKey: TrialKeys.until)
+        if raw > 0 {
+            referralTrialUntil = Date(timeIntervalSinceReferenceDate: raw)
+        }
+    }
+
+    /// 友達が共有家計簿に参加したとき、オーナーへプレミアム体験を付与する。
+    /// 既に体験中なら期限を延長する。累計上限に達している場合は付与しない。
+    /// - Returns: 実際に付与した日数（0 なら未付与）
+    @discardableResult
+    func grantReferralTrial(days: Int = PurchaseManager.referralTrialDaysPerJoin) -> Int {
+        let defaults = UserDefaults.appGroup
+        let total = defaults.integer(forKey: TrialKeys.totalGrantedDays)
+        guard total < Self.maxReferralTrialDays else { return 0 }
+
+        let grantDays = min(days, Self.maxReferralTrialDays - total)
+        let now = Date()
+        // 体験中なら現在の期限から、切れていれば今から延長
+        let base = max(referralTrialUntil ?? now, now)
+        let newUntil = Calendar.current.date(byAdding: .day, value: grantDays, to: base) ?? base
+
+        referralTrialUntil = newUntil
+        defaults.set(newUntil.timeIntervalSinceReferenceDate, forKey: TrialKeys.until)
+        defaults.set(total + grantDays, forKey: TrialKeys.totalGrantedDays)
+        return grantDays
+    }
     
     // MARK: - Updates listener
     private func startListeningForTransactions() {

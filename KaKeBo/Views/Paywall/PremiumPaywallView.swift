@@ -43,7 +43,23 @@ struct PremiumPaywallView: View {
                             .padding(.horizontal)
                     }
                     .padding(.top, 8)
-                    
+
+                    // MARK: - 友達招待プレミアム体験中バナー
+                    if pm.isReferralTrialActive {
+                        HStack(spacing: 10) {
+                            Image(systemName: "gift.fill")
+                                .foregroundStyle(accent)
+                            Text("プレミアム体験中（残り\(pm.referralTrialRemainingDays)日）")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(accent.opacity(0.12))
+                        )
+                    }
+
                     // MARK: - 機能紹介 (FeatureCards)
                     featureCards
                     

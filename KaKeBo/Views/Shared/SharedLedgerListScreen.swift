@@ -185,6 +185,16 @@ struct SharedLedgerListScreen: View {
                     .foregroundStyle(.secondary)
             }
 
+            // 友達招待プレミアム体験の案内
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "gift.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.pink)
+                Text("招待した友達が参加すると、あなたにプレミアムを\(PurchaseManager.referralTrialDaysPerJoin)日間プレゼント🎉")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+            }
+
             Button {
                 showJoinByLinkSheet = true
             } label: {
