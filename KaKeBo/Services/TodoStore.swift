@@ -128,7 +128,8 @@ final class TodoStore: ObservableObject {
             } else {
                 todos.append(CalendarTodo(title: t.title, done: false, due: due, templateId: t.id))
             }
-            Task { await ReminderManager.scheduleMonthly(template: t, due: due, hour: 8) }
+            // ToDo の自動プッシュ通知（旧 ReminderManager.scheduleMonthly）は廃止。
+            // 通知はユーザーが設定したリマインダールール（ReminderManagerV2）からのみ送る。
         }
     }
     

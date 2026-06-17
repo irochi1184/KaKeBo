@@ -167,15 +167,8 @@ struct HomeView: View {
                 selectedMonth = monthResolver.anchorMonth(containing: Date())
                 didSetInitialMonth = true
             }
-            // 予算超過チェック通知
-            let forecast = BudgetForecastService.calculate(
-                transactions: store.transactions,
-                budgets: store.budgets,
-                categories: store.categories,
-                currentMonth: monthResolver.anchorMonth(containing: Date()),
-                resolver: monthResolver
-            )
-            BudgetAlertNotifier.checkAndNotify(forecast: forecast)
+            // 予算超過はホーム画面の予算アラートカードで表示するため、
+            // アプリを開くたびにプッシュ通知を出すのはやめる（在アプリ中の通知は冗長）
         }
         // 設定画面（サイドメニュー経由）での変更を即時反映する
         .onChange(of: cardOrderRaw) { _, _ in

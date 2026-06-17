@@ -163,6 +163,11 @@ enum ReminderManagerV2 {
         center.removeDeliveredNotifications(withIdentifiers: d)
     }
     
+    /// 起動時などに呼ぶ公開掃除API：ルール未設定でも残ってしまうレガシーToDo通知を一掃する
+    static func purgeLegacyTodoNotifications() async {
+        await sweepLegacyMonthly()
+    }
+
     /// レガシー掃除：かつての単発月次通知（monthly.*）を一掃して事故防止
     private static func sweepLegacyMonthly() async {
         let prefix = "monthly."
