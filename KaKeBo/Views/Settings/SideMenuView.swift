@@ -51,7 +51,7 @@ struct SideMenuView: View {
     @StateObject private var todoStore = TodoStore()
 
     enum Sheet: Identifiable {
-        case reminders, categories, recurringTodos, fixedExpenses, recurringDetect, theme, help, lock, sharedLedgers, monthStart, calendarBottomDisplay, exportData, updateHistory
+        case reminders, categories, recurringTodos, fixedExpenses, recurringDetect, theme, help, lock, sharedLedgers, monthStart, calendarBottomDisplay, homeCardOrder, exportData, updateHistory
         var id: String { "side-sheet-\(self)" }
     }
 
@@ -315,6 +315,7 @@ struct SideMenuView: View {
         menuRow("アプリロックを設定", icon: "lock.shield", accent: accent) { sheet = .lock }
         menuRow("月の開始日を設定", icon: "calendar.badge.plus", accent: accent) { sheet = .monthStart }
         menuRow("カレンダー下部の表示", icon: "rectangle.bottomthird.inset.filled", accent: accent) { sheet = .calendarBottomDisplay }
+        menuRow("ホーム画面のカード並び替え", icon: "rectangle.stack", accent: accent) { sheet = .homeCardOrder }
         menuRow("共有家計簿を管理", icon: "person.2", accent: accent) { sheet = .sharedLedgers }
     }
 
@@ -450,6 +451,9 @@ struct SideMenuView: View {
                         selection: $calendarBottomMode,
                         accent: themeStore.theme.accentColor(for: scheme)
                     )
+                case .homeCardOrder:
+                    HomeCardOrderSettingsView(accent: themeStore.theme.accentColor(for: scheme))
+                        .navigationTitle("ホーム画面のカード並び替え")
                 case .exportData:
                     ExportView()
                         .environmentObject(store)

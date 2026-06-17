@@ -27,7 +27,12 @@ struct HomeView: View {
     @AppStorage("home.lastLedgerMode") private var lastLedgerModeRaw: String = "personal"
     @AppStorage("home.lastSharedLedgerRecordName") private var lastSharedLedgerRecordName: String?
     @AppStorage("monthStart.onboardingDone") private var monthStartOnboardingDone = false
-    
+
+    // 設定画面でのカード並び順・表示設定の変更を即時に検知するための監視用
+    // （サイドメニューはオーバーレイのため HomeView の onAppear が走らない）
+    @AppStorage("home.cardOrder") private var cardOrderRaw: String = ""
+    @AppStorage("home.hiddenCards") private var hiddenCardsRaw: String = ""
+
     @State private var selectedMonth: Date = {
         let cal = Calendar.current
         let comps = cal.dateComponents([ .year, .month ], from: Date())
@@ -41,7 +46,8 @@ struct HomeView: View {
     @State private var dailyDetailSheet: DailyTrendDetailContext?
 
     // ▼ 追加：カード順序の状態とドラッグ中のカード
-    @State private var cardOrder: [DashboardCard] = CardOrderStore().load(default: [.header, .budgetAlert, .forecast, .weeklySummary, .donut, .daily, .transactions])
+    @State private var cardOrder: [DashboardCard] = CardOrderStore().load()
+    @State private var hiddenCards: Set<DashboardCard> = HiddenCardStore().load()
     @State private var dragging: DashboardCard?
 
     private let dropUTIs: [UTType] = [.plainText] // onDrag のペイロード種別
@@ -150,6 +156,9 @@ struct HomeView: View {
             }
         }
         .onAppear {
+            // 設定画面で並び順・表示設定を変更した場合に反映する
+            cardOrder = CardOrderStore().load()
+            hiddenCards = HiddenCardStore().load()
             store.applyFixedExpensesForCurrentMonth()
             if !monthStartOnboardingDone {
                 showMonthStartIntro = true
@@ -167,6 +176,13 @@ struct HomeView: View {
                 resolver: monthResolver
             )
             BudgetAlertNotifier.checkAndNotify(forecast: forecast)
+        }
+        // 設定画面（サイドメニュー経由）での変更を即時反映する
+        .onChange(of: cardOrderRaw) { _, _ in
+            cardOrder = CardOrderStore().load()
+        }
+        .onChange(of: hiddenCardsRaw) { _, _ in
+            hiddenCards = HiddenCardStore().load()
         }
     }
     
@@ -290,6 +306,8 @@ struct HomeView: View {
     // 現在のデータ状況で表示可能なカードのみを順序通りに返す
     private func visibleCardsInOrder() -> [DashboardCard] {
         cardOrder.filter { c in
+            // 設定で非表示にしたカードは除外
+            if hiddenCards.contains(c) { return false }
             switch c {
             case .header: return true
             case .budgetAlert: return !budgetAlerts.isEmpty
@@ -1057,42 +1075,6 @@ extension TransactionListCard where RowID == CKRecord.ID {
             }
         }
         self.onDelete = nil
-    }
-}
-
-// 並び替え対象のカード
-private enum DashboardCard: String, CaseIterable, Identifiable {
-    case header         // 月次ヘッダー（収支・支出・収入）
-    case budgetAlert    // 予算超過・警告カード
-    case forecast       // 支出予測・予算カード
-    case weeklySummary  // 週間サマリー
-    case donut          // 円グラフ（支出/収入ブレイクダウン）
-    case daily          // 日別推移（棒グラフ）
-    case transactions   // 最近の取引リスト
-    var id: String { rawValue }
-}
-
-// AppStorage で順序を保存/復元（["header","donut",...] という配列文字列で保存）
-private struct CardOrderStore {
-    @AppStorage("home.cardOrder") private var raw: String = ""
-    func load(default order: [DashboardCard]) -> [DashboardCard] {
-        guard let data = raw.data(using: .utf8),
-              let ids = (try? JSONDecoder().decode([String].self, from: data)) else {
-            return order
-        }
-        // 既知のカードだけ復元（将来カード増減しても安全）
-        let map = Dictionary(uniqueKeysWithValues: DashboardCard.allCases.map { ($0.id, $0) })
-        let seq = ids.compactMap { map[$0] }
-        // 足りないカードは末尾に補完
-        let missing = DashboardCard.allCases.filter { !seq.contains($0) }
-        return seq + missing
-    }
-    func save(_ order: [DashboardCard]) {
-        let ids = order.map(\.id)
-        if let data = try? JSONEncoder().encode(ids),
-           let s = String(data: data, encoding: .utf8) {
-            raw = s
-        }
     }
 }
 

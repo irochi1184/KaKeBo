@@ -73,40 +73,28 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "カテゴリ別予算タブ",
-            message: "新しい「予算」タブが登場。カテゴリごとの予算と支出を、ひと目で把握できます。",
-            symbol: "chart.pie.fill",
+            title: "ホーム画面のカードを並び替え",
+            message: "設定画面からホームのカードを自由に並び替え。よく見る情報を上に配置できます。",
+            symbol: "rectangle.stack.fill",
             tint: .blue
         ),
         Highlight(
-            title: "予算アラート",
-            message: "予算の超過や使いすぎをホーム画面でいち早くお知らせ。使いすぎを未然に防げます。",
-            symbol: "exclamationmark.triangle.fill",
-            tint: .orange
+            title: "不要なカードを非表示に",
+            message: "使わないカードはオフにしてすっきり。自分仕様のホーム画面に整えられます。",
+            symbol: "eye.slash.fill",
+            tint: .indigo
         ),
         Highlight(
-            title: "先月の支出から予算設定",
-            message: "ワンタップで先月の支出をそのまま予算に。ゼロから入力する手間がありません。",
-            symbol: "wand.and.stars",
+            title: "予算から支出一覧をすぐ確認",
+            message: "予算タブのカテゴリをタップすると、その月の支出明細をその場で確認できます。",
+            symbol: "list.bullet.rectangle",
             tint: .green
         ),
         Highlight(
-            title: "予算のオン・オフ",
-            message: "カテゴリごとに予算を一時停止。金額はそのまま残るので、必要なときにすぐ戻せます。",
-            symbol: "switch.2",
-            tint: .purple
-        ),
-        Highlight(
-            title: "サイドメニュー",
-            message: "メニューをサイドにすっきり整理。よく使う機能へ迷わずアクセスできます。",
-            symbol: "sidebar.left",
-            tint: .teal
-        ),
-        Highlight(
-            title: "安定性の向上",
-            message: "iCloud自動バックアップが確実に保存されるよう改善し、大切なデータをより安全に守ります。",
-            symbol: "icloud.fill",
-            tint: .cyan
+            title: "予算リストの並び替え",
+            message: "予算が高い順・支出が多い順など、見たい順番で予算を並び替えられます。",
+            symbol: "arrow.up.arrow.down",
+            tint: .orange
         )
     ]
     /*
@@ -174,6 +162,12 @@ private struct UpdateNoticeContent: View {
      - カテゴリ追加・編集画面から予算を設定できるように
      - メニューをサイドメニューに整理
      - iCloud自動バックアップが保存されない問題を修正
+     アップデート 3.1
+     - ホーム画面のカードを設定画面から並び替えできるように
+     - ホーム画面の不要なカードを非表示にできる機能を追加
+     - カードの並び替え・表示切り替えがホーム画面にすぐ反映されるよう改善
+     - 予算タブでカテゴリをタップするとその月の支出一覧を確認できるように
+     - 予算タブのカテゴリを予算順・支出順で並び替えできるように
      */
 
     let accent: Color
@@ -294,7 +288,7 @@ private struct UpdateNoticeContent: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("バージョン \(AppVersion.current)")
                     .font(.title.weight(.heavy))
-                Text("予算管理が、もっと自由に。")
+                Text("もっと、自分好みに使いやすく。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -394,6 +388,13 @@ struct VersionEntry: Identifiable {
 
 /// 過去のアップデート履歴（新しい順）
 let versionHistory: [VersionEntry] = [
+    VersionEntry(version: "3.1", items: [
+        "ホーム画面のカードを設定画面から並び替えできるように",
+        "ホーム画面の不要なカードを非表示にできる機能を追加",
+        "カードの並び替え・表示切り替えがホーム画面にすぐ反映されるよう改善",
+        "予算タブでカテゴリをタップするとその月の支出一覧を確認できるように",
+        "予算タブのカテゴリを予算順・支出順で並び替えできるように",
+    ]),
     VersionEntry(version: "3.0", items: [
         "カテゴリ別予算管理タブを追加",
         "予算の超過・使いすぎをホーム画面に通知する予算アラートを追加",

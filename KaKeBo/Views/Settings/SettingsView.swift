@@ -78,7 +78,7 @@ struct SettingsView: View {
     }
     
     enum Sheet: Identifiable {
-        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers, monthStart, calendarBottomDisplay
+        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers, monthStart, calendarBottomDisplay, homeCardOrder
         var id: String { "sheet-\(self)" }
     }
     // 外部URL
@@ -254,6 +254,15 @@ struct SettingsView: View {
                             .navigationBarTitleDisplayMode(.inline)
                         }
                         .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+
+                    case .homeCardOrder:
+                        NavigationStack {
+                            HomeCardOrderSettingsView(accent: accent)
+                                .navigationTitle("ホーム画面のカード並び替え")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
 
                     }
@@ -564,6 +573,13 @@ struct SettingsView: View {
                 accent: accent,
                 trailingText: calendarBottomMode.title
             ) { sheet = .calendarBottomDisplay }
+
+            SettingsRowButton(
+                title: "ホーム画面のカード並び替え",
+                systemImage: "rectangle.stack",
+                accent: accent,
+                trailingText: nil
+            ) { sheet = .homeCardOrder }
 
             SettingsRowButton(
                 title: "共有家計簿を管理",
