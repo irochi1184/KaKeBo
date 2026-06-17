@@ -2,7 +2,8 @@ import StoreKit
 import SwiftUI
 import UIKit
 
-let totalday = 100
+/// レビューを依頼する累計ログイン日数のマイルストーン（段階制）
+let reviewMilestones = [7, 30, 100]
 
 // MARK: - ログイン日数の集計
 enum LoginDayTracker {
@@ -41,12 +42,17 @@ enum LoginDayTracker {
     }
 }
 
-// MARK: - totalday日達成時のレビュー導線
+// MARK: - 利用日数マイルストーン達成時のレビュー導線
 struct LoginMilestoneReviewGate: View {
     @AppStorage(LoginDayTracker.Keys.totalLoginDays, store: .appGroup) private var totalLoginDays = 0
+    // 旧バージョンの単一完了フラグ（マイグレーション用に読み取る）
     @AppStorage("engagement.reviewPrompt.completed", store: .appGroup) private var reviewPromptCompleted = false
+    // 直近で表示済みのマイルストーン日数（これより大きいものだけ表示する）
+    @AppStorage("engagement.reviewPrompt.lastMilestone", store: .appGroup) private var lastPromptedMilestone = 0
 
     @State private var isPresented = false
+    // 現在表示中のマイルストーン日数（オーバーレイの文言に使う）
+    @State private var currentMilestone = 0
 
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var themeStore: ThemeStore
@@ -64,29 +70,44 @@ struct LoginMilestoneReviewGate: View {
     var body: some View {
         LoginMilestoneReviewOverlay(
             isPresented: $isPresented,
+            milestoneDay: currentMilestone,
             accent: accent,
             background: background,
             isNewYearGreeting: isNewYearGreeting
         )
-            .onAppear { evaluateAndMaybeShow(registerLogin: true) }
+            .onAppear {
+                migrateLegacyCompletionIfNeeded()
+                evaluateAndMaybeShow(registerLogin: true)
+            }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
                     evaluateAndMaybeShow(registerLogin: true)
                 }
             }
             .onChange(of: isPresented) { _, newValue in
-                if newValue == false && totalLoginDays >= totalday {
-                    reviewPromptCompleted = true
+                if newValue == false && currentMilestone > lastPromptedMilestone {
+                    lastPromptedMilestone = currentMilestone
                 }
             }
+    }
+
+    /// 旧バージョンで100日プロンプト完了済みのユーザーが再表示されないように移行する
+    private func migrateLegacyCompletionIfNeeded() {
+        if reviewPromptCompleted && lastPromptedMilestone == 0 {
+            lastPromptedMilestone = reviewMilestones.max() ?? 100
+        }
     }
 
     private func evaluateAndMaybeShow(registerLogin: Bool) {
         if registerLogin {
             _ = LoginDayTracker.registerLogin()
         }
-
-        if totalLoginDays >= totalday && !reviewPromptCompleted {
+        guard !isPresented else { return }
+        // 到達済みかつ未表示のマイルストーンのうち、最も大きいものを1つ表示する
+        if let milestone = reviewMilestones
+            .filter({ $0 <= totalLoginDays && $0 > lastPromptedMilestone })
+            .max() {
+            currentMilestone = milestone
             isPresented = true
         }
     }
@@ -94,6 +115,7 @@ struct LoginMilestoneReviewGate: View {
 
 private struct LoginMilestoneReviewOverlay: View {
     @Binding var isPresented: Bool
+    let milestoneDay: Int
     let accent: Color
     let background: Color
     let isNewYearGreeting: Bool
@@ -142,7 +164,7 @@ private struct LoginMilestoneReviewOverlay: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("おめでとうございます！")
                     .font(.title3.weight(.semibold))
-                Text("累計\(totalday)日利用の達成です")
+                Text("累計\(milestoneDay)日利用の達成です")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -156,8 +178,8 @@ private struct LoginMilestoneReviewOverlay: View {
             if isNewYearGreeting {
                 Text("明けましておめでとうございます！")
             }
-            Text("あなたはこのアプリを使用して累計\(totalday)日が経過しました。")
-            Text("\(totalday)日間、使い続けてくれてありがとうございます！")
+            Text("あなたはこのアプリを使用して累計\(milestoneDay)日が経過しました。")
+            Text("\(milestoneDay)日間、使い続けてくれてありがとうございます！")
             Text("この家計簿アプリは、\n「広告なしで、安心して使えるものを作りたい」\nという想いで、ひとりで開発・運営しています。")
             Text("正直、大きな収益はありません。\nそれでも続けられているのは、\n使ってくれている皆さんのおかげです。")
             Text("レビューでの応援が、\n次のアップデートの原動力になります。\nもし良ければレビューにご協力ください。")
@@ -198,7 +220,7 @@ private struct LoginMilestoneReviewOverlay: View {
             return
         }
         
-        SKStoreReviewController.requestReview(in: scene)
+        AppStore.requestReview(in: scene)
         isPresented = false
     }
 }
@@ -268,17 +290,22 @@ final class ReviewRequestManager {
         defaults.set(now, forKey: Keys.lastRequestAttemptDate)
 
         let alert = UIAlertController(
-            title: "KaKeBoをご利用いただきありがとうございます",
-            message: "使い心地はいかがですか？よろしければレビューで応援していただけると励みになります。",
+            title: "KaKeBo を楽しんでいただけていますか？",
+            message: "あなたの声が、広告なし・ひとり開発の KaKeBo を続ける一番の励みになります。よろしければ星での応援をお願いできませんか？",
             preferredStyle: .alert
         )
 
-        alert.addAction(UIAlertAction(title: "今回はしない", style: .cancel))
-        alert.addAction(UIAlertAction(title: "今後表示しない", style: .destructive) { [weak self] _ in
+        // レビュー導線を主役に（preferredAction で強調）
+        let reviewAction = UIAlertAction(title: "応援する", style: .default) { _ in
+            AppStore.requestReview(in: scene)
+        }
+        alert.addAction(reviewAction)
+        alert.preferredAction = reviewAction
+
+        alert.addAction(UIAlertAction(title: "あとで", style: .cancel))
+        // オプトアウトは控えめに（赤の破棄スタイルをやめる）
+        alert.addAction(UIAlertAction(title: "今後は表示しない", style: .default) { [weak self] _ in
             self?.defaults.set(true, forKey: Keys.neverShowAgain)
-        })
-        alert.addAction(UIAlertAction(title: "レビューする", style: .default) { _ in
-            SKStoreReviewController.requestReview(in: scene)
         })
 
         topVC.present(alert, animated: true)
