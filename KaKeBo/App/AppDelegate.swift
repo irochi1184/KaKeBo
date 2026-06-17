@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // 過去バージョンで自動登録された ToDo 通知（monthly.*）が
+        // ルール未設定でも残って発火するのを防ぐため、起動時に一掃する
+        Task { await ReminderManagerV2.purgeLegacyTodoNotifications() }
         return true
     }
     
