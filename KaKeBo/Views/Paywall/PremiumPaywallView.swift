@@ -209,7 +209,16 @@ struct PremiumPaywallView: View {
         }
     }
 
+    /// 無料トライアル（紹介オファー）付きのサブスクが存在するか
+    private var hasFreeTrialOffer: Bool {
+        pm.products.contains { $0.subscription?.introductoryOffer?.paymentMode == .freeTrial }
+    }
+
     private var planBannerText: String {
+        // 無料トライアルがある場合は最優先で訴求
+        if hasFreeTrialOffer {
+            return "年額プランは無料トライアル付き。気に入らなければ期間内の解約で料金はかかりません。"
+        }
         let hasSubscription = pm.products.contains { $0.type == .autoRenewable }
         let hasLifetime = pm.products.contains { $0.type == .nonConsumable }
         switch (hasSubscription, hasLifetime) {
@@ -285,7 +294,10 @@ private struct ProductPremiumCard: View {
     let product: Product
     let accent: Color
     let onPurchase: () -> Void
-    
+
+    // 無料トライアル（紹介オファー）の説明文。対象かつ適格な場合のみ表示
+    @State private var trialText: String? = nil
+
     var body: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
@@ -295,12 +307,18 @@ private struct ProductPremiumCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                if let trialText {
+                    Text(trialText)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer()
             Button {
                 onPurchase()
             } label: {
-                Text("\(product.displayPrice)")
+                Text(trialText == nil ? product.displayPrice : "無料で開始")
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
@@ -320,6 +338,43 @@ private struct ProductPremiumCard: View {
                 )
         )
         .shadow(color: .black.opacity(0.10), radius: 12, y: 6)
+        .task { await loadIntroOffer() }
+    }
+
+    /// 紹介オファー（無料トライアル）を確認し、適格なら説明文をセットする
+    private func loadIntroOffer() async {
+        guard
+            let sub = product.subscription,
+            let offer = sub.introductoryOffer,
+            offer.paymentMode == .freeTrial
+        else { return }
+        // 過去にトライアル/オファーを利用済みのユーザーは対象外
+        guard await sub.isEligibleForIntroOffer else { return }
+        let period = Self.periodLengthText(offer.period)
+        let unit = Self.periodUnitText(sub.subscriptionPeriod)
+        trialText = "\(period)無料、その後 \(product.displayPrice)/\(unit)"
+    }
+
+    /// トライアル期間の長さ（例: 1週間 → 「7日間」）
+    private static func periodLengthText(_ period: Product.SubscriptionPeriod) -> String {
+        switch period.unit {
+        case .day:   return "\(period.value)日間"
+        case .week:  return "\(period.value * 7)日間"
+        case .month: return "\(period.value)か月間"
+        case .year:  return "\(period.value)年間"
+        @unknown default: return "\(period.value)"
+        }
+    }
+
+    /// 課金周期の単位（例: 年額 → 「年」）
+    private static func periodUnitText(_ period: Product.SubscriptionPeriod) -> String {
+        switch period.unit {
+        case .day:   return "日"
+        case .week:  return "週"
+        case .month: return "月"
+        case .year:  return "年"
+        @unknown default: return ""
+        }
     }
 }
 
