@@ -25,6 +25,9 @@ final class SharedLedgerStore: ObservableObject {
     @Published var frequentTemplatesByLedger: [CKRecord.ID: [SharedFrequentTransactionTemplate]] = [:]
     @Published var isLoading = false
     @Published var lastError: Error?
+    /// 共有家計簿の読み込みに失敗（iCloud不可・通信エラー・一時的な空振り等）したかどうか。
+    /// 一覧が空表示になる前にエラーを可視化し、キャッシュ表示＋再試行へ誘導するために使う。
+    @Published var loadFailed = false
 
     @Published var activeCopy: CopyState? = nil
     @Published var globalToast: ToastState? = nil
@@ -94,9 +97,104 @@ final class SharedLedgerStore: ObservableObject {
 
         defaults.migrateIfNeeded(keys: [lastOpenedLedgerKey])
 
+        // 前回取得できた共有家計簿一覧をローカルから即時復元（CloudKit取得失敗時の「全消え」防止）
+        loadLedgerCache()
+
         Task {
             await self.configureSharingInfrastructure()
         }
+    }
+
+    // MARK: - 共有家計簿一覧のローカルキャッシュ（読み込み失敗時の保険）
+
+    private let ledgerCacheKey = "sharedLedger.cachedList.v1"
+
+    /// 一覧キャッシュ用の Codable 表現（CKRecord.ID を分解して保存）
+    private struct CachedLedger: Codable {
+        let recordName: String
+        let zoneName: String
+        let zoneOwnerName: String
+        let name: String
+        let icon: String
+        let colorHex: String
+        let ownerUserId: String
+        let createdAt: Date
+        let updatedAt: Date
+        let isOwned: Bool
+
+        init(ledger: SharedLedger, isOwned: Bool) {
+            self.recordName = ledger.id.recordName
+            self.zoneName = ledger.id.zoneID.zoneName
+            self.zoneOwnerName = ledger.id.zoneID.ownerName
+            self.name = ledger.name
+            self.icon = ledger.icon
+            self.colorHex = ledger.colorHex
+            self.ownerUserId = ledger.ownerUserId
+            self.createdAt = ledger.createdAt
+            self.updatedAt = ledger.updatedAt
+            self.isOwned = isOwned
+        }
+
+        var ledger: SharedLedger {
+            let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: zoneOwnerName)
+            let recordID = CKRecord.ID(recordName: recordName, zoneID: zoneID)
+            return SharedLedger(
+                id: recordID,
+                name: name,
+                icon: icon,
+                colorHex: colorHex,
+                ownerUserId: ownerUserId,
+                createdAt: createdAt,
+                updatedAt: updatedAt
+            )
+        }
+    }
+
+    /// 現在の一覧をローカルへ保存する
+    private func saveLedgerCache() {
+        let cached = ledgers.map { CachedLedger(ledger: $0, isOwned: ledgerSourceMap[$0.id] != .shared) }
+        defaults.set(try? JSONEncoder().encode(cached), forKey: ledgerCacheKey)
+    }
+
+    /// ローカルキャッシュから一覧を復元する（CloudKit取得前の即時表示用）
+    private func loadLedgerCache() {
+        guard
+            let data = defaults.data(forKey: ledgerCacheKey),
+            let cached = try? JSONDecoder().decode([CachedLedger].self, from: data),
+            !cached.isEmpty
+        else { return }
+        ledgers = cached.map(\.ledger)
+        for item in cached {
+            ledgerSourceMap[item.ledger.id] = item.isOwned ? .private : .shared
+        }
+        print("ℹ️ [SharedLedgerStore] restored \(cached.count) ledgers from local cache")
+    }
+
+    // MARK: - 自動リトライ（指数バックオフ）
+
+    private var reloadRetryTask: Task<Void, Never>?
+    private var reloadRetryCount = 0
+    private let maxReloadRetry = 5
+
+    /// 読み込み失敗時に、指数バックオフで自動リトライを仕込む
+    private func scheduleAutoReloadRetry() {
+        guard reloadRetryCount < maxReloadRetry else { return }
+        reloadRetryTask?.cancel()
+        let attempt = reloadRetryCount
+        reloadRetryTask = Task { [weak self] in
+            // 2,4,8,16,30 秒（上限30秒）
+            let seconds = min(30, 1 << (attempt + 1))
+            try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.reloadRetryCount += 1
+            _ = await self.reloadLedgers(logContext: "autoRetry#\(self.reloadRetryCount)")
+        }
+    }
+
+    private func resetReloadRetry() {
+        reloadRetryCount = 0
+        reloadRetryTask?.cancel()
+        reloadRetryTask = nil
     }
 
     private let lastOpenedLedgerKey = "LastOpenedSharedLedgerRecordName"
@@ -671,8 +769,11 @@ final class SharedLedgerStore: ObservableObject {
         print("❌ [SharedLedgerStore] quotaExceeded operation=\(operation), container=\(containerIdentifier)\(shareSuffix)\(ledgerSuffix), retryAfter=\(retryAfterSeconds(from: error)?.description ?? "n/a"), userInfo=\(error.userInfo)")
     }
 
+    /// - Parameter acceptsEmptyResult: 取得結果が空のとき、既存の一覧（キャッシュ）を空で上書きしてよいか。
+    ///   ユーザー操作による明示的な再読み込み（プル更新等）では true を渡す。自動・バックグラウンド更新では
+    ///   一時的な空振りで「全消え」表示にならないよう false（既定）にする。
     @discardableResult
-    func reloadLedgers(logContext: String? = nil) async -> Bool {
+    func reloadLedgers(logContext: String? = nil, acceptsEmptyResult: Bool = false) async -> Bool {
         isLoading = true
         defer { isLoading = false }
 
@@ -684,10 +785,14 @@ final class SharedLedgerStore: ObservableObject {
             let status = try await container.accountStatus()
             guard status == .available else {
                 print("⚠️ \(contextPrefix) iCloud unavailable (status=\(status.rawValue)) → スキップ")
+                loadFailed = true
+                scheduleAutoReloadRetry()
                 return false
             }
         } catch {
             print("⚠️ \(contextPrefix) iCloud status check failed: \(error) → スキップ")
+            loadFailed = true
+            scheduleAutoReloadRetry()
             return false
         }
 
@@ -719,7 +824,23 @@ final class SharedLedgerStore: ObservableObject {
             
             // ③ マージして createdAt でソート
             let all = (owned + shared).sorted(by: { $0.createdAt < $1.createdAt })
+
+            // 空振りガード：取得自体は成功でも結果が空、かつ既存一覧が非空のときは
+            // 一時的な不整合（iCloud同期遅延・ゾーン未準備等）の可能性が高い。
+            // 既存（キャッシュ）を消さずに保持し、エラー表示＋自動リトライに回す。
+            // 本当に0件になるケース（最後の家計簿を脱退/削除）は leaveLedger/deleteLedger 側で
+            // 一覧を直接更新するため、ここで空にする必要はない。
+            if all.isEmpty && !ledgers.isEmpty && !acceptsEmptyResult {
+                print("⚠️ \(contextPrefix) fetched empty but list was non-empty → keep cache & retry")
+                loadFailed = true
+                scheduleAutoReloadRetry()
+                return false
+            }
+
             self.ledgers = all
+            saveLedgerCache()
+            loadFailed = false
+            resetReloadRetry()
             let currentIDs = Set(all.map(\.id))
             let removed = previousIDs.subtracting(currentIDs)
             for removedID in removed {
@@ -738,6 +859,9 @@ final class SharedLedgerStore: ObservableObject {
         } catch {
             self.lastError = error
             print("❌ \(contextPrefix) error:", error)
+            // 取得失敗。既存（キャッシュ）一覧は消さずに保持し、エラー可視化＋自動リトライ。
+            loadFailed = true
+            scheduleAutoReloadRetry()
             return false
         }
     }
@@ -996,6 +1120,7 @@ final class SharedLedgerStore: ObservableObject {
             transactionsByLedger[ledger.id] = nil
             categoriesByLedger[ledger.id] = nil
             deletingLedgerIDs.remove(ledger.id)
+            saveLedgerCache()
             showToast(message: "「\(ledger.name)」の削除が完了しました")
             return true
         } catch {
@@ -1039,6 +1164,7 @@ final class SharedLedgerStore: ObservableObject {
             transactionsByLedger[ledger.id] = nil
             categoriesByLedger[ledger.id] = nil
             deletingLedgerIDs.remove(ledger.id)
+            saveLedgerCache()
             showToast(message: "「\(ledger.name)」から脱退しました")
             return true
         } catch {

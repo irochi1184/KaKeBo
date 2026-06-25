@@ -105,11 +105,18 @@ struct SharedLedgerListScreen: View {
         if store.isLoading && store.ledgers.isEmpty {
             ProgressView("読み込み中…")
                 .tint(.accentColor)
+        } else if store.ledgers.isEmpty && store.loadFailed {
+            // 読み込み失敗で一覧が空：データ消失と誤解されないようエラー＋再試行を表示
+            loadErrorView
         } else if store.ledgers.isEmpty {
             emptyStateView
         } else {
             ScrollView {
                 VStack(spacing: 18) {
+                    // 一覧は表示できているが最新同期に失敗している場合の注意バナー
+                    if store.loadFailed {
+                        syncWarningBanner
+                    }
                     headerCard
 
                     if !store.ownedLedgers.isEmpty {
@@ -160,12 +167,70 @@ struct SharedLedgerListScreen: View {
             .padding(.horizontal, 24)
             
             addLedgerButton
-            
+
             Spacer()
         }
         .padding()
     }
-    
+
+    // 読み込み失敗（一覧が空）時のビュー。「消えたわけではない」と明示し再試行へ誘導する。
+    private var loadErrorView: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            VStack(spacing: 12) {
+                Image(systemName: "icloud.slash")
+                    .font(.system(size: 52))
+                    .foregroundStyle(.orange)
+
+                Text("共有家計簿を読み込めませんでした")
+                    .font(.title3.weight(.semibold))
+                    .multilineTextAlignment(.center)
+
+                Text("データが消えたわけではありません。iCloud へのサインインと通信状況をご確認のうえ、再読み込みをお試しください。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 24)
+
+            Button {
+                Task { await store.reloadLedgers(logContext: "manualRetry", acceptsEmptyResult: true) }
+            } label: {
+                Label("再読み込み", systemImage: "arrow.clockwise")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(store.isLoading)
+
+            Spacer()
+        }
+        .padding()
+    }
+
+    // 一覧は出ているが最新同期に失敗しているときの控えめな注意バナー
+    private var syncWarningBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.icloud")
+                .foregroundStyle(.orange)
+            Text("最新の同期に失敗しました。表示は前回取得した内容です。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("再試行") {
+                Task { await store.reloadLedgers(logContext: "bannerRetry", acceptsEmptyResult: true) }
+            }
+            .font(.caption.weight(.semibold))
+            .disabled(store.isLoading)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.orange.opacity(0.10))
+        )
+    }
+
     private var headerCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("共有家計簿")
