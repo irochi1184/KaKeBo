@@ -73,28 +73,22 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "ホーム画面のカードを並び替え",
-            message: "設定画面からホームのカードを自由に並び替え。よく見る情報を上に配置できます。",
-            symbol: "rectangle.stack.fill",
-            tint: .blue
+            title: "友達招待でプレミアム体験",
+            message: "あなたの共有家計簿に友達が参加すると、プレミアムを1週間プレゼント。みんなで使うほどお得に。",
+            symbol: "gift.fill",
+            tint: .pink
         ),
         Highlight(
-            title: "不要なカードを非表示に",
-            message: "使わないカードはオフにしてすっきり。自分仕様のホーム画面に整えられます。",
-            symbol: "eye.slash.fill",
-            tint: .indigo
-        ),
-        Highlight(
-            title: "予算から支出一覧をすぐ確認",
-            message: "予算タブのカテゴリをタップすると、その月の支出明細をその場で確認できます。",
-            symbol: "list.bullet.rectangle",
-            tint: .green
-        ),
-        Highlight(
-            title: "予算リストの並び替え",
-            message: "予算が高い順・支出が多い順など、見たい順番で予算を並び替えられます。",
-            symbol: "arrow.up.arrow.down",
+            title: "年額プランを無料でお試し",
+            message: "年額プランに無料トライアルが登場。まずは試してから、じっくり決められます。",
+            symbol: "crown.fill",
             tint: .orange
+        ),
+        Highlight(
+            title: "共有家計簿の表示を安定化",
+            message: "通信やiCloudの一時的な不調で共有家計簿が表示されないことがある問題を改善しました。",
+            symbol: "person.2.fill",
+            tint: .blue
         )
     ]
     /*
@@ -169,6 +163,10 @@ private struct UpdateNoticeContent: View {
      - 予算タブでカテゴリをタップするとその月の支出一覧を確認できるように
      - 予算タブのカテゴリを予算順・支出順で並び替えできるように
      - 通知の挙動を改善（リマインダー未設定でもToDo通知が出る／起動のたびに予算通知が出る問題を修正）
+     アップデート 3.2
+     - 友達招待プレミアム体験を追加（共有家計簿に友達が参加するとオーナーにプレミアム1週間プレゼント）
+     - 年額プランに無料トライアルを追加
+     - 通信やiCloudの一時的な不調で共有家計簿が表示されない問題を改善（表示の安定化）
      */
 
     let accent: Color
@@ -289,7 +287,7 @@ private struct UpdateNoticeContent: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("バージョン \(AppVersion.current)")
                     .font(.title.weight(.heavy))
-                Text("もっと、自分好みに使いやすく。")
+                Text("みんなで使うほど、お得に。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -389,6 +387,11 @@ struct VersionEntry: Identifiable {
 
 /// 過去のアップデート履歴（新しい順）
 let versionHistory: [VersionEntry] = [
+    VersionEntry(version: "3.2", items: [
+        "友達招待プレミアム体験を追加（共有家計簿に友達が参加するとオーナーにプレミアム1週間プレゼント）",
+        "年額プランに無料トライアルを追加",
+        "通信やiCloudの一時的な不調で共有家計簿が表示されない問題を改善（表示の安定化）",
+    ]),
     VersionEntry(version: "3.1", items: [
         "ホーム画面のカードを設定画面から並び替えできるように",
         "ホーム画面の不要なカードを非表示にできる機能を追加",
