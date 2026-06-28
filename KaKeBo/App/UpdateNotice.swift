@@ -73,22 +73,16 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "友達招待でプレミアム体験",
-            message: "あなたの共有家計簿に友達が参加すると、プレミアムを1週間プレゼント。みんなで使うほどお得に。",
-            symbol: "gift.fill",
-            tint: .pink
-        ),
-        Highlight(
-            title: "年額プランを無料でお試し",
-            message: "年額プランに無料トライアルが登場。まずは試してから、じっくり決められます。",
-            symbol: "crown.fill",
-            tint: .orange
-        ),
-        Highlight(
-            title: "共有家計簿の表示を安定化",
-            message: "通信やiCloudの一時的な不調で共有家計簿が表示されないことがある問題を改善しました。",
+            title: "共有家計簿の表示を修正",
+            message: "一部の環境で、オーナーの共有家計簿が表示されなくなることがある問題を修正しました。データは消えていません。",
             symbol: "person.2.fill",
             tint: .blue
+        ),
+        Highlight(
+            title: "表示の安定性を向上",
+            message: "アプリの再インストール後やiCloud同期の遅延時にも、共有家計簿がより確実に表示されるよう改善しました。",
+            symbol: "checkmark.seal.fill",
+            tint: .green
         )
     ]
     /*
@@ -167,6 +161,9 @@ private struct UpdateNoticeContent: View {
      - 友達招待プレミアム体験を追加（共有家計簿に友達が参加するとオーナーにプレミアム1週間プレゼント）
      - 年額プランに無料トライアルを追加
      - 通信やiCloudの一時的な不調で共有家計簿が表示されない問題を改善（表示の安定化）
+     アップデート 3.2.1
+     - 一部の環境でオーナーの共有家計簿が表示されない問題を修正
+     - 再インストール後やiCloud同期の遅延時の共有家計簿の表示安定性を向上
      */
 
     let accent: Color
@@ -387,6 +384,10 @@ struct VersionEntry: Identifiable {
 
 /// 過去のアップデート履歴（新しい順）
 let versionHistory: [VersionEntry] = [
+    VersionEntry(version: "3.2.1", items: [
+        "一部の環境でオーナーの共有家計簿が表示されない問題を修正",
+        "再インストール後やiCloud同期の遅延時の共有家計簿の表示安定性を向上",
+    ]),
     VersionEntry(version: "3.2", items: [
         "友達招待プレミアム体験を追加（共有家計簿に友達が参加するとオーナーにプレミアム1週間プレゼント）",
         "年額プランに無料トライアルを追加",
