@@ -174,11 +174,19 @@ final class SharedLedgerStore: ObservableObject {
 
     private var reloadRetryTask: Task<Void, Never>?
     private var reloadRetryCount = 0
-    private let maxReloadRetry = 5
+    private let defaultReloadRetryLimit = 5
+    /// 再インストール直後など「サーバーに痕跡はあるが取得が空」の場合は、
+    /// ゾーン同期の完了に1分以上かかることがあるため再試行上限を引き上げる
+    private let coldStartReloadRetryLimit = 10
+    private var reloadRetryLimit = 5
+    /// オーナーのカスタムゾーンが「自前で作成するより前から」サーバーに存在したか。
+    /// セッション内の最初の観測値を保持し、再インストール直後の一時的な空と
+    /// 本当に共有家計簿が無い新規ユーザーとを区別するために使う。
+    private var ownedZonePreExisted: Bool?
 
     /// 読み込み失敗時に、指数バックオフで自動リトライを仕込む
     private func scheduleAutoReloadRetry() {
-        guard reloadRetryCount < maxReloadRetry else { return }
+        guard reloadRetryCount < reloadRetryLimit else { return }
         reloadRetryTask?.cancel()
         let attempt = reloadRetryCount
         reloadRetryTask = Task { [weak self] in
@@ -193,6 +201,7 @@ final class SharedLedgerStore: ObservableObject {
 
     private func resetReloadRetry() {
         reloadRetryCount = 0
+        reloadRetryLimit = defaultReloadRetryLimit
         reloadRetryTask?.cancel()
         reloadRetryTask = nil
     }
@@ -243,13 +252,18 @@ final class SharedLedgerStore: ObservableObject {
         return user.recordName
     }
 
-    private func ensureSharedZone() async throws {
+    /// オーナー用のカスタムゾーンを用意する。
+    /// 戻り値は「この呼び出し時点でゾーンが既に存在していたか」。
+    /// 最初の観測結果のみ `ownedZonePreExisted` に記録する（自前作成と取り違えないため）。
+    @discardableResult
+    private func ensureSharedZone() async throws -> Bool {
         let zoneID = SharedLedger.zoneID
         do {
             let zones = try await db.recordZones(for: [zoneID])
             if let result = zones[zoneID],
                case .success = result {
-                return
+                if ownedZonePreExisted == nil { ownedZonePreExisted = true }
+                return true
             }
         } catch {
             if let ckError = error as? CKError, ckError.code != .zoneNotFound {
@@ -257,8 +271,28 @@ final class SharedLedgerStore: ObservableObject {
             }
         }
 
+        // ここに来た＝ゾーンが存在しなかった（新規ユーザー、または初回作成前）
+        if ownedZonePreExisted == nil { ownedZonePreExisted = false }
         let zone = CKRecordZone(zoneID: zoneID)
         _ = try await db.modifyRecordZones(saving: [zone], deleting: [])
+        return false
+    }
+
+    /// サーバー側に「既存の共有家計簿データ」の痕跡があるかを返す。
+    /// 再インストール直後（ローカルもキャッシュも空）の取得結果が空のとき、
+    /// 「同期前の一時的な空」か「本当に0件の新規ユーザー」かを切り分けるために使う。
+    private func hasAnyRemoteLedgerTrace() async -> Bool {
+        // 最初のゾーン観測を確定させる（自前作成より前の存在有無を ownedZonePreExisted に反映）
+        if ownedZonePreExisted == nil {
+            _ = try? await ensureSharedZone()
+        }
+        // 自分がオーナーのゾーンが以前から存在した＝過去に共有家計簿を作っている
+        if ownedZonePreExisted == true { return true }
+        // 招待されて参加している家計簿は共有DB側のゾーンとして現れる
+        if let sharedZones = try? await sharedDB.allRecordZones(), !sharedZones.isEmpty {
+            return true
+        }
+        return false
     }
 
     private func configureSharingInfrastructure() async {
@@ -825,16 +859,30 @@ final class SharedLedgerStore: ObservableObject {
             // ③ マージして createdAt でソート
             let all = (owned + shared).sorted(by: { $0.createdAt < $1.createdAt })
 
-            // 空振りガード：取得自体は成功でも結果が空、かつ既存一覧が非空のときは
-            // 一時的な不整合（iCloud同期遅延・ゾーン未準備等）の可能性が高い。
-            // 既存（キャッシュ）を消さずに保持し、エラー表示＋自動リトライに回す。
+            // 空振りガード：取得自体は成功でも結果が空のとき、本当に0件なのか
+            // 一時的な不整合（iCloud同期遅延・ゾーン未準備等）なのかを切り分ける。
             // 本当に0件になるケース（最後の家計簿を脱退/削除）は leaveLedger/deleteLedger 側で
             // 一覧を直接更新するため、ここで空にする必要はない。
-            if all.isEmpty && !ledgers.isEmpty && !acceptsEmptyResult {
-                print("⚠️ \(contextPrefix) fetched empty but list was non-empty → keep cache & retry")
-                loadFailed = true
-                scheduleAutoReloadRetry()
-                return false
+            if all.isEmpty && !acceptsEmptyResult {
+                // ① 既存一覧が非空 → 一時的な空振り。キャッシュを消さず保持して再試行（従来動作）
+                if !ledgers.isEmpty {
+                    print("⚠️ \(contextPrefix) fetched empty but list was non-empty → keep cache & retry")
+                    loadFailed = true
+                    scheduleAutoReloadRetry()
+                    return false
+                }
+                // ② 一覧もキャッシュも空（新規 or 再インストール直後）。
+                //    サーバーに既存データの痕跡があれば、同期前の一時的な空とみなして
+                //    空を確定せず、上限を引き上げて再試行する（「消えた」誤表示の防止）。
+                if await hasAnyRemoteLedgerTrace() {
+                    print("⚠️ \(contextPrefix) cold-start empty but remote trace exists → treat as transient & retry")
+                    reloadRetryLimit = coldStartReloadRetryLimit
+                    loadFailed = true
+                    scheduleAutoReloadRetry()
+                    return false
+                }
+                // ③ 痕跡なし＝本当に0件の新規ユーザー → そのまま空を確定
+                print("ℹ️ \(contextPrefix) empty with no remote trace → confirmed empty")
             }
 
             self.ledgers = all
