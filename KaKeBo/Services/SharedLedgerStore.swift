@@ -1033,35 +1033,37 @@ final class SharedLedgerStore: ObservableObject {
         defaults.set(try? JSONEncoder().encode(templates), forKey: frequentTemplatesKey(for: ledger))
     }
 
-    // 自分が owner の Ledger（今までの挙動）
+    // 自分が owner の Ledger（privateDB の専用ゾーン）
     private func fetchOwnedLedgers(for userId: String) async throws -> [SharedLedger] {
         // CloudKit 側では条件なしで全部取る
         let predicate = NSPredicate(value: true)
         let query = CKQuery(recordType: SharedLedger.recordType, predicate: predicate)
-        
+
+        // queryRecords は privateDB の SharedLedgerZone（自分専用ゾーン）を見る。
+        // ここで返るレコードは「自分の private DB にある＝自分のもの」であることが CloudKit の保証。
+        // 参加中の他人の家計簿は sharedDB 側（fetchSharedLedgers）に現れるため、ここに混在しない。
         let records = try await queryRecords(query, in: db)
         var result: [SharedLedger] = []
-        
+
         for record in records {
             guard let ledger = SharedLedger(record: record) else { continue }
-            
-            // ① ownerUserId が設定されている場合
-            if let owner = record[SharedLedger.FieldKey.ownerUserId] as? String,
-               owner == userId {
-                result.append(ledger)
-                ledgerSourceMap[ledger.id] = .private
-                continue
+
+            // ownerUserId / creator が現在の userRecordID と一致しなくても破棄しない。
+            // 過去のアカウント操作・データ移行等で ownerUserId がズレているケースがあり、
+            // 以前は一致しないと破棄していたため、自分の家計簿を「無い」と誤判定して
+            // 空表示になる不具合があった。private DB のレコードは常に本人のものなので採用する。
+            let ownerField = record[SharedLedger.FieldKey.ownerUserId] as? String
+            let creatorName = record.creatorUserRecordID?.recordName
+            if ownerField != userId && creatorName != userId {
+                print("⚠️ [SharedLedgerStore] owned ledger with mismatched owner field "
+                      + "record=\(ledger.id.recordName) ownerField=\(ownerField ?? "nil") "
+                      + "creator=\(creatorName ?? "nil") currentUser=\(userId) → 自分のゾーンにあるためオーナー扱い")
             }
-            
-            // ② ownerUserId が無い古いデータ → creator が自分ならオーナー扱い
-            if let creator = record.creatorUserRecordID,
-               creator.recordName == userId {
-                result.append(ledger)
-                ledgerSourceMap[ledger.id] = .private
-                continue
-            }
+
+            result.append(ledger)
+            ledgerSourceMap[ledger.id] = .private
         }
-        
+
         return result
     }
 
