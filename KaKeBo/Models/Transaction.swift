@@ -13,4 +13,7 @@ struct Transaction: Identifiable, Codable, Hashable {
     var memo: String
     var categoryId: UUID
     var tags: [String]
+    /// 添付写真のファイル名（AppGroup コンテナ内 `Photos/` 配下に保存された実体への参照）。
+    /// 旧データとの互換のためオプショナル。nil/空は写真なし。
+    var photoFilenames: [String]? = nil
 }

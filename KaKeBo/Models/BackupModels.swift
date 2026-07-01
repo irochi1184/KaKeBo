@@ -40,6 +40,9 @@ struct BackupTransaction: Codable, Identifiable {
     var memo: String
     var categoryId: UUID
     var tags: [String]?
+    // v3.3 で追加（旧バックアップとの互換のためオプショナル）。
+    // 実体画像はアーカイブ内 Photos/ に同梱される。
+    var photoFilenames: [String]?
 }
 
 // ここはアプリの実体に合わせて最低限（あれば復元）

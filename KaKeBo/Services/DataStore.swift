@@ -42,6 +42,10 @@ final class DataStore: ObservableObject {
         load()
         if categories.isEmpty { seed() }
         loadFrequentTemplates()
+
+        // 起動時に、どの取引からも参照されていない写真ファイル（追加途中でキャンセルされた等）を掃除
+        let referenced = Set(transactions.flatMap { $0.photoFilenames ?? [] })
+        PhotoStore.shared.purgeOrphans(keeping: referenced)
     }
 
     /// v2.3.1 で誤って使用された AppGroup コンテナからデータを復旧
@@ -141,9 +145,17 @@ final class DataStore: ObservableObject {
     }
 
     func deleteTransactions(at offsets: IndexSet) {
+        let removed = offsets.map { transactions[$0] }
         transactions.remove(atOffsets: offsets)
+        cleanupPhotos(for: removed)
         saveTransactions()
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    /// 取引から外れた写真の実体ファイルを削除する（孤児ファイル防止）。
+    private func cleanupPhotos(for removed: [Transaction]) {
+        let names = removed.flatMap { $0.photoFilenames ?? [] }
+        if !names.isEmpty { PhotoStore.shared.delete(names) }
     }
 
     func addCategory(_ cat: Category) {
@@ -162,8 +174,10 @@ final class DataStore: ObservableObject {
 
     func deleteCategory(_ cat: Category) {
         categories.removeAll(where: { $0.id == cat.id })
+        let removedTx = transactions.filter { $0.categoryId == cat.id }
         transactions.removeAll(where: { $0.categoryId == cat.id })
         frequentTemplates.removeAll { $0.categoryId == cat.id }
+        cleanupPhotos(for: removedTx)
         save()
         WidgetCenter.shared.reloadAllTimelines()
     }
@@ -174,7 +188,7 @@ final class DataStore: ObservableObject {
         if let dtos = loadJSON([TransactionDTO].self, from: transactionsURL) {
             transactions = dtos.map { dto in
                 let typeVal: TransactionType = (dto.type.lowercased() == "income") ? .income : .expense
-                return Transaction(id: dto.id, date: dto.date, amount: dto.amount, type: typeVal, memo: dto.memo, categoryId: dto.categoryId, tags: dto.tags ?? [])
+                return Transaction(id: dto.id, date: dto.date, amount: dto.amount, type: typeVal, memo: dto.memo, categoryId: dto.categoryId, tags: dto.tags ?? [], photoFilenames: dto.photoFilenames)
             }
         } else if let old = loadJSON([Transaction].self, from: transactionsURL) {
             transactions = old
@@ -200,7 +214,7 @@ final class DataStore: ObservableObject {
         let dtos: [TransactionDTO] = transactions.map { tx in
             let typeStr: String
             switch tx.type { case .income: typeStr = "income"; case .expense: typeStr = "expense" }
-            return TransactionDTO(id: tx.id, date: tx.date, amount: tx.amount, type: typeStr, categoryId: tx.categoryId, memo: tx.memo, tags: tx.tags)
+            return TransactionDTO(id: tx.id, date: tx.date, amount: tx.amount, type: typeStr, categoryId: tx.categoryId, memo: tx.memo, tags: tx.tags, photoFilenames: tx.photoFilenames)
         }
         saveJSON(dtos, to: transactionsURL)
 
@@ -219,7 +233,7 @@ final class DataStore: ObservableObject {
         let dtos: [TransactionDTO] = transactions.map { tx in
             let typeStr: String
             switch tx.type { case .income: typeStr = "income"; case .expense: typeStr = "expense" }
-            return TransactionDTO(id: tx.id, date: tx.date, amount: tx.amount, type: typeStr, categoryId: tx.categoryId, memo: tx.memo, tags: tx.tags)
+            return TransactionDTO(id: tx.id, date: tx.date, amount: tx.amount, type: typeStr, categoryId: tx.categoryId, memo: tx.memo, tags: tx.tags, photoFilenames: tx.photoFilenames)
         }
         saveJSON(dtos, to: transactionsURL)
         WidgetCenter.shared.reloadAllTimelines()
@@ -358,7 +372,12 @@ extension DataStore {
     func upsertTransaction(_ tx: Transaction) {
         let shouldCountAsNewSave = !transactions.contains(where: { $0.id == tx.id })
         if let i = transactions.firstIndex(where: { $0.id == tx.id }) {
+            // 編集で外された写真の実体を削除（孤児ファイル防止）
+            let oldNames = Set(transactions[i].photoFilenames ?? [])
+            let newNames = Set(tx.photoFilenames ?? [])
+            let orphaned = oldNames.subtracting(newNames)
             transactions[i] = tx
+            if !orphaned.isEmpty { PhotoStore.shared.delete(Array(orphaned)) }
         } else {
             transactions.insert(tx, at: 0)
         }
@@ -371,7 +390,9 @@ extension DataStore {
     /// ID配列でまとめて削除して保存
     func deleteTransactions(with ids: [UUID]) {
         guard !ids.isEmpty else { return }
+        let removed = transactions.filter { ids.contains($0.id) }
         transactions.removeAll { ids.contains($0.id) }
+        cleanupPhotos(for: removed)
         saveTransactions()
     }
     
@@ -382,7 +403,12 @@ extension DataStore {
     func updateTransaction(_ tx: Transaction) {
         // 既存更新だけに限定したい場合はこちらを使ってもOK
         guard let idx = transactions.firstIndex(where: { $0.id == tx.id }) else { return }
+        // 編集で外された写真の実体を削除（孤児ファイル防止）
+        let oldNames = Set(transactions[idx].photoFilenames ?? [])
+        let newNames = Set(tx.photoFilenames ?? [])
+        let orphaned = oldNames.subtracting(newNames)
         transactions[idx] = tx
+        if !orphaned.isEmpty { PhotoStore.shared.delete(Array(orphaned)) }
         saveTransactions()
     }
     
@@ -395,8 +421,10 @@ extension DataStore {
     func deleteCategories(with ids: [UUID]) {
         guard !ids.isEmpty else { return }
         categories.removeAll { ids.contains($0.id) }
+        let removedTx = transactions.filter { ids.contains($0.categoryId) }
         transactions.removeAll { ids.contains($0.categoryId) }
         frequentTemplates.removeAll { ids.contains($0.categoryId) }
+        cleanupPhotos(for: removedTx)
         save()
     }
 

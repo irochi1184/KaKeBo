@@ -48,6 +48,9 @@ struct EditTransactionView: View {
     // ★ タグ（Add と同等）
     @State private var tags: [String]
     @State private var tagInput: String = ""
+
+    // 添付写真（個人帳簿のみ・プレミアム機能）
+    @State private var photoFilenames: [String]
     
     // キーボード制御（Add と揃える）
     @State private var isKeyboardVisible = false
@@ -70,6 +73,7 @@ struct EditTransactionView: View {
         _selectedCategoryId = State(initialValue: transaction.categoryId)
         _selectedSharedCategoryId = State(initialValue: nil)
         _tags = State(initialValue: transaction.tags.map { String($0.prefix(8)) }) // 8文字統一
+        _photoFilenames = State(initialValue: transaction.photoFilenames ?? [])
     }
 
     init(sharedLedger: SharedLedger, transaction: SharedTransaction) {
@@ -82,6 +86,7 @@ struct EditTransactionView: View {
         _selectedCategoryId = State(initialValue: nil)
         _selectedSharedCategoryId = State(initialValue: transaction.categoryId)
         _tags = State(initialValue: [])
+        _photoFilenames = State(initialValue: [])
     }
 
     private var isSharedMode: Bool {
@@ -309,8 +314,17 @@ struct EditTransactionView: View {
                             }
                         }
                     }.luxCard()
+
+                    // 写真添付（個人帳簿のみ・プレミアム機能）
+                    TransactionPhotoSection(
+                        photoFilenames: $photoFilenames,
+                        accent: themeStore.theme.accentColor(for: scheme),
+                        isPremium: purchase.isPremiumActive,
+                        onRequirePremium: { showPaywall = true }
+                    )
+                    .luxCard()
                 }
-                
+
                 Spacer(minLength: prefersCustomKeypad && showCustomKeypad ? (isSmallPhone ? 12 : 20) : 0)
             }
             .padding(.top, 12)
@@ -548,6 +562,7 @@ struct EditTransactionView: View {
             edited.memo = trimmedMemo
             edited.categoryId = catId
             edited.tags = tags
+            edited.photoFilenames = photoFilenames.isEmpty ? nil : photoFilenames
 
             store.upsertTransaction(edited)
             dismiss()
