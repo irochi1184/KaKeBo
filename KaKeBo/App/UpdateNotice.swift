@@ -73,15 +73,21 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "共有家計簿の表示を修正",
-            message: "一部の環境で、オーナーの共有家計簿が表示されなくなることがある問題を修正しました。データは消えていません。",
-            symbol: "person.2.fill",
+            title: "取引に写真を添付",
+            message: "レシートや領収書の写真を取引に添付できるようになりました（プレミアム機能）。一覧でも小さなプレビューが表示され、タップで拡大できます。",
+            symbol: "photo.on.rectangle.angled",
+            tint: .orange
+        ),
+        Highlight(
+            title: "バックアップに写真も保存",
+            message: "バックアップに写真も含まれるようになり、機種変更のときも写真ごと引き継げます。",
+            symbol: "externaldrive.badge.icloud",
             tint: .blue
         ),
         Highlight(
-            title: "表示の安定性を向上",
-            message: "アプリの再インストール後やiCloud同期の遅延時にも、共有家計簿がより確実に表示されるよう改善しました。",
-            symbol: "checkmark.seal.fill",
+            title: "自動バックアップからいつでも復元",
+            message: "設定から、端末・iCloudの自動バックアップを一覧してその場で復元できるようになりました。iCloudバックアップがFilesアプリにも表示されるよう改善しています。",
+            symbol: "clock.arrow.circlepath",
             tint: .green
         )
     ]
@@ -164,6 +170,11 @@ private struct UpdateNoticeContent: View {
      アップデート 3.2.1
      - 一部の環境でオーナーの共有家計簿が表示されない問題を修正
      - 再インストール後やiCloud同期の遅延時の共有家計簿の表示安定性を向上
+     アップデート 3.3
+     - 取引に写真を添付できる機能を追加（プレミアム。一覧に小さなプレビュー、タップで拡大）
+     - バックアップ（zip）に写真も含めるようにし、機種変更でも写真を引き継げるように
+     - 自動バックアップ（端末・iCloud）を設定からいつでも一覧・復元できる画面を追加
+     - iCloud自動バックアップがFilesアプリに表示されない問題を修正
      */
 
     let accent: Color
@@ -384,6 +395,12 @@ struct VersionEntry: Identifiable {
 
 /// 過去のアップデート履歴（新しい順）
 let versionHistory: [VersionEntry] = [
+    VersionEntry(version: "3.3", items: [
+        "取引に写真を添付できる機能を追加（プレミアム。一覧に小さなプレビュー、タップで拡大表示）",
+        "バックアップに写真も含めるようにし、機種変更でも写真を引き継げるように",
+        "自動バックアップ（端末・iCloud）を設定からいつでも一覧・復元できる画面を追加",
+        "iCloud自動バックアップがFilesアプリに表示されない問題を修正",
+    ]),
     VersionEntry(version: "3.2.1", items: [
         "一部の環境でオーナーの共有家計簿が表示されない問題を修正",
         "再インストール後やiCloud同期の遅延時の共有家計簿の表示安定性を向上",
