@@ -2062,9 +2062,18 @@ extension SharedLedgerStore {
     
     /// バックアップファイルを共有家計簿へ復元
     func importBackup(data: Data, to ledger: SharedLedger) async throws -> DataStore.ImportReport {
+        // zip バンドル（写真同梱）の場合は中の backup.json を取り出す。共有家計簿は写真非対応のため画像は無視。
+        let jsonData: Data
+        if BackupArchive.isZip(data),
+           let entry = BackupArchive.extract(data).first(where: { $0.path == "backup.json" }) {
+            jsonData = entry.data
+        } else {
+            jsonData = data
+        }
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let backup = try decoder.decode(KaKeBoBackupV1.self, from: data)
+        let backup = try decoder.decode(KaKeBoBackupV1.self, from: jsonData)
         
         // 事前に最新データを反映
         await reloadCategories(for: ledger)

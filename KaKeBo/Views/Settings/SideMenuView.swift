@@ -491,7 +491,7 @@ struct SideMenuView: View {
                 let data: Data
                 switch target {
                 case .personal:
-                    data = store.exportFullBackupJSON(theme: themeStore.theme)
+                    data = store.exportFullBackup(theme: themeStore.theme)
                 case .shared(let ledgerId):
                     guard let ledger = sharedLedgerStore.ledgers.first(where: { $0.id == ledgerId }) else {
                         throw NSError(domain: "KaKeBo", code: -1, userInfo: [NSLocalizedDescriptionKey: "選択した共有家計簿が見つかりませんでした。"])

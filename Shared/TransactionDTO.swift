@@ -17,8 +17,11 @@ public struct TransactionDTO: Codable, Identifiable {
     public let categoryId: UUID
     public let memo: String
     let tags: [String]?
-    
-    public init(id: UUID, date: Date, amount: Int, type: String, categoryId: UUID, memo: String, tags: [String]) {
+    /// 添付写真ファイル名。永続化ラウンドトリップで失われないよう DTO にも保持する。
+    /// 旧 JSON との互換のためオプショナル。Widget 側では未使用。
+    let photoFilenames: [String]?
+
+    public init(id: UUID, date: Date, amount: Int, type: String, categoryId: UUID, memo: String, tags: [String], photoFilenames: [String]? = nil) {
         self.id = id
         self.date = date
         self.amount = amount
@@ -26,6 +29,7 @@ public struct TransactionDTO: Codable, Identifiable {
         self.categoryId = categoryId
         self.memo = memo
         self.tags = tags
+        self.photoFilenames = photoFilenames
     }
 }
 
@@ -66,6 +70,7 @@ public extension TransactionDTO {
         self.categoryId = tx.categoryId
         self.memo = tx.memo
         self.tags = tx.tags
+        self.photoFilenames = nil
     }
 }
 

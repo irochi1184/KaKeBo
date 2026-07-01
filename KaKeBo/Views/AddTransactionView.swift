@@ -30,6 +30,9 @@ struct AddTransactionView: View {
     @State private var tags: [String] = []
     @State private var tagInput: String = ""
 
+    // 添付写真（個人帳簿のみ・プレミアム機能）
+    @State private var photoFilenames: [String] = []
+
     // キーボード／UI
     @State private var isKeyboardVisible = false
     @FocusState private var memoFocused: Bool
@@ -388,7 +391,18 @@ struct AddTransactionView: View {
                         .presentationDetents([.large, .medium])
                         .presentationDragIndicator(.visible)
                 }
-                
+
+                // 写真添付（個人帳簿のみ・プレミアム機能）
+                if ledgerContext.isPersonal {
+                    TransactionPhotoSection(
+                        photoFilenames: $photoFilenames,
+                        accent: themeStore.theme.accentColor(for: scheme),
+                        isPremium: purchase.isPremiumActive,
+                        onRequirePremium: { showPaywall = true }
+                    )
+                    .luxCard()
+                }
+
                 Spacer(minLength: 0)
             }
             .padding(.top, 12)
@@ -799,7 +813,8 @@ struct AddTransactionView: View {
                 type: type,
                 memo: trimmedMemo,
                 categoryId: chosen.id,
-                tags: tags
+                tags: tags,
+                photoFilenames: photoFilenames.isEmpty ? nil : photoFilenames
             )
             store.addTransaction(tx)
             dismiss()

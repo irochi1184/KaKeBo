@@ -793,6 +793,7 @@ private struct TransactionRowContent {
     let amount: Int
     let isIncome: Bool
     let date: Date
+    var photoFilenames: [String] = []   // 添付写真（共有家計簿は空）
 }
 
 private struct TransactionRow: View {
@@ -846,7 +847,12 @@ private struct TransactionRow: View {
             }
             
             Spacer()
-            
+
+            // 写真プレビュー（添付があるときのみ・行の高さは変えない）
+            if !row.photoFilenames.isEmpty {
+                TransactionRowPhotoPreview(filenames: row.photoFilenames, size: 30)
+            }
+
             VStack(alignment: .trailing, spacing: 2) {
                 Text(currency(row.amount))
                     .font(.subheadline.weight(.semibold))
@@ -1008,9 +1014,10 @@ extension TransactionListCard where RowID == UUID {
                 tags: tx.tags,                 // そのまま
                 amount: tx.amount,
                 isIncome: tx.type == .income,
-                date: tx.date
+                date: tx.date,
+                photoFilenames: tx.photoFilenames ?? []
             )
-            
+
             return Row(id: tx.id, content: content)
         }
         

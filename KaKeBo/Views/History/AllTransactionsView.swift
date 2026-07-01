@@ -912,6 +912,11 @@ private struct HistoryRow: View {
                 }
             }
 
+            // 写真プレビュー（添付があるときのみ・行の高さは変えない）
+            if let photos = content.personal?.photoFilenames, !photos.isEmpty {
+                TransactionRowPhotoPreview(filenames: photos)
+            }
+
             // 右：金額と日付
             VStack(alignment: .trailing, spacing: 2) {
                 Text(amountStr())

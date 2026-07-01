@@ -221,6 +221,10 @@ struct CalendarDayDetailCard: View {
                                     }
                                 }
                                 Spacer()
+                                // 写真プレビュー（添付があるときのみ・行の高さは変えない）
+                                if let photos = tx.photoFilenames, !photos.isEmpty {
+                                    TransactionRowPhotoPreview(filenames: photos, size: 30)
+                                }
                                 Text(currency(tx.amount))
                                     .foregroundStyle(tx.type == .income ? .green : .primary)
                             }

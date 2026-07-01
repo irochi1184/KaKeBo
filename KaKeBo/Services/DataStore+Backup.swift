@@ -24,7 +24,8 @@ extension DataStore {
         let txs: [BackupTransaction] = transactions.map {
             .init(id: $0.id, date: $0.date, amount: $0.amount,
                   typeRaw: $0.type == .income ? "income" : "expense",
-                  memo: $0.memo, categoryId: $0.categoryId, tags: $0.tags)
+                  memo: $0.memo, categoryId: $0.categoryId, tags: $0.tags,
+                  photoFilenames: $0.photoFilenames)
         }
         // 毎月ToDo（あるなら）
         let recTodos: [BackupRecurringTodo]? = {
@@ -130,10 +131,51 @@ extension DataStore {
         return (try? enc.encode(payload)) ?? Data()
     }
     
-    // ===== インポート（JSON または 旧CSV） =====
+    // ===== エクスポート（写真同梱：zip バンドル / 写真なし：JSON） =====
+    /// 添付写真があれば JSON + Photos/ をまとめた zip、なければ従来通り JSON を返す。
+    /// ファイル拡張子は従来どおり .kakebo のままで、中身の種別はインポート側が判定する。
+    func exportFullBackup(theme: AppTheme? = nil) -> Data {
+        let json = exportFullBackupJSON(theme: theme)
+
+        // 全取引が参照する写真ファイル名を収集（実在するもののみ）
+        let referenced = Set(transactions.flatMap { $0.photoFilenames ?? [] })
+        guard !referenced.isEmpty else { return json }
+
+        var entries: [BackupArchive.Entry] = [.init(path: "backup.json", data: json)]
+        for name in referenced {
+            let url = PhotoStore.shared.url(for: name)
+            if let imgData = try? Data(contentsOf: url) {
+                entries.append(.init(path: "Photos/\(name)", data: imgData))
+            }
+        }
+        // 実在写真が無ければ JSON のまま返す
+        guard entries.count > 1 else { return json }
+        return BackupArchive.create(entries)
+    }
+
+    // ===== インポート（zip / JSON / 旧CSV） =====
     struct ImportReport { let inserted: Int; let createdCategories: Int; let skipped: Int }
-    
+
     func importBackup(data: Data, applyTheme: ((AppTheme) -> Void)? = nil, applyMonthStartSettings: ((MonthStartSettings) -> Void)? = nil) throws -> ImportReport {
+
+        // 0) zip バンドルなら写真を復元してから中の backup.json を取り出す
+        if BackupArchive.isZip(data) {
+            let entries = BackupArchive.extract(data)
+            // 写真を PhotoStore に復元（既存ファイルは温存＝UUID衝突はほぼ無いが安全側）
+            for e in entries where e.path.hasPrefix("Photos/") {
+                let name = String(e.path.dropFirst("Photos/".count))
+                guard !name.isEmpty else { continue }
+                let dest = PhotoStore.shared.url(for: name)
+                if !FileManager.default.fileExists(atPath: dest.path) {
+                    try? e.data.write(to: dest, options: .atomic)
+                }
+            }
+            if let jsonEntry = entries.first(where: { $0.path == "backup.json" }) {
+                return try importJSONBackup(data: jsonEntry.data, applyTheme: applyTheme, applyMonthStartSettings: applyMonthStartSettings)
+            }
+            // backup.json が見つからない不正な zip
+            throw NSError(domain: "KaKeBo", code: -2, userInfo: [NSLocalizedDescriptionKey: "バックアップファイルの形式が正しくありません。"])
+        }
 
         // 1) まず JSON を試す
         if let rep = try? importJSONBackup(data: data, applyTheme: applyTheme, applyMonthStartSettings: applyMonthStartSettings) {
@@ -174,7 +216,11 @@ extension DataStore {
                 skipped += 1; continue
             }
             let type: TransactionType = (bt.typeRaw == "income") ? .income : .expense
-            let tx = Transaction(id: UUID(), date: bt.date, amount: bt.amount, type: type, memo: bt.memo, categoryId: newCatId, tags: bt.tags ?? [])
+            // 写真は実体が復元済み（zip 同梱）のもののみ参照を保持し、欠損参照を作らない
+            let photos = (bt.photoFilenames ?? []).filter {
+                FileManager.default.fileExists(atPath: PhotoStore.shared.url(for: $0).path)
+            }
+            let tx = Transaction(id: UUID(), date: bt.date, amount: bt.amount, type: type, memo: bt.memo, categoryId: newCatId, tags: bt.tags ?? [], photoFilenames: photos.isEmpty ? nil : photos)
             addTransaction(tx)
             inserted += 1
         }
