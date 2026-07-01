@@ -55,6 +55,7 @@ struct SettingsView: View {
     @State private var exportDoneMessage: String = "バックアップ作成が完了しました。"
     @State private var showLockSheet = false
     @State private var showBackupSheet = false
+    @State private var showAutoBackupRestore = false
     @State private var backupTarget: BackupTarget = .personal
     @State private var backupMode: BackupMode = .export
     @State private var pendingImportTarget: BackupTarget?
@@ -289,6 +290,10 @@ struct SettingsView: View {
                         proceedBackupFlow()
                     }
                     .environmentObject(sharedLedgerStore)
+                }
+                .sheet(isPresented: $showAutoBackupRestore) {
+                    AutoBackupRestoreView()
+                        .environmentObject(store)
                 }
                 // ロック設定
                 .sheet(isPresented: $showLockSheet) {
@@ -608,6 +613,14 @@ struct SettingsView: View {
                 showBackupSheet = true
             }
 
+            SettingsRowButton(
+                title: "自動バックアップから復元",
+                systemImage: "clock.arrow.circlepath",
+                accent: accent
+            ) {
+                showAutoBackupRestore = true
+            }
+
             NavigationLink {
                 ExportView()
                     .environmentObject(store)
@@ -868,7 +881,7 @@ struct SettingsRowButton: View {
     let title: String
     let systemImage: String
     let accent: Color
-    let trailingText: String?
+    var trailingText: String? = nil
     let action: () -> Void
     
     var body: some View {

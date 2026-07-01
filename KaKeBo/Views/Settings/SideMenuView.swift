@@ -31,6 +31,7 @@ struct SideMenuView: View {
 
     // バックアップ関連
     @State private var showBackupSheet = false
+    @State private var showAutoBackupRestore = false
     @State private var backupTarget: BackupTarget = .personal
     @State private var backupMode: BackupMode = .export
     @State private var isProcessingBackup = false
@@ -99,6 +100,10 @@ struct SideMenuView: View {
                 isProcessing: $isProcessingBackup
             ) { proceedBackupFlow() }
             .environmentObject(sharedLedgerStore)
+        }
+        .sheet(isPresented: $showAutoBackupRestore) {
+            AutoBackupRestoreView()
+                .environmentObject(store)
         }
         .fileExporter(
             isPresented: $showingExporter,
@@ -323,6 +328,9 @@ struct SideMenuView: View {
     private func backupItems(accent: Color) -> some View {
         menuRow("バックアップを作成・復元", icon: "arrow.triangle.2.circlepath", accent: accent) {
             showBackupSheet = true
+        }
+        menuRow("自動バックアップから復元", icon: "clock.arrow.circlepath", accent: accent) {
+            showAutoBackupRestore = true
         }
         menuRow("データを書き出す", icon: "square.and.arrow.up", accent: accent) {
             sheet = .exportData
