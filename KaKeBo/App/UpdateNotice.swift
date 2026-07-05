@@ -73,22 +73,16 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "取引に写真を添付",
-            message: "レシートや領収書の写真を取引に添付できるようになりました（プレミアム機能）。一覧でも小さなプレビューが表示され、タップで拡大できます。",
-            symbol: "photo.on.rectangle.angled",
-            tint: .orange
-        ),
-        Highlight(
-            title: "バックアップに写真も保存",
-            message: "バックアップに写真も含まれるようになり、機種変更のときも写真ごと引き継げます。",
-            symbol: "externaldrive.badge.icloud",
-            tint: .blue
-        ),
-        Highlight(
-            title: "自動バックアップからいつでも復元",
-            message: "設定から、端末・iCloudの自動バックアップを一覧してその場で復元できるようになりました。iCloudバックアップがFilesアプリにも表示されるよう改善しています。",
-            symbol: "clock.arrow.circlepath",
+            title: "予算の残りをウィジェットで確認",
+            message: "予算の残額をロック画面とホーム画面のウィジェットに表示できるようになりました。カテゴリを選んで残りを常に確認できます（カテゴリ選択はプレミアム）。",
+            symbol: "gauge.with.dots.needle.67percent",
             tint: .green
+        ),
+        Highlight(
+            title: "カテゴリ予算に「残り」を表示",
+            message: "「使用額 / 予算」に加えて「残り○○円」が表示されるようになりました。予算タブ・カテゴリの支出一覧・ホームの予算アラートで、あといくら使えるかがひと目で分かります。",
+            symbol: "chart.pie.fill",
+            tint: .orange
         )
     ]
     /*
@@ -175,6 +169,11 @@ private struct UpdateNoticeContent: View {
      - バックアップ（zip）に写真も含めるようにし、機種変更でも写真を引き継げるように
      - 自動バックアップ（端末・iCloud）を設定からいつでも一覧・復元できる画面を追加
      - iCloud自動バックアップがFilesアプリに表示されない問題を修正
+     アップデート 3.4
+     - 予算の残額ウィジェットを追加（ロック画面：円形/横長/インライン、ホーム画面：小/中サイズ）
+     - ウィジェットでカテゴリを選んで残額を表示（全体予算は無料、カテゴリ選択はプレミアム）
+     - カテゴリ予算に「残り○○円」表示を追加（予算タブ・カテゴリ支出一覧・ホームの予算アラート）
+     - 超過時は超過額を赤字で表示
      */
 
     let accent: Color
@@ -395,6 +394,12 @@ struct VersionEntry: Identifiable {
 
 /// 過去のアップデート履歴（新しい順）
 let versionHistory: [VersionEntry] = [
+    VersionEntry(version: "3.4", items: [
+        "予算の残額ウィジェットを追加（ロック画面：円形・横長・インライン／ホーム画面：小・中サイズ）",
+        "ウィジェットでカテゴリを選んで残額を表示（全体予算は無料、カテゴリ選択はプレミアム）",
+        "カテゴリ予算に「残り○○円」表示を追加（予算タブ・カテゴリ支出一覧・ホームの予算アラート）",
+        "予算を超過したカテゴリは超過額を赤字で表示",
+    ]),
     VersionEntry(version: "3.3", items: [
         "取引に写真を添付できる機能を追加（プレミアム。一覧に小さなプレビュー、タップで拡大表示）",
         "バックアップに写真も含めるようにし、機種変更でも写真を引き継げるように",
