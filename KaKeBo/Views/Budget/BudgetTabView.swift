@@ -552,7 +552,7 @@ private struct CategoryBudgetRow: View {
             }
 
             // プログレスバー
-            if let r = ratio {
+            if let r = ratio, let b = budget {
                 let barColor: Color = r > 1.0 ? .red : (r > 0.8 ? .orange : category.color)
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
@@ -565,6 +565,20 @@ private struct CategoryBudgetRow: View {
                     }
                 }
                 .frame(height: 6)
+
+                // 残額表示
+                HStack {
+                    Spacer()
+                    if expense > b {
+                        Text("\(currency(expense - b)) 超過")
+                            .font(.caption.weight(.medium).monospacedDigit())
+                            .foregroundStyle(.red)
+                    } else {
+                        Text("残り \(currency(b - expense))")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .padding(14)
@@ -716,6 +730,16 @@ private struct CategoryBudgetDetailSheet: View {
                     Text("予算 \(currency(b))")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
+                    // 残額表示
+                    if total > b {
+                        Text("\(currency(total - b)) 超過")
+                            .font(.caption.weight(.medium).monospacedDigit())
+                            .foregroundStyle(.red)
+                    } else {
+                        Text("残り \(currency(b - total))")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Text("\(transactions.count)件")
                     .font(.subheadline.weight(.medium))

@@ -49,9 +49,21 @@ struct BudgetAlertCard: View {
 
                 Spacer()
 
-                Text("\(currency(alert.expense)) / \(currency(alert.budget))")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(alert.isOver ? .red : .orange)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("\(currency(alert.expense)) / \(currency(alert.budget))")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(alert.isOver ? .red : .orange)
+                    // 残額表示
+                    if alert.isOver {
+                        Text("\(currency(alert.expense - alert.budget)) 超過")
+                            .font(.caption2.weight(.medium).monospacedDigit())
+                            .foregroundStyle(.red)
+                    } else {
+                        Text("残り \(currency(alert.budget - alert.expense))")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             // プログレスバー
