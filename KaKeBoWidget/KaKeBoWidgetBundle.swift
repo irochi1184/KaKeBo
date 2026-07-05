@@ -14,6 +14,7 @@ import SwiftUI
 struct KaKeBoWidgetBundle: WidgetBundle {
     var body: some Widget {
         KaKeBoWidget()
+        KaKeBoBudgetWidget()
 //        KaKeBoWidgetControl()
 //        KaKeBoWidgetLiveActivity()
     }
