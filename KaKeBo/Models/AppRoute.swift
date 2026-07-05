@@ -37,6 +37,12 @@ final class AppRoute: ObservableObject {
             return true
         }
 
+        // 予算ウィジェット（ロック画面）タップで予算タブを開く
+        if url.host == "budget" {
+            tab = .budget
+            return true
+        }
+
         return false
     }
 

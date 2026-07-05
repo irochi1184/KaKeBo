@@ -9,11 +9,22 @@ import Combine
 import SwiftUI
 import Foundation
 import StoreKit
+import WidgetKit
 
 @MainActor
 final class PurchaseManager: ObservableObject {
     @Published var products: [Product] = []
-    @Published var purchasedProductIDs: Set<String> = []
+    @Published var purchasedProductIDs: Set<String> = [] {
+        didSet {
+            // ウィジェット（プロセス外）からプレミアム状態を参照できるよう AppGroup にキャッシュする。
+            // 招待体験分は premium.referralTrial.until を widget 側で直接参照するため、ここでは課金分のみ。
+            UserDefaults.appGroup.set(!purchasedProductIDs.isEmpty, forKey: Self.purchasedCacheKey)
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+    }
+
+    /// ウィジェットが読むプレミアム（課金）状態のキャッシュキー
+    nonisolated static let purchasedCacheKey = "premium.purchasedCache"
     @Published var isLoading = false
     @Published var errorMessage: String? = nil
     
@@ -154,6 +165,8 @@ final class PurchaseManager: ObservableObject {
         referralTrialUntil = newUntil
         defaults.set(newUntil.timeIntervalSinceReferenceDate, forKey: TrialKeys.until)
         defaults.set(total + grantDays, forKey: TrialKeys.totalGrantedDays)
+        // 体験付与でプレミアム判定が変わるためウィジェットを更新
+        WidgetCenter.shared.reloadAllTimelines()
         return grantDays
     }
     
