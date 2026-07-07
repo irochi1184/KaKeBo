@@ -8,7 +8,7 @@ KaKeBo は iOS 向け家計簿アプリ。SwiftUI + MVVM 構成で、CoreData �
 
 - **Bundle ID**: `com.irochi.KaKeBo`
 - **Deployment Target**: iOS 17.6（iOS 26 対応）
-- **現在のバージョン**: 3.0
+- **バージョン**: `project.pbxproj` の `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` が唯一の情報源（このファイルには記載しない）
 - **言語**: Swift / SwiftUI
 - **外部依存**: なし（SPM / CocoaPods 不使用）
 - **AppGroup ID**: `group.com.irochiTech.KaKeBo`（`Shared/AppGroup.swift`）
@@ -127,3 +127,4 @@ Shared/            # アプリ・Widget共有コード（AppGroup, TransactionDT
 ## アップデート通知の管理
 
 `App/UpdateNotice.swift` の `defaultHighlights` 配列を差し替えることで、バージョンアップ時のお知らせ内容を変更できる。過去のバージョン内容はコメントブロックに履歴として残す。
+あわせて `versionHistory` 配列の先頭にも新バージョンのエントリを追加すること（設定画面のアップデート履歴一覧に反映される）。
