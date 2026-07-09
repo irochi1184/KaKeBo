@@ -25,7 +25,8 @@ struct SettingsView: View {
     @AppStorage("reminder.enabled", store: .appGroup) private var enabled: Bool = true
     @AppStorage("reminder.time", store: .appGroup) private var timeRaw: Double = Self.defaultTime.timeIntervalSinceReferenceDate
     @AppStorage("calendar.bottom.display.mode", store: .appGroup) private var calendarBottomMode: CalendarBottomDisplayMode = .monthTodo
-    
+    @AppStorage(LaunchScreenOption.storageKey, store: .appGroup) private var launchScreenRaw = LaunchScreenOption.home.rawValue
+
     // ▼ リマインダー統一：Settings 内で共有する ToDo ストア（今日の件数評価などに使う）
     @StateObject private var todoStore = TodoStore()
     
@@ -79,7 +80,7 @@ struct SettingsView: View {
     }
     
     enum Sheet: Identifiable {
-        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers, monthStart, calendarBottomDisplay, homeCardOrder
+        case reminders, categories, recurringTodos, fixedExpenses, theme, help, lock, sharedLedgers, monthStart, calendarBottomDisplay, homeCardOrder, launchScreen
         var id: String { "sheet-\(self)" }
     }
     // 外部URL
@@ -264,6 +265,14 @@ struct SettingsView: View {
                                 .navigationBarTitleDisplayMode(.inline)
                         }
                         .presentationDetents([.large, .medium])
+                        .presentationDragIndicator(.visible)
+
+                    case .launchScreen:
+                        NavigationStack {
+                            LaunchScreenSettingsView(accent: accent)
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                        .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
 
                     }
@@ -585,6 +594,13 @@ struct SettingsView: View {
                 accent: accent,
                 trailingText: nil
             ) { sheet = .homeCardOrder }
+
+            SettingsRowButton(
+                title: "起動時に開く画面",
+                systemImage: "arrow.up.forward.app",
+                accent: accent,
+                trailingText: (LaunchScreenOption(rawValue: launchScreenRaw) ?? .home).title
+            ) { sheet = .launchScreen }
 
             SettingsRowButton(
                 title: "共有家計簿を管理",

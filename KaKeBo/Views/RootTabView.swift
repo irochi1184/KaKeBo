@@ -16,6 +16,7 @@ struct RootTabView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var showSettings = false
     @State private var showLaunchScreen = true
+    @State private var didApplyLaunchScreenOption = false
 
     private let launchScreenMinDuration: UInt64 = 600_000_000  // 0.6秒
     private let launchScreenTimeout: UInt64 = 5_000_000_000    // 5秒タイムアウト
@@ -53,8 +54,17 @@ struct RootTabView: View {
         }
         .task { await startLaunchSequence() }
         .toolbar(showLaunchScreen ? .hidden : .visible, for: .tabBar)
+        // 起動時に開く画面の「取引追加」用シート（初回選択画面からの即時反映にも使用）
+        .sheet(isPresented: $appRoute.addTransactionRequested) {
+            AddTransactionView(defaultCategoryId: store.categories.first?.id)
+                .environmentObject(store)
+                .environmentObject(themeStore)
+                .environmentObject(sharedLedgerStore)
+                .environmentObject(ledgerContext)
+        }
         .overlay(TutorialGate())
         .overlay(UpdateNoticeGate())
+        .overlay(LaunchScreenPromptGate())
         .overlay(LoginMilestoneReviewGate())
         .overlay(alignment: .bottom) {
             SharedLedgerNotificationOverlay()
@@ -75,10 +85,36 @@ struct RootTabView: View {
         )
     }
 
+    /// 設定「起動時に開く画面」を適用する。ウィジェット等のディープリンクが先に来ていればそちらを優先。
+    /// 戻り値は取引追加シートを開くべきかどうか。
+    private func applyLaunchScreenOptionIfNeeded() -> Bool {
+        guard !didApplyLaunchScreenOption else { return false }
+        didApplyLaunchScreenOption = true
+        guard !appRoute.didHandleDeepLink else { return false }
+
+        let option = LaunchScreenOption.loadFromDefaults()
+        appRoute.tab = option.tab
+        return option == .addTransaction
+    }
+
+    /// 起動画面のフェード後に取引追加シートを開く
+    private func presentLaunchAddTransaction() async {
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        // シート表示の直前にもディープリンク割り込みを確認する
+        if !appRoute.didHandleDeepLink {
+            appRoute.addTransactionRequested = true
+        }
+    }
+
     private func startLaunchSequence() async {
+        let shouldPresentAdd = applyLaunchScreenOptionIfNeeded()
+
         if ledgerContext.isRestored {
             withAnimation(.easeOut(duration: 0.2)) {
                 showLaunchScreen = false
+            }
+            if shouldPresentAdd {
+                await presentLaunchAddTransaction()
             }
             return
         }
@@ -126,5 +162,9 @@ struct RootTabView: View {
         #if DEBUG
         print("✅ [RootTabView] 起動シーケンス完了 mode=\(ledgerContext.mode)")
         #endif
+
+        if shouldPresentAdd {
+            await presentLaunchAddTransaction()
+        }
     }
 }
