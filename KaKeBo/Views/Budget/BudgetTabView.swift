@@ -68,8 +68,17 @@ struct BudgetTabView: View {
         budgetByCategory.values.filter { $0.isEnabled }.reduce(0) { $0 + $1.limitAmount }
     }
 
+    // 予算を設定中（有効）のカテゴリの支出のみ合計（総予算と対象を揃える）
     private var totalExpense: Int {
-        expenseByCategory.values.reduce(0, +)
+        expenseByCategory.reduce(0) { sum, pair in
+            guard let b = budgetByCategory[pair.key], b.isEnabled, b.limitAmount > 0 else { return sum }
+            return sum + pair.value
+        }
+    }
+
+    // 予算未設定・停止中のカテゴリの支出（注記表示用）
+    private var excludedExpense: Int {
+        expenseByCategory.values.reduce(0, +) - totalExpense
     }
 
     // 先月のカテゴリ別支出（「先月の支出を予算に設定」用）
@@ -323,6 +332,14 @@ struct BudgetTabView: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(Double(totalExpense) / Double(max(1, totalBudget)) > 1.0 ? .red : .secondary)
                 }
+            }
+
+            // 予算対象外の支出があることを注記
+            if excludedExpense > 0 {
+                Text("※ 予算未設定・停止中のカテゴリの支出 \(currency(excludedExpense)) は含まれていません")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .padding(16)
