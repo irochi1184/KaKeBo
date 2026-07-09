@@ -25,7 +25,10 @@ struct CalendarMonthGrid: View {
     
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
     private var cal: Calendar { Calendar.current }
-    
+
+    /// 祝日判定（年単位でキャッシュされるため共有インスタンスを使う）
+    private static let holidayProvider = JapaneseHolidayProvider()
+
     var body: some View {
         LazyVGrid(columns: columns, spacing: 6) {
             let days = daysInMonth()
@@ -44,7 +47,8 @@ struct CalendarMonthGrid: View {
                         todoCount: todoCounts[k] ?? 0,
                         accent: accent,
                         hasNote: notedDays.contains(key),
-                        noteSnippet: noteSnippets[key]
+                        noteSnippet: noteSnippets[key],
+                        isHoliday: Self.holidayProvider.isHoliday(day)
                     )
                     .onTapGesture { onTapDay(day) }
                     .onLongPressGesture(minimumDuration: 0.3) { onLongPressDay(day) }
@@ -96,9 +100,18 @@ private struct DayCell: View {
     let accent: Color
     let hasNote: Bool
     let noteSnippet: String?
-    
+    let isHoliday: Bool
+
     private var cal: Calendar { Calendar.current }
-    
+
+    /// 日付数字の色: 祝日・日曜=赤 / 土曜=青 / 平日=グレー
+    private var dayNumberColor: Color {
+        let weekday = cal.component(.weekday, from: date) // 1:日〜7:土
+        if isHoliday || weekday == 1 { return .red }
+        if weekday == 7 { return .blue }
+        return Color(.secondaryLabel)
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {   // ← 右上から左上に変更
             // 枠
@@ -117,7 +130,7 @@ private struct DayCell: View {
                     Spacer(minLength: 0)
                     Text("\(cal.component(.day, from: date))")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(dayNumberColor)
                         .padding(.top, 4)
                         .padding(.trailing, 6)
                 }

@@ -67,10 +67,11 @@ struct CalendarScreen: View {
                         VStack(spacing: 8) {
                             // 曜日ヘッダー
                             HStack {
-                                ForEach(weekdaySymbolsJP, id: \.self) { w in
+                                // shortStandaloneWeekdaySymbols は 0:日〜6:土 の順
+                                ForEach(Array(weekdaySymbolsJP.enumerated()), id: \.offset) { index, w in
                                     Text(w)
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(weekdayHeaderColor(index: index))
                                         .frame(maxWidth: .infinity)
                                 }
                             }
@@ -330,6 +331,15 @@ struct CalendarScreen: View {
         let f = DateFormatter()
         f.locale = Locale(identifier: "ja_JP")
         return f.shortStandaloneWeekdaySymbols
+    }
+
+    /// 曜日ヘッダーの色: 日曜=赤 / 土曜=青 / 平日=グレー
+    private func weekdayHeaderColor(index: Int) -> Color {
+        switch index {
+        case 0: return .red
+        case 6: return .blue
+        default: return Color(.secondaryLabel)
+        }
     }
     
     @AppStorage("kakebo.recurring.templates") private var templatesData: Data = Data()
