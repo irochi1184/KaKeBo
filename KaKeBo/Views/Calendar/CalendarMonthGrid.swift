@@ -104,11 +104,11 @@ private struct DayCell: View {
 
     private var cal: Calendar { Calendar.current }
 
-    /// 日付数字の色: 祝日・日曜=赤 / 土曜=青 / 平日=グレー
+    /// 日付数字の色: 祝日・日曜=赤 / 土曜=青 / 平日=グレー（赤・青は少し抑えめに）
     private var dayNumberColor: Color {
         let weekday = cal.component(.weekday, from: date) // 1:日〜7:土
-        if isHoliday || weekday == 1 { return .red }
-        if weekday == 7 { return .blue }
+        if isHoliday || weekday == 1 { return .red.opacity(0.9) }
+        if weekday == 7 { return .blue.opacity(0.9) }
         return Color(.secondaryLabel)
     }
 

@@ -333,11 +333,11 @@ struct CalendarScreen: View {
         return f.shortStandaloneWeekdaySymbols
     }
 
-    /// 曜日ヘッダーの色: 日曜=赤 / 土曜=青 / 平日=グレー
+    /// 曜日ヘッダーの色: 日曜=赤 / 土曜=青 / 平日=グレー（赤・青は少し抑えめに）
     private func weekdayHeaderColor(index: Int) -> Color {
         switch index {
-        case 0: return .red
-        case 6: return .blue
+        case 0: return .red.opacity(0.9)
+        case 6: return .blue.opacity(0.9)
         default: return Color(.secondaryLabel)
         }
     }
