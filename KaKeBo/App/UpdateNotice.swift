@@ -73,15 +73,21 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "予算の残りをウィジェットで確認",
-            message: "予算の残額をロック画面とホーム画面のウィジェットに表示できるようになりました。カテゴリを選んで残りを常に確認できます（カテゴリ選択はプレミアム）。",
-            symbol: "gauge.with.dots.needle.67percent",
-            tint: .green
+            title: "起動時に開く画面を選べるように",
+            message: "アプリを起動したとき最初に表示する画面を、ホーム・カレンダー・レポート・取引一覧・予算・取引追加から選べるようになりました。「取引追加」を選べば起動してすぐ入力できます。",
+            symbol: "arrow.up.forward.app",
+            tint: .blue
         ),
         Highlight(
-            title: "カテゴリ予算に「残り」を表示",
-            message: "「使用額 / 予算」に加えて「残り○○円」が表示されるようになりました。予算タブ・カテゴリの支出一覧・ホームの予算アラートで、あといくら使えるかがひと目で分かります。",
-            symbol: "chart.pie.fill",
+            title: "カレンダーの土日・祝日を色分け",
+            message: "カレンダーの日付を、祝日・日曜は赤、土曜は青で表示するようにしました。休みの日の出費がひと目で分かります。",
+            symbol: "calendar",
+            tint: .red
+        ),
+        Highlight(
+            title: "予算タブの支出合計を見直し",
+            message: "支出合計に、予算を設定したカテゴリの支出だけを含めるようにしました。総予算と同じ基準になり、使用率や残り金額がより実態に合った表示になります。",
+            symbol: "yensign.circle",
             tint: .orange
         )
     ]
@@ -174,6 +180,11 @@ private struct UpdateNoticeContent: View {
      - ウィジェットでカテゴリを選んで残額を表示（全体予算は無料、カテゴリ選択はプレミアム）
      - カテゴリ予算に「残り○○円」表示を追加（予算タブ・カテゴリ支出一覧・ホームの予算アラート）
      - 超過時は超過額を赤字で表示
+     アップデート 3.4.1
+     - 起動時に最初に表示する画面を選べる設定を追加（ホーム・カレンダー・レポート・取引一覧・予算・取引追加）
+     - アップデート後の初回起動時に起動画面を選択できる案内を表示
+     - カレンダーの祝日・日曜を赤、土曜を青で色分け表示
+     - 予算タブの支出合計を予算設定済みカテゴリのみの合計に変更（除外分は注記表示）
      */
 
     let accent: Color
@@ -294,7 +305,7 @@ private struct UpdateNoticeContent: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("バージョン \(AppVersion.current)")
                     .font(.title.weight(.heavy))
-                Text("みんなで使うほど、お得に。")
+                Text("起動してすぐ、いつもの画面へ。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -394,6 +405,12 @@ struct VersionEntry: Identifiable {
 
 /// 過去のアップデート履歴（新しい順）
 let versionHistory: [VersionEntry] = [
+    VersionEntry(version: "3.4.1", items: [
+        "起動時に最初に表示する画面を選べる設定を追加（ホーム・カレンダー・レポート・取引一覧・予算・取引追加）",
+        "アップデート後の初回起動時に起動画面を選択できる案内を表示",
+        "カレンダーの祝日・日曜を赤、土曜を青で色分け表示",
+        "予算タブの支出合計を予算設定済みカテゴリのみの合計に変更（除外分は注記表示）",
+    ]),
     VersionEntry(version: "3.4", items: [
         "予算の残額ウィジェットを追加（ロック画面：円形・横長・インライン／ホーム画面：小・中サイズ）",
         "ウィジェットでカテゴリを選んで残額を表示（全体予算は無料、カテゴリ選択はプレミアム）",
