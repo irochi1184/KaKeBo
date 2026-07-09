@@ -21,6 +21,12 @@ final class AppRoute: ObservableObject {
     @Published var tab: Tab = .home
     @Published private(set) var calendarSelection: Date?
 
+    /// 取引追加シートの表示要求（起動時に開く画面の設定・初回選択画面から使用）
+    @Published var addTransactionRequested = false
+
+    /// ディープリンクでタブが指定されたか（起動時に開く画面の設定より優先する）
+    private(set) var didHandleDeepLink = false
+
     /// カレンタータブを前面にし、指定日を選択させる。
     func focusCalendar(on date: Date) {
         tab = .calendar
@@ -33,12 +39,14 @@ final class AppRoute: ObservableObject {
 
         if url.host == "calendar",
            let date = parseDate(from: url) {
+            didHandleDeepLink = true
             focusCalendar(on: date)
             return true
         }
 
         // 予算ウィジェット（ロック画面）タップで予算タブを開く
         if url.host == "budget" {
+            didHandleDeepLink = true
             tab = .budget
             return true
         }
