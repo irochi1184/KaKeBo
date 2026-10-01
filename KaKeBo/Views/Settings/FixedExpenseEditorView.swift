@@ -19,6 +19,7 @@ struct FixedExpenseEditorView: View {
     @State private var title: String = ""
     @State private var amount: Int = 0
     @State private var dayOfMonth: Int = 0   // 0=月末
+    @State private var paymentDateAdjustment: PaymentDateAdjustment = .none
     @State private var categoryId: UUID? = nil
     @State private var memo: String = ""
     @State private var isActive: Bool = true
@@ -60,6 +61,7 @@ struct FixedExpenseEditorView: View {
             _title       = State(initialValue: t.title)
             _amount      = State(initialValue: t.amount)
             _dayOfMonth  = State(initialValue: t.dayOfMonth)
+            _paymentDateAdjustment = State(initialValue: t.paymentDateAdjustment)
             _categoryId  = State(initialValue: t.categoryId)
             _memo        = State(initialValue: t.memo ?? "")
             _isActive    = State(initialValue: t.isActive)
@@ -118,6 +120,20 @@ struct FixedExpenseEditorView: View {
                                       iconName: "calendar",
                                       trailing: "chevron.right")
                         }
+                        dividerHairline
+                        Picker(selection: $paymentDateAdjustment) {
+                            ForEach(PaymentDateAdjustment.allCases, id: \.self) { option in
+                                Text(option.displayName).tag(option)
+                            }
+                        } label: {
+                            rowButton(
+                                title: "土日祝の場合",
+                                subtitle: paymentDateAdjustment.displayName,
+                                iconName: "calendar.badge.exclamationmark",
+                                trailing: "chevron.up.chevron.down"
+                            )
+                        }
+                        .pickerStyle(.menu)
                         dividerHairline
                         Button {
                             showCategorySheet = true
@@ -437,6 +453,7 @@ struct FixedExpenseEditorView: View {
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             amount: amount,
             dayOfMonth: dayOfMonth,
+            paymentDateAdjustment: paymentDateAdjustment,
             categoryId: cat,
             memo: memo.isEmpty ? nil : memo,
             isActive: isActive,

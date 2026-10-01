@@ -45,7 +45,9 @@ extension DataStore {
             guard let arr = try? JSONDecoder().decode([FixedExpenseTemplate].self, from: data) else { return nil }
             return arr.map {
                 .init(id: $0.id, title: $0.title, amount: $0.amount,
-                      dayOfMonth: $0.dayOfMonth, categoryId: $0.categoryId,
+                      dayOfMonth: $0.dayOfMonth,
+                      paymentDateAdjustment: $0.paymentDateAdjustment == .none ? nil : $0.paymentDateAdjustment,
+                      categoryId: $0.categoryId,
                       memo: $0.memo ?? "", isActive: $0.isActive,
                       tags: $0.tags.isEmpty ? nil : $0.tags,
                       createdDate: $0.createdDate,
@@ -240,6 +242,7 @@ extension DataStore {
                     title: tpl.title,
                     amount: tpl.amount,
                     dayOfMonth: tpl.dayOfMonth,
+                    paymentDateAdjustment: tpl.paymentDateAdjustment ?? .none,
                     categoryId: mappedCategory,
                     memo: tpl.memo,
                     isActive: tpl.isActive,

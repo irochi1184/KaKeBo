@@ -17,12 +17,42 @@ enum RepeatMode: Codable, Hashable, Equatable {
     case untilDate(Date)
 }
 
+/// 支払日が土日祝だった場合の補正方法
+enum PaymentDateAdjustment: String, Codable, CaseIterable, Hashable {
+    case none
+    case previousBusinessDay
+    case nextBusinessDay
+
+    var displayName: String {
+        switch self {
+        case .none:
+            return "変更しない"
+        case .previousBusinessDay:
+            return "前の平日にする"
+        case .nextBusinessDay:
+            return "次の平日にする"
+        }
+    }
+
+    var listText: String? {
+        switch self {
+        case .none:
+            return nil
+        case .previousBusinessDay:
+            return "休日は前の平日に変更"
+        case .nextBusinessDay:
+            return "休日は次の平日に変更"
+        }
+    }
+}
+
 /// 毎月の定額支出テンプレート（0 = 月末, 1...31）
 struct FixedExpenseTemplate: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var title: String                  // 表示名（例：家賃）
     var amount: Int                    // 金額（正）
     var dayOfMonth: Int                // 0=月末, 1..31
+    var paymentDateAdjustment: PaymentDateAdjustment = .none
     var categoryId: UUID               // 紐づけるカテゴリ（支出カテゴリ）
     var memo: String? = nil            // 任意メモ
     var isActive: Bool = true          // 有効/無効
@@ -35,6 +65,7 @@ struct FixedExpenseTemplate: Identifiable, Codable, Hashable {
          title: String,
          amount: Int,
          dayOfMonth: Int,
+         paymentDateAdjustment: PaymentDateAdjustment = .none,
          categoryId: UUID,
          memo: String? = nil,
          isActive: Bool = true,
@@ -46,6 +77,7 @@ struct FixedExpenseTemplate: Identifiable, Codable, Hashable {
         self.title = title
         self.amount = amount
         self.dayOfMonth = dayOfMonth
+        self.paymentDateAdjustment = paymentDateAdjustment
         self.categoryId = categoryId
         self.memo = memo
         self.isActive = isActive
@@ -62,6 +94,7 @@ struct FixedExpenseTemplate: Identifiable, Codable, Hashable {
         title = try container.decode(String.self, forKey: .title)
         amount = try container.decode(Int.self, forKey: .amount)
         dayOfMonth = try container.decode(Int.self, forKey: .dayOfMonth)
+        paymentDateAdjustment = try container.decodeIfPresent(PaymentDateAdjustment.self, forKey: .paymentDateAdjustment) ?? .none
         categoryId = try container.decode(UUID.self, forKey: .categoryId)
         memo = try container.decodeIfPresent(String.self, forKey: .memo)
         isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
@@ -77,6 +110,7 @@ struct FixedExpenseTemplate: Identifiable, Codable, Hashable {
         try container.encode(title, forKey: .title)
         try container.encode(amount, forKey: .amount)
         try container.encode(dayOfMonth, forKey: .dayOfMonth)
+        try container.encode(paymentDateAdjustment, forKey: .paymentDateAdjustment)
         try container.encode(categoryId, forKey: .categoryId)
         try container.encodeIfPresent(memo, forKey: .memo)
         try container.encode(isActive, forKey: .isActive)
@@ -87,7 +121,7 @@ struct FixedExpenseTemplate: Identifiable, Codable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, amount, dayOfMonth, categoryId, memo, isActive, tags
+        case id, title, amount, dayOfMonth, paymentDateAdjustment, categoryId, memo, isActive, tags
         case createdDate, repeatMode, appliedCount
     }
 

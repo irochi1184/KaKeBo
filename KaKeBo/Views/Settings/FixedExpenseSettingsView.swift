@@ -124,6 +124,15 @@ struct FixedExpenseSettingsView: View {
                                     Text("金額 \(yen(t.amount))").font(.caption).foregroundStyle(.secondary)
                                     Text("毎月 \(dayText(t.dayOfMonth))").font(.caption).foregroundStyle(.secondary)
                                 }
+                                if let adjustmentText = t.paymentDateAdjustment.listText {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "calendar.badge.exclamationmark")
+                                            .font(.caption2)
+                                        Text(adjustmentText)
+                                            .font(.caption2)
+                                    }
+                                    .foregroundStyle(.secondary)
+                                }
                                 if !t.repeatStatusText.isEmpty {
                                     HStack(spacing: 4) {
                                         Image(systemName: "arrow.triangle.2.circlepath")

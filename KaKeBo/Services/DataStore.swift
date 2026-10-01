@@ -484,85 +484,100 @@ extension DataStore {
         saveFrequentTemplates()
     }
     
-    /// 今月&今日までに“自動計上すべき”固定費を transactions に反映する
-    /// - すでに当月分を計上済みのテンプレートはスキップ（Settings の手動計上からも共通利用可）
-    func applyFixedExpensesForCurrentMonth() {
+    /// 今日までに“自動計上すべき”固定費を transactions に反映する
+    /// - 支払日の休日補正で月をまたぐ可能性があるため、前月・当月・翌月を対象月として確認する
+    /// - 計上済み管理は「実際の取引日」ではなく「固定費の対象月」単位で保持する
+    func applyFixedExpensesForCurrentMonth(referenceDate: Date = Date()) {
         let cal = Calendar.current
-        guard let start = cal.date(from: cal.dateComponents([.year, .month], from: Date())),
-              let end = cal.date(byAdding: .month, value: 1, to: start) else {
+        guard let currentMonthStart = cal.date(from: cal.dateComponents([.year, .month], from: referenceDate)) else {
             return
         }
-        let today = cal.startOfDay(for: Date())
+        let today = cal.startOfDay(for: referenceDate)
 
-        // テンプレ取得
         let defaults = UserDefaults.appGroup
         defaults.migrateIfNeeded(keys: [Self.fixedTemplatesKey])
-        var templates = (try? JSONDecoder().decode([FixedExpenseTemplate].self,
-                                                   from: defaults.migratedData(forKey: Self.fixedTemplatesKey) ?? Data())) ?? []
+        var templates = (try? JSONDecoder().decode(
+            [FixedExpenseTemplate].self,
+            from: defaults.migratedData(forKey: Self.fixedTemplatesKey) ?? Data()
+        )) ?? []
 
         guard templates.contains(where: { $0.isActive }) else { return }
-        
-        // 当月の「計上済みテンプレID集合」を読み出し
-        let monthKey = monthKeyString(for: start)  // "yyyy-MM"
-        let postedKey = Self.fixedPostedKeyPrefix + monthKey
-        defaults.migrateIfNeeded(keys: [postedKey])
-        var posted: Set<UUID> = {
-            if let data = defaults.migratedData(forKey: postedKey),
-               let ids = try? JSONDecoder().decode([UUID].self, from: data) {
-                return Set(ids)
-            }
-            return Set()
-        }()
-        
+
+        // 月初の前倒し・月末の後ろ倒しを拾うため、対象月を前後1か月まで確認する
+        let targetMonthStarts = [-1, 0, 1].compactMap {
+            cal.date(byAdding: .month, value: $0, to: currentMonthStart)
+        }
+
         var didAppend = false
         var templatesModified = false
 
-        for (idx, t) in templates.enumerated() {
-            guard t.isActive && !posted.contains(t.id) else { continue }
-            // 繰り返し上限チェック
-            guard !t.isRepeatLimitReached else {
-                // 上限到達 → 自動で無効化
-                templates[idx].isActive = false
-                templatesModified = true
-                continue
-            }
-            // 当月の”計上日”
-            let due = computeDue(for: t, in: start)
-            // 今日までに到来したものだけ自動計上（＝未来日はまだ）
-            if due <= today && due >= start && due < end {
+        for targetMonthStart in targetMonthStarts {
+            let monthKey = monthKeyString(for: targetMonthStart)
+            let postedKey = Self.fixedPostedKeyPrefix + monthKey
+            defaults.migrateIfNeeded(keys: [postedKey])
+
+            var posted: Set<UUID> = {
+                if let data = defaults.migratedData(forKey: postedKey),
+                   let ids = try? JSONDecoder().decode([UUID].self, from: data) {
+                    return Set(ids)
+                }
+                return Set()
+            }()
+
+            var postedModified = false
+
+            for idx in templates.indices {
+                let template = templates[idx]
+                guard template.isActive && !posted.contains(template.id) else { continue }
+
+                // 繰り返し上限チェック
+                guard !template.isRepeatLimitReached else {
+                    templates[idx].isActive = false
+                    templatesModified = true
+                    continue
+                }
+
+                let due = computeDue(for: template, in: targetMonthStart)
+
+                // 対象月の支払日を休日補正した結果が今日までに到来していれば計上する
+                guard due <= today else { continue }
+
                 // カテゴリがまだあるかチェック
-                guard let _ = categories.first(where: { $0.id == t.categoryId }) else { continue }
-                // 取引追加（支出）
+                guard categories.contains(where: { $0.id == template.categoryId }) else { continue }
+
                 let tx = Transaction(
                     date: due,
-                    amount: t.amount,
+                    amount: template.amount,
                     type: .expense,
-                    memo: memoForFixedExpense(t),
-                    categoryId: t.categoryId,
-                    tags: t.tags
+                    memo: memoForFixedExpense(template),
+                    categoryId: template.categoryId,
+                    tags: template.tags
                 )
                 transactions.insert(tx, at: 0)
-                posted.insert(t.id)
+
+                posted.insert(template.id)
+                postedModified = true
                 templates[idx].appliedCount += 1
                 templatesModified = true
                 didAppend = true
             }
+
+            if postedModified {
+                let data = try? JSONEncoder().encode(Array(posted))
+                defaults.set(data, forKey: postedKey)
+            }
         }
 
-        // テンプレートの更新を保存（appliedCount や isActive の変更）
         if templatesModified {
             defaults.set(try? JSONEncoder().encode(templates), forKey: Self.fixedTemplatesKey)
         }
 
         if didAppend {
             saveTransactions()
-            // 計上済み更新
-            let data = try? JSONEncoder().encode(Array(posted))
-            defaults.set(data, forKey: postedKey)
             WidgetCenter.shared.reloadAllTimelines()
         }
     }
-    
+
     /// 指定テンプレートを”今月”で即時計上（手動ボタン用）
     func postFixedExpenseNow(_ t: FixedExpenseTemplate) {
         let cal = Calendar.current
@@ -620,29 +635,191 @@ extension DataStore {
         return title
     }
     
-    /// 31日対応（0=月末）
+    /// 31日対応（0=月末）＋土日祝の支払日補正
     private func computeDue(for tpl: FixedExpenseTemplate, in monthStart: Date) -> Date {
         let cal = Calendar.current
-        if tpl.dayOfMonth == 0 {
-            guard let end = cal.date(byAdding: DateComponents(month: 1, day: -1), to: monthStart) else {
-                return monthStart
+
+        let baseDue: Date = {
+            if tpl.dayOfMonth == 0 {
+                guard let end = cal.date(byAdding: DateComponents(month: 1, day: -1), to: monthStart) else {
+                    return monthStart
+                }
+                return cal.startOfDay(for: end)
             }
-            return cal.startOfDay(for: end)
-        } else {
+
             guard let range = cal.range(of: .day, in: .month, for: monthStart) else {
                 return monthStart
             }
             let day = min(tpl.dayOfMonth, range.count)
-            return cal.startOfDay(for:
-                                    cal.date(from: DateComponents(year: cal.component(.year, from: monthStart),
-                                                                  month: cal.component(.month, from: monthStart),
-                                                                  day: day)) ?? monthStart
+            let components = DateComponents(
+                year: cal.component(.year, from: monthStart),
+                month: cal.component(.month, from: monthStart),
+                day: day
             )
+            return cal.startOfDay(for: cal.date(from: components) ?? monthStart)
+        }()
+
+        switch tpl.paymentDateAdjustment {
+        case .none:
+            return baseDue
+        case .previousBusinessDay:
+            return adjustedBusinessDay(from: baseDue, direction: -1, calendar: cal)
+        case .nextBusinessDay:
+            return adjustedBusinessDay(from: baseDue, direction: 1, calendar: cal)
         }
     }
-    
+
+    private func adjustedBusinessDay(from date: Date, direction: Int, calendar: Calendar) -> Date {
+        guard direction == -1 || direction == 1 else {
+            return calendar.startOfDay(for: date)
+        }
+
+        var candidate = calendar.startOfDay(for: date)
+        while !isBusinessDay(candidate, calendar: calendar) {
+            guard let moved = calendar.date(byAdding: .day, value: direction, to: candidate) else {
+                return candidate
+            }
+            candidate = calendar.startOfDay(for: moved)
+        }
+        return candidate
+    }
+
+    private func isBusinessDay(_ date: Date, calendar: Calendar) -> Bool {
+        !calendar.isDateInWeekend(date) && !JapaneseHolidayCalendar.isHoliday(date, calendar: calendar)
+    }
+
     private func monthKeyString(for monthStart: Date) -> String {
         let f = DateFormatter(); f.locale = .init(identifier: "ja_JP"); f.dateFormat = "yyyy-MM"
         return f.string(from: monthStart)
+    }
+}
+
+
+// MARK: - 日本の祝日判定
+
+/// 固定費の支払日補正に使う日本の祝日判定。
+/// KaKeBo の運用期間を考慮し、2007年以降の祝日制度を対象とする。
+private enum JapaneseHolidayCalendar {
+    static func isHoliday(_ date: Date, calendar sourceCalendar: Calendar = .current) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "ja_JP")
+        calendar.timeZone = sourceCalendar.timeZone
+
+        let normalized = calendar.startOfDay(for: date)
+        let year = calendar.component(.year, from: normalized)
+        guard year >= 2007 else { return false }
+
+        return holidays(in: year, calendar: calendar).contains(normalized)
+    }
+
+    private static func holidays(in year: Int, calendar: Calendar) -> Set<Date> {
+        var nationalHolidays = Set<Date>()
+
+        func add(_ month: Int, _ day: Int) {
+            if let date = calendar.date(from: DateComponents(year: year, month: month, day: day)) {
+                nationalHolidays.insert(calendar.startOfDay(for: date))
+            }
+        }
+
+        func addNthMonday(month: Int, ordinal: Int) {
+            guard let first = calendar.date(from: DateComponents(year: year, month: month, day: 1)) else { return }
+            let firstWeekday = calendar.component(.weekday, from: first)
+            let monday = 2
+            let offset = (monday - firstWeekday + 7) % 7
+            let day = 1 + offset + (ordinal - 1) * 7
+            add(month, day)
+        }
+
+        // 毎年の祝日
+        add(1, 1)                 // 元日
+        addNthMonday(month: 1, ordinal: 2) // 成人の日
+        add(2, 11)                // 建国記念の日
+
+        if year <= 2018 {
+            add(12, 23)           // 天皇誕生日（平成）
+        } else if year >= 2020 {
+            add(2, 23)            // 天皇誕生日（令和）
+        }
+
+        add(3, vernalEquinoxDay(year: year))
+        add(4, 29)                // 昭和の日
+        add(5, 3)                 // 憲法記念日
+        add(5, 4)                 // みどりの日
+        add(5, 5)                 // こどもの日
+
+        // 海の日・スポーツの日・山の日は東京五輪による特例を考慮
+        switch year {
+        case 2020:
+            add(7, 23)            // 海の日
+            add(7, 24)            // スポーツの日
+            add(8, 10)            // 山の日
+        case 2021:
+            add(7, 22)            // 海の日
+            add(7, 23)            // スポーツの日
+            add(8, 8)             // 山の日（振替休日は後段で算出）
+        default:
+            addNthMonday(month: 7, ordinal: 3) // 海の日
+            add(8, 11)            // 山の日
+            addNthMonday(month: 10, ordinal: 2) // スポーツの日
+        }
+
+        addNthMonday(month: 9, ordinal: 3) // 敬老の日
+        add(9, autumnEquinoxDay(year: year))
+        add(11, 3)                // 文化の日
+        add(11, 23)               // 勤労感謝の日
+
+        // 2019年の即位関連の祝日
+        if year == 2019 {
+            add(5, 1)
+            add(10, 22)
+        }
+
+        var holidays = nationalHolidays
+
+        // 国民の休日：前後を国民の祝日に挟まれた平日
+        if let yearStart = calendar.date(from: DateComponents(year: year, month: 1, day: 1)),
+           let nextYear = calendar.date(from: DateComponents(year: year + 1, month: 1, day: 1)),
+           let days = calendar.dateComponents([.day], from: yearStart, to: nextYear).day {
+            for offset in 1..<(max(days - 1, 1)) {
+                guard let date = calendar.date(byAdding: .day, value: offset, to: yearStart),
+                      let previous = calendar.date(byAdding: .day, value: -1, to: date),
+                      let next = calendar.date(byAdding: .day, value: 1, to: date) else {
+                    continue
+                }
+
+                let normalized = calendar.startOfDay(for: date)
+                let weekday = calendar.component(.weekday, from: normalized)
+                guard weekday != 1 && weekday != 7 else { continue }
+
+                if nationalHolidays.contains(calendar.startOfDay(for: previous))
+                    && nationalHolidays.contains(calendar.startOfDay(for: next)) {
+                    holidays.insert(normalized)
+                }
+            }
+        }
+
+        // 振替休日：日曜の国民の祝日の直後にある最初の休日でない日
+        for holiday in nationalHolidays where calendar.component(.weekday, from: holiday) == 1 {
+            guard var substitute = calendar.date(byAdding: .day, value: 1, to: holiday) else { continue }
+            substitute = calendar.startOfDay(for: substitute)
+
+            while holidays.contains(substitute) {
+                guard let next = calendar.date(byAdding: .day, value: 1, to: substitute) else { break }
+                substitute = calendar.startOfDay(for: next)
+            }
+            holidays.insert(substitute)
+        }
+
+        return holidays
+    }
+
+    private static func vernalEquinoxDay(year: Int) -> Int {
+        // 1980〜2099年で使える近似式
+        Int(20.8431 + 0.242194 * Double(year - 1980) - Double((year - 1980) / 4))
+    }
+
+    private static func autumnEquinoxDay(year: Int) -> Int {
+        // 1980〜2099年で使える近似式
+        Int(23.2488 + 0.242194 * Double(year - 1980) - Double((year - 1980) / 4))
     }
 }
