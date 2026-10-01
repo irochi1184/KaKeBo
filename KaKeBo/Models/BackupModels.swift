@@ -58,6 +58,7 @@ struct BackupFixedExpense: Codable, Identifiable {
     var title: String
     var amount: Int
     var dayOfMonth: Int
+    var paymentDateAdjustment: PaymentDateAdjustment?
     var categoryId: UUID?
     var memo: String
     var isActive: Bool
