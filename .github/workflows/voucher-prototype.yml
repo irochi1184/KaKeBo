@@ -1,0 +1,19 @@
+name: Build voucher prototype
+on:
+  pull_request:
+    paths:
+      - 'Prototype/**'
+      - '.github/workflows/voucher-prototype.yml'
+permissions:
+  contents: read
+jobs:
+  simulator:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build isolated iPhone app
+        run: >
+          xcodebuild -project Prototype/KaKeBoPrototype.xcodeproj
+          -scheme KaKeBoPrototype -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO build
