@@ -82,12 +82,14 @@ struct CardOrderStore {
 /// 非表示にしているカードの集合を AppStorage で保存/復元する。
 /// （ここに含まれるカードは、データの有無に関わらずホーム画面に表示しない）
 struct HiddenCardStore {
+    static let defaultHidden: Set<DashboardCard> = [.weeklySummary, .forecast]
+
     @AppStorage("home.hiddenCards") private var raw: String = ""
 
     func load() -> Set<DashboardCard> {
         guard let data = raw.data(using: .utf8),
               let ids = (try? JSONDecoder().decode([String].self, from: data)) else {
-            return []
+            return Self.defaultHidden
         }
         let map = Dictionary(uniqueKeysWithValues: DashboardCard.allCases.map { ($0.id, $0) })
         return Set(ids.compactMap { map[$0] })
