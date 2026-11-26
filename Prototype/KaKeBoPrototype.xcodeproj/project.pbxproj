@@ -50,13 +50,13 @@
 		};
 		FBDC4F23F93125BBEEAE800C = {
 			isa = PBXGroup;
-			children = (38A007151ABE87CC01A5B6E9, );
+			children = (38A007151ABE87CC01A5B6E9, 91251B722F603F5400AD371C, );
 			name = Products;
 			sourceTree = "<group>";
 		};
 		64292B1C2B2E13EAD8788FC8 = {
 			isa = PBXGroup;
-			children = (BCE16DD0260827ECF338C787, FBDC4F23F93125BBEEAE800C, );
+			children = (BCE16DD0260827ECF338C787, FBDC4F23F93125BBEEAE800C, E05FCB614AB36FDEE72EE1F2, );
 			sourceTree = "<group>";
 		};
 		FE77C82BB2A42EFEEC930360 = {
@@ -160,7 +160,84 @@
 			productRefGroup = FBDC4F23F93125BBEEAE800C;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (0E8A3AD980EC179856012B7E, );
+			targets = (0E8A3AD980EC179856012B7E, C1D6574ADE4A048AA71108CF, );
+		};
+		91251B722F603F5400AD371C = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.cfbundle;
+			path = PrototypeUITests.xctest;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		E05FCB614AB36FDEE72EE1F2 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "UITests/VoucherScreens.swift";
+			sourceTree = "<group>";
+		};
+		E8E999BD5C0365F586053AAC = {
+			isa = PBXBuildFile;
+			fileRef = E05FCB614AB36FDEE72EE1F2;
+		};
+		30F416E6C342BEB0B66F9005 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (E8E999BD5C0365F586053AAC, );
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D799BAE6088A90139B415FCC = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = 0E8A3AD980EC179856012B7E;
+			remoteInfo = KaKeBoPrototype;
+		};
+		E9FAD0C6CD43534327C0AF90 = {
+			isa = PBXTargetDependency;
+			target = 0E8A3AD980EC179856012B7E;
+			targetProxy = D799BAE6088A90139B415FCC;
+		};
+		FCB48D8F88BCDB0ED9FADFD7 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo.VoucherPrototype.UITests;
+				PRODUCT_NAME = PrototypeUITests;
+				TEST_TARGET_NAME = KaKeBoPrototype;
+				GENERATE_INFOPLIST_FILE = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = XX3ULK22EF;
+			};
+			name = Debug;
+		};
+		942EEBBACD6C88CAE7F29B29 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo.VoucherPrototype.UITests;
+				PRODUCT_NAME = PrototypeUITests;
+				TEST_TARGET_NAME = KaKeBoPrototype;
+				GENERATE_INFOPLIST_FILE = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = XX3ULK22EF;
+			};
+			name = Release;
+		};
+		BECB265224D91761C05FDA33 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (FCB48D8F88BCDB0ED9FADFD7, 942EEBBACD6C88CAE7F29B29, );
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C1D6574ADE4A048AA71108CF = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BECB265224D91761C05FDA33;
+			buildPhases = (30F416E6C342BEB0B66F9005, );
+			buildRules = ();
+			dependencies = (E9FAD0C6CD43534327C0AF90, );
+			name = PrototypeUITests;
+			productName = PrototypeUITests;
+			productReference = 91251B722F603F5400AD371C;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 	};
 	rootObject = 98F54143AB4E86B28C3AFEE0;
