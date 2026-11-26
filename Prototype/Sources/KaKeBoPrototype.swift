@@ -26,7 +26,6 @@ private struct PrototypeHome: View {
     @State private var month = Date()
     @State private var kind = Kind.expense
     @State private var showEntry = false
-    @State private var settings = false
     @AppStorage("prototype.horizontalChart") private var bars = false
     @State private var newest: UUID?
 
@@ -42,66 +41,99 @@ private struct PrototypeHome: View {
         }.sorted { $0.amount == $1.amount ? $0.name < $1.name : $0.amount > $1.amount }
     }
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var calendarOpen = false
+    @State private var calendarDay = Date()
+    private let greens: [Color] = [
+        Color(red: 0.14, green: 0.31, blue: 0.16), Color(red: 0.36, green: 0.51, blue: 0.27),
+        Color(red: 0.55, green: 0.67, blue: 0.37), Color(red: 0.68, green: 0.75, blue: 0.48),
+        Color(red: 0.77, green: 0.80, blue: 0.62), Color(red: 0.86, green: 0.86, blue: 0.80)
+    ]
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+            VStack(spacing: 0) {
+                ZStack {
+                    Text("KaKeBo").font(.system(size: 29, weight: .semibold, design: .serif))
                     HStack {
-                        monthButton(-1)
                         Spacer()
-                        Text(month, format: .dateTime.year().month(.wide)).font(.title3.bold())
-                        Spacer()
-                        monthButton(1)
-                    }
-                    Picker("収支", selection: $kind) {
-                        ForEach(Kind.allCases) { Text($0.rawValue).tag($0) }
-                    }.pickerStyle(.segmented)
-                    chartPanel
-                    NavigationLink("カテゴリ別内訳") {
-                        List(slices) { slice in
-                            NavigationLink {
-                                VoucherList(items: current.filter { $0.category == slice.name }, title: slice.name)
-                            } label: {
-                                HStack { Text(slice.name); Spacer(); Text(Paper.yen(slice.amount)) }
+                        Menu {
+                            Picker("収支", selection: $kind) {
+                                ForEach(Kind.allCases) { Text($0.rawValue).tag($0) }
                             }
-                        }.navigationTitle("カテゴリ別内訳")
+                            Picker("グラフ", selection: $bars) {
+                                Text("円グラフ").tag(false); Text("横棒グラフ").tag(true)
+                            }
+                        } label: {
+                            Bookmark().fill(Bookmark.gold).frame(width: 16, height: 24).frame(width: 44, height: 44)
+                        }.accessibilityLabel("表示設定")
                     }
-                    Divider()
-                    HStack {
-                        Text("最近の記録").font(.headline)
-                        Spacer()
-                        NavigationLink("履歴") { VoucherList(items: ledger.entries, title: "すべての履歴") }
-                    }
-                    ForEach(current.prefix(4)) { item in
-                        VoucherStub(item: item, marked: item.id == newest)
-                    }
-                }.padding()
-            }
-            .background(Paper.desk)
-            .navigationTitle("KaKeBo 試作").navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button { settings = true } label: { Image(systemName: "gearshape").accessibilityLabel("表示設定") } }
-            .safeAreaInset(edge: .bottom) {
+                }.padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(Paper.desk)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        HStack(spacing: 8) {
+                            monthButton(-1)
+                            Text(month, format: .dateTime.year().month(.wide))
+                                .font(.custom("HiraMinProN-W6", size: 28, relativeTo: .title))
+                            monthButton(1)
+                        }.frame(maxWidth: .infinity)
+                        NavigationLink { breakdownList } label: { chartPanel }
+                            .buttonStyle(.plain).accessibilityHint("カテゴリ別内訳を開きます")
+                        Perforation()
+                        Text("最近の記録").font(.custom("HiraMinProN-W6", size: 19, relativeTo: .headline))
+                        if let item = current.first {
+                            VoucherStub(item: item, marked: item.id == newest)
+                        } else { Text("この月の記録はありません").foregroundStyle(.secondary) }
+                    }.padding(.horizontal, 17).padding(.vertical, 16)
+                }
                 Button { showEntry = true } label: {
-                    Label("記録する", systemImage: "plus").font(.headline).frame(maxWidth: .infinity)
-                }.buttonStyle(.borderedProminent).controlSize(.large)
-                    .disabled(!ledger.ready).padding().background(Paper.desk)
+                    Label("記録する", systemImage: "plus")
+                }.buttonStyle(VoucherButtonStyle()).disabled(!ledger.ready)
+                    .padding(.horizontal, 31).padding(.vertical, 16)
+                Divider()
+                HStack(spacing: 0) {
+                    tabLabel("ホーム", "house.fill").accessibilityAddTraits(.isSelected)
+                    Button { calendarOpen = true } label: { tabLabel("カレンダー", "calendar") }
+                    NavigationLink { breakdownList } label: { tabLabel("レポート", "chart.bar") }
+                    NavigationLink { VoucherList(items: ledger.entries, title: "履歴") } label: { tabLabel("履歴", "list.bullet.rectangle") }
+                    tabLabel("予算", "yensign.circle").opacity(0.45).accessibilityLabel("予算、試作対象外")
+                }.padding(.top, 7)
             }
-            .sheet(isPresented: $showEntry) {
+            .foregroundStyle(Paper.ink)
+            .background { PaperSurface().ignoresSafeArea() }
+            .toolbar(.hidden, for: .navigationBar)
+            .fullScreenCover(isPresented: $showEntry) {
                 EntryView(ledger: ledger, kind: kind, date: Date()) { item in
-                    kind = item.kind
-                    month = item.date
-                    newest = item.id
+                    kind = item.kind; month = item.date; newest = item.id
                 }
             }
-            .confirmationDialog("ホームのカテゴリ別グラフ", isPresented: $settings, titleVisibility: .visible) {
-                Button("円グラフ") { bars = false }
-                Button("横棒グラフ") { bars = true }
-                Button("閉じる", role: .cancel) {}
+            .sheet(isPresented: $calendarOpen) {
+                VStack {
+                    DatePicker("日付", selection: $calendarDay, displayedComponents: .date).datePickerStyle(.graphical)
+                    VoucherList(items: ledger.entries.filter { Calendar.current.isDate($0.date, inSameDayAs: calendarDay) }, title: "")
+                    Button("閉じる") { calendarOpen = false }
+                }.padding()
             }
             .alert("保存領域を確認してください", isPresented: Binding(get: { ledger.problem != nil }, set: { if !$0 { ledger.problem = nil } })) {
                 Button("閉じる") {}
             } message: { Text(ledger.problem ?? "") }
         }
+    }
+
+    private func tabLabel(_ name: String, _ icon: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon).font(.title3)
+            Text(name).font(.caption2)
+        }.frame(maxWidth: .infinity, minHeight: 44)
+    }
+
+    private var breakdownList: some View {
+        List(slices) { slice in
+            NavigationLink { VoucherList(items: current.filter { $0.category == slice.name }, title: slice.name) } label: {
+                HStack { Text(slice.name); Spacer(); Text(Paper.yen(slice.amount)) }
+            }
+        }.navigationTitle("カテゴリ別内訳").toolbar(.visible, for: .navigationBar)
     }
 
     private func monthButton(_ step: Int) -> some View {
@@ -114,37 +146,54 @@ private struct PrototypeHome: View {
     private var chartPanel: some View {
         let all = slices
         let total = current.reduce(0) { $0 + $1.amount }
-        var shown = Array(all.prefix(bars ? 5 : 3))
-        if !bars && all.count > 3 {
-            shown.append(Slice(name: "ほか\(all.count - 3)カテゴリ", amount: all.dropFirst(3).reduce(0) { $0 + $1.amount }, color: .gray))
+        var shown = Array(all.prefix(5))
+        if !bars && all.count > 5 {
+            shown.append(Slice(name: "その他", amount: all.dropFirst(5).reduce(0) { $0 + $1.amount }, color: .gray))
         }
-        return VStack(alignment: .leading, spacing: 12) {
-            Text(kind.rawValue + "合計").font(.subheadline)
-            Text(Paper.yen(total)).font(.largeTitle.bold()).monospacedDigit()
-            if all.isEmpty {
-                Text("この月の記録はありません").foregroundStyle(.secondary)
-            } else if !bars {
-                Chart(shown) { slice in
-                    SectorMark(angle: .value("金額", slice.amount), innerRadius: .ratio(0.68))
-                        .foregroundStyle(slice.color)
-                }.frame(height: 150).accessibilityHidden(true)
-            }
-            ForEach(shown) { slice in
+        let legend = VStack(spacing: 8) {
+            ForEach(Array(shown.enumerated()), id: \.element.id) { index, slice in
                 VStack(spacing: 3) {
-                    HStack {
-                        Circle().fill(slice.color).frame(width: 9, height: 9)
+                    HStack(spacing: 5) {
+                        Circle().fill(greens[index]).frame(width: 10, height: 10)
                         Text(slice.name)
-                        Spacer()
+                        Spacer(minLength: 2)
                         Text(Paper.yen(slice.amount)).monospacedDigit()
-                    }
+                    }.font(.subheadline)
                     if bars {
-                        ProgressView(value: Double(slice.amount), total: Double(all.first?.amount ?? 1))
-                            .tint(slice.color)
+                        ProgressView(value: Double(slice.amount), total: Double(all.first?.amount ?? 1)).tint(greens[index])
                     }
                 }
             }
-        }.padding().frame(maxWidth: .infinity, alignment: .leading).background(Paper.sheet)
+        }
+        let summary = VStack(spacing: 3) {
+            Text("今月の" + kind.rawValue).font(.caption)
+            Text(Paper.yen(total)).font(.system(.title2, design: .serif).weight(.semibold))
+                .lineLimit(1).minimumScaleFactor(0.55)
+        }
+        let ring = ZStack {
+            if shown.isEmpty { Circle().strokeBorder(Paper.desk, lineWidth: 18) }
+            else {
+                Chart(Array(shown.enumerated()), id: \.element.id) { index, slice in
+                    SectorMark(angle: .value("金額", slice.amount), innerRadius: .ratio(0.70))
+                        .foregroundStyle(greens[index])
+                }.accessibilityHidden(true)
+            }
+            summary.padding(.horizontal, 16)
+        }.aspectRatio(1, contentMode: .fit)
+        return Group {
+            if bars {
+                VStack(spacing: 12) { summary; legend }
+            } else if typeSize.isAccessibilitySize {
+                VStack { ring.frame(height: 175); legend }
+            } else {
+                HStack(spacing: 12) {
+                    ring.containerRelativeFrame(.horizontal) { width, _ in min(200, (width - 46) * 0.47) }
+                    legend.frame(maxWidth: .infinity)
+                }
+            }
+        }.padding(.vertical, 12).frame(maxWidth: .infinity)
     }
+
 }
 
 private struct VoucherStub: View {
@@ -160,7 +209,8 @@ private struct VoucherStub: View {
                 if marked { Image(systemName: "checkmark.circle.fill").foregroundStyle(Paper.ink).accessibilityLabel("保存済み") }
             }
             if !item.memo.isEmpty { Text(item.memo).font(.subheadline) }
-        }.padding().background(Paper.sheet, in: ReceiptEdge())
+        }.padding(.horizontal, 16).padding(.vertical, 12)
+            .background { PaperSurface().clipShape(ReceiptEdge(stub: true)).shadow(color: .black.opacity(0.14), radius: 2, y: 3) }
     }
 }
 
@@ -170,6 +220,6 @@ private struct VoucherList: View {
     var body: some View {
         ScrollView {
             LazyVStack { ForEach(items.sorted { $0.date > $1.date }) { VoucherStub(item: $0) } }.padding()
-        }.background(Paper.desk).navigationTitle(title)
+        }.background(Paper.desk).navigationTitle(title).toolbar(.visible, for: .navigationBar)
     }
 }
