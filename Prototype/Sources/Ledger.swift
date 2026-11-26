@@ -85,29 +85,94 @@ final class Ledger: ObservableObject {
 
 enum Paper {
     static let ink = Color(red: 0.10, green: 0.28, blue: 0.19)
-    static let desk = Color(red: 0.92, green: 0.94, blue: 0.89)
-    static let sheet = Color(red: 1, green: 0.99, blue: 0.96)
+    static let desk = Color(red: 0.87, green: 0.89, blue: 0.82)
+    static let sheet = Color(red: 0.982, green: 0.973, blue: 0.936)
     static func yen(_ amount: Int) -> String {
         "¥" + amount.formatted(.number.locale(Locale(identifier: "ja_JP")))
     }
 }
 
+struct PaperSurface: View {
+    var base = Paper.sheet
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(base))
+            // A fixed grain pattern stays still when the form redraws.
+            var grain = Path()
+            var seed: UInt32 = 12345
+            func sample() -> CGFloat {
+                seed = seed &* 1664525 &+ 1013904223
+                return CGFloat(seed) / CGFloat(UInt32.max)
+            }
+            for _ in 0..<min(5000, Int(size.width * size.height / 28)) {
+                grain.addRect(CGRect(x: sample() * size.width, y: sample() * size.height, width: 1.1, height: 0.6))
+            }
+            context.fill(grain, with: .color(.brown.opacity(0.09)))
+        }.allowsHitTesting(false).accessibilityHidden(true)
+    }
+}
+
 struct ReceiptEdge: Shape {
+    var stub = false
     func path(in rect: CGRect) -> Path {
+        let w = rect.width, h = rect.height
+        let cut: CGFloat = stub ? 5 : 15
         var p = Path()
-        p.move(to: CGPoint(x: 0, y: 7))
-        p.addLine(to: CGPoint(x: 7, y: 0))
-        p.addLine(to: CGPoint(x: rect.width - 7, y: 0))
-        p.addLine(to: CGPoint(x: rect.width, y: 7))
-        let count = max(1, Int(rect.width / 12))
-        let step = rect.width / CGFloat(count)
-        p.addLine(to: CGPoint(x: rect.width, y: rect.height - 3))
+        p.move(to: CGPoint(x: 0, y: cut))
+        p.addLine(to: CGPoint(x: cut, y: 0))
+        p.addLine(to: CGPoint(x: w-cut, y: 0))
+        p.addLine(to: CGPoint(x: w, y: cut))
+        if stub {
+            p.addLine(to: CGPoint(x: w, y: h/2-5))
+            p.addQuadCurve(to: CGPoint(x: w, y: h/2+5), control: CGPoint(x: w-9, y: h/2))
+        }
+        p.addLine(to: CGPoint(x: w, y: h))
+        let count = max(1, Int(w / 11))
+        let step = w / CGFloat(count)
         for i in (0..<count).reversed() {
-            p.addLine(to: CGPoint(x: (CGFloat(i) + 0.5) * step, y: rect.height))
-            p.addLine(to: CGPoint(x: CGFloat(i) * step, y: rect.height - 3))
+            p.addQuadCurve(to: CGPoint(x: CGFloat(i)*step, y: h),
+                           control: CGPoint(x: (CGFloat(i)+0.5)*step, y: h-7))
+        }
+        if stub {
+            p.addLine(to: CGPoint(x: 0, y: h/2+5))
+            p.addQuadCurve(to: CGPoint(x: 0, y: h/2-5), control: CGPoint(x: 9, y: h/2))
         }
         p.closeSubpath()
         return p
+    }
+}
+
+struct Bookmark: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        p.move(to: .zero); p.addLine(to: CGPoint(x: r.width, y: 0))
+        p.addLine(to: CGPoint(x: r.width, y: r.height))
+        p.addLine(to: CGPoint(x: r.midX, y: r.height * 0.73))
+        p.addLine(to: CGPoint(x: 0, y: r.height)); p.closeSubpath()
+        return p
+    }
+    static let gold = Color(red: 0.73, green: 0.59, blue: 0.23)
+}
+
+struct Perforation: View {
+    var body: some View {
+        GeometryReader { geo in
+            Path { p in p.move(to: .zero); p.addLine(to: CGPoint(x: geo.size.width, y: 0)) }
+                .stroke(Paper.ink.opacity(0.38), style: StrokeStyle(lineWidth: 0.7, dash: [1, 3]))
+        }.frame(height: 1)
+    }
+}
+
+struct VoucherButtonStyle: ButtonStyle {
+    var filled = false
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.font(.headline).frame(maxWidth: .infinity, minHeight: 48)
+            .foregroundStyle(filled ? Color.white : Paper.ink)
+            .background(filled ? (enabled ? Paper.ink : Color.gray.opacity(0.45)) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 13))
+            .overlay { if !filled { RoundedRectangle(cornerRadius: 13).strokeBorder(Paper.ink) } }
+            .opacity(configuration.isPressed ? 0.75 : 1)
     }
 }
 
