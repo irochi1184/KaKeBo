@@ -57,6 +57,8 @@ struct HomeView: View {
     struct CategoryBreakdownSheetData: Identifiable {
         let id = UUID()
         let title: String
+        let type: TransactionType
+        let transactions: [CategoryDetailTransaction]
         let breakdown: [CategorySlice]
         let currentTotal: Int
         let previousTotal: Int
@@ -141,6 +143,8 @@ struct HomeView: View {
             .sheet(item: $breakdownSheet) { sheet in
                 CategoryBreakdownSheet(
                     title: sheet.title,
+                    type: sheet.type,
+                    transactions: sheet.transactions,
                     breakdown: sheet.breakdown,
                     currentTotal: sheet.currentTotal,
                     previousTotal: sheet.previousTotal
@@ -233,17 +237,24 @@ struct HomeView: View {
                             income: incomeSlices,
                             incomeCurrentTotal: sharedMonthIncome(txs: allTxs),
                             incomePreviousTotal: sharedPrevMonthIncome(allTxs: allTxs)
-                        )
-                        .homeCard()
-                        .padding(.horizontal)
-                        .onTapGesture {
+                        ) { type in
+                            let sharedType: SharedTransactionType = type == .expense ? .expense : .income
+                            let transactions = allTxs
+                                .filter { $0.type == sharedType && isInCurrentMonth($0.date) }
+                                .map { CategoryDetailTransaction(id: $0.id.recordName,
+                                                                 categoryKey: $0.categoryId?.recordName ?? $0.categoryName,
+                                                                 date: $0.date, amount: $0.amount, memo: $0.memo ?? "") }
                             breakdownSheet = CategoryBreakdownSheetData(
                                 title: monthTitle(selectedMonth),
-                                breakdown: expenseSlices,
-                                currentTotal: sharedMonthExpense(txs: allTxs),
-                                previousTotal: sharedPrevMonthExpense(allTxs: allTxs)
+                                type: type,
+                                transactions: transactions,
+                                breakdown: type == .expense ? expenseSlices : incomeSlices,
+                                currentTotal: type == .expense ? sharedMonthExpense(txs: allTxs) : sharedMonthIncome(txs: allTxs),
+                                previousTotal: type == .expense ? sharedPrevMonthExpense(allTxs: allTxs) : sharedPrevMonthIncome(allTxs: allTxs)
                             )
                         }
+                        .homeCard()
+                        .padding(.horizontal)
                     }
                     
                     // ③ 日別棒グラフ
@@ -347,16 +358,22 @@ struct HomeView: View {
                 income: incomeBreakdown,
                 incomeCurrentTotal: monthIncome,
                 incomePreviousTotal: prevMonthIncome
-            )
-            .homeCard()
-            .onTapGesture {
+            ) { type in
+                let transactions = thisMonthTx
+                    .filter { $0.type == type }
+                    .map { CategoryDetailTransaction(id: $0.id.uuidString,
+                                                     categoryKey: $0.categoryId.uuidString,
+                                                     date: $0.date, amount: $0.amount, memo: $0.memo) }
                 breakdownSheet = CategoryBreakdownSheetData(
                     title: monthTitle(selectedMonth),
-                    breakdown: expenseBreakdown,
-                    currentTotal: monthExpense,
-                    previousTotal: prevMonthExpense
+                    type: type,
+                    transactions: transactions,
+                    breakdown: type == .expense ? expenseBreakdown : incomeBreakdown,
+                    currentTotal: type == .expense ? monthExpense : monthIncome,
+                    previousTotal: type == .expense ? prevMonthExpense : prevMonthIncome
                 )
             }
+            .homeCard()
 
         case .daily:
             DailyBarChart(series: dailySeries)

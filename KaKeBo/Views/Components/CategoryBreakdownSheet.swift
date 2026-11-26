@@ -1,7 +1,17 @@
 import SwiftUI
 
+struct CategoryDetailTransaction: Identifiable {
+    let id: String
+    let categoryKey: String
+    let date: Date
+    let amount: Int
+    let memo: String
+}
+
 struct CategoryBreakdownSheet: View {
     let title: String
+    let type: TransactionType
+    let transactions: [CategoryDetailTransaction]
     let breakdown: [CategorySlice]
     let currentTotal: Int
     let previousTotal: Int
@@ -33,7 +43,7 @@ struct CategoryBreakdownSheet: View {
                             currentTotal: currentTotal,
                             previousTotal: previousTotal,
                             minShareToShowLabel: 0.08,
-                            isExpense: true
+                            isExpense: type == .expense
                         )
                         .frame(maxWidth: .infinity, alignment: .center)
                     }
@@ -44,7 +54,7 @@ struct CategoryBreakdownSheet: View {
                             Image(systemName: "circle.dashed")
                                 .font(.largeTitle)
                                 .foregroundStyle(.secondary)
-                            Text("今月の支出がまだありません")
+                            Text(type == .expense ? "この月の支出がまだありません" : "この月の収入がまだありません")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -65,23 +75,35 @@ struct CategoryBreakdownSheet: View {
                                             Image(systemName: excludedKeys.contains(slice.filterKey) ? "square" : "checkmark.square.fill")
                                                 .imageScale(.medium)
                                                 .foregroundStyle(excludedKeys.contains(slice.filterKey) ? .secondary : slice.color)
-                                                .frame(width: 24)
+                                                .frame(width: 44, height: 44)
+                                                .contentShape(Rectangle())
                                         }
                                         .buttonStyle(.plain)
+                                        .accessibilityLabel("\(slice.name)をグラフに表示")
+                                        .accessibilityValue(excludedKeys.contains(slice.filterKey) ? "オフ" : "オン")
 
-                                        Label(slice.name, systemImage: slice.symbolName ?? "tag.fill")
-                                            .labelStyle(.titleAndIcon)
-                                            .foregroundStyle(slice.color.opacity(excludedKeys.contains(slice.filterKey) ? 0.35 : 1.0))
+                                        NavigationLink {
+                                            transactionList(for: slice)
+                                        } label: {
+                                            HStack {
+                                                Label(slice.name, systemImage: slice.symbolName ?? "tag.fill")
+                                                    .labelStyle(.titleAndIcon)
+                                                    .foregroundStyle(slice.color.opacity(excludedKeys.contains(slice.filterKey) ? 0.35 : 1.0))
 
-                                        Spacer(minLength: 8)
+                                                Spacer(minLength: 8)
 
-                                        Text(currency(slice.value))
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundStyle(excludedKeys.contains(slice.filterKey) ? .secondary : .primary)
+                                                Text(currency(slice.value))
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .foregroundStyle(excludedKeys.contains(slice.filterKey) ? .secondary : .primary)
+                                                Image(systemName: "chevron.right")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            .frame(minHeight: 44)
+                                            .contentShape(Rectangle())
+                                        }
+                                        .buttonStyle(.plain)
                                     }
-                                    .padding(.vertical, 4)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { toggle(slice) }
                                     Divider().opacity(0.2)
                                 }
                             }
@@ -113,6 +135,37 @@ struct CategoryBreakdownSheet: View {
         .onChange(of: breakdown) { _, _ in
             excludedKeys.removeAll()
         }
+    }
+
+    private func transactionList(for slice: CategorySlice) -> some View {
+        let rows = transactions.filter { $0.categoryKey == slice.filterKey }
+            .sorted { $0.date > $1.date }
+
+        return List {
+            Section {
+                ForEach(rows) { tx in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(tx.date, style: .date)
+                            Spacer()
+                            Text(currency(tx.amount))
+                                .fontWeight(.semibold)
+                        }
+                        if !tx.memo.isEmpty {
+                            Text(tx.memo)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                Text(title)
+            } footer: {
+                Text("合計 \(currency(slice.value))（\(rows.count)件）")
+            }
+        }
+        .navigationTitle(slice.name)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func toggle(_ slice: CategorySlice) {

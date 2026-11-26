@@ -215,6 +215,8 @@ struct CategoryDonutPager: View {
     let incomeCurrentTotal: Int
     let incomePreviousTotal: Int
     
+    let onOpenDetail: (TransactionType) -> Void
+
     @State private var page = 0
     
     var body: some View {
@@ -241,6 +243,9 @@ struct CategoryDonutPager: View {
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { onOpenDetail(.expense) }
+                    .accessibilityAction { onOpenDetail(.expense) }
                     .tag(0)
                     
                     // 収入
@@ -254,6 +259,9 @@ struct CategoryDonutPager: View {
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { onOpenDetail(.income) }
+                    .accessibilityAction { onOpenDetail(.income) }
                     .tag(1)
                 }
                 // ドット非表示

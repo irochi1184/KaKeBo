@@ -48,7 +48,7 @@ struct HomeCardOrderSettingsView: View {
                 Button {
                     withAnimation {
                         order = DashboardCard.defaultOrder
-                        hidden = []
+                        hidden = HiddenCardStore.defaultHidden
                     }
                     orderStore.save(order)
                     hiddenStore.save(hidden)
