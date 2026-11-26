@@ -1,0 +1,244 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+		38A007151ABE87CC01A5B6E9 = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			includeInIndex = 0;
+			path = KaKeBoPrototype.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		F721CB4B3F1EF79C3757AB07 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = EntryView.swift;
+			sourceTree = "<group>";
+		};
+		3EA581026FE98B991D8D757F = {
+			isa = PBXBuildFile;
+			fileRef = F721CB4B3F1EF79C3757AB07;
+		};
+		7A5001B3648B9436310D5E7A = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = KaKeBoPrototype.swift;
+			sourceTree = "<group>";
+		};
+		60707D35EC4DD07E3FF1F5EA = {
+			isa = PBXBuildFile;
+			fileRef = 7A5001B3648B9436310D5E7A;
+		};
+		D2BC2B06B89EA9536ED7BEE4 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = Ledger.swift;
+			sourceTree = "<group>";
+		};
+		312BA47C653CEDBF09B7EA03 = {
+			isa = PBXBuildFile;
+			fileRef = D2BC2B06B89EA9536ED7BEE4;
+		};
+		BCE16DD0260827ECF338C787 = {
+			isa = PBXGroup;
+			children = (F721CB4B3F1EF79C3757AB07, 7A5001B3648B9436310D5E7A, D2BC2B06B89EA9536ED7BEE4, );
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		FBDC4F23F93125BBEEAE800C = {
+			isa = PBXGroup;
+			children = (38A007151ABE87CC01A5B6E9, 91251B722F603F5400AD371C, );
+			name = Products;
+			sourceTree = "<group>";
+		};
+		64292B1C2B2E13EAD8788FC8 = {
+			isa = PBXGroup;
+			children = (BCE16DD0260827ECF338C787, FBDC4F23F93125BBEEAE800C, E05FCB614AB36FDEE72EE1F2, );
+			sourceTree = "<group>";
+		};
+		FE77C82BB2A42EFEEC930360 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (3EA581026FE98B991D8D757F, 60707D35EC4DD07E3FF1F5EA, 312BA47C653CEDBF09B7EA03, );
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		89E1FD6268CC0F221A2BE178 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				SDKROOT = iphoneos;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SWIFT_VERSION = 5.0;
+				CLANG_ENABLE_MODULES = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E6DE6C99132752C914FEF632 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				SDKROOT = iphoneos;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SWIFT_VERSION = 5.0;
+				CLANG_ENABLE_MODULES = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		862894B703A6DEDF96A9DD6C = {
+			isa = XCConfigurationList;
+			buildConfigurations = (89E1FD6268CC0F221A2BE178, E6DE6C99132752C914FEF632, );
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E9B2E96ABC5F6856F2BE79CF = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo.VoucherPrototype;
+				PRODUCT_NAME = KaKeBoPrototype;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "KaKeBo 試作";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = 1;
+				MARKETING_VERSION = 0.1;
+				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = XX3ULK22EF;
+			};
+			name = Debug;
+		};
+		5A8C91857F674E16E2724F47 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo.VoucherPrototype;
+				PRODUCT_NAME = KaKeBoPrototype;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "KaKeBo 試作";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = 1;
+				MARKETING_VERSION = 0.1;
+				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = XX3ULK22EF;
+			};
+			name = Release;
+		};
+		F37922C48DA5978D02C9E50E = {
+			isa = XCConfigurationList;
+			buildConfigurations = (E9B2E96ABC5F6856F2BE79CF, 5A8C91857F674E16E2724F47, );
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0E8A3AD980EC179856012B7E = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F37922C48DA5978D02C9E50E;
+			buildPhases = (FE77C82BB2A42EFEEC930360, );
+			buildRules = ();
+			dependencies = ();
+			name = KaKeBoPrototype;
+			productName = KaKeBoPrototype;
+			productReference = 38A007151ABE87CC01A5B6E9;
+			productType = "com.apple.product-type.application";
+		};
+		98F54143AB4E86B28C3AFEE0 = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 862894B703A6DEDF96A9DD6C;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = ja;
+			hasScannedForEncodings = 0;
+			knownRegions = (ja, Base, );
+			mainGroup = 64292B1C2B2E13EAD8788FC8;
+			productRefGroup = FBDC4F23F93125BBEEAE800C;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (0E8A3AD980EC179856012B7E, C1D6574ADE4A048AA71108CF, );
+		};
+		91251B722F603F5400AD371C = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.cfbundle;
+			path = PrototypeUITests.xctest;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		E05FCB614AB36FDEE72EE1F2 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "UITests/VoucherScreens.swift";
+			sourceTree = "<group>";
+		};
+		E8E999BD5C0365F586053AAC = {
+			isa = PBXBuildFile;
+			fileRef = E05FCB614AB36FDEE72EE1F2;
+		};
+		30F416E6C342BEB0B66F9005 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (E8E999BD5C0365F586053AAC, );
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D799BAE6088A90139B415FCC = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = 0E8A3AD980EC179856012B7E;
+			remoteInfo = KaKeBoPrototype;
+		};
+		E9FAD0C6CD43534327C0AF90 = {
+			isa = PBXTargetDependency;
+			target = 0E8A3AD980EC179856012B7E;
+			targetProxy = D799BAE6088A90139B415FCC;
+		};
+		FCB48D8F88BCDB0ED9FADFD7 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo.VoucherPrototype.UITests;
+				PRODUCT_NAME = PrototypeUITests;
+				TEST_TARGET_NAME = KaKeBoPrototype;
+				GENERATE_INFOPLIST_FILE = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = XX3ULK22EF;
+			};
+			name = Debug;
+		};
+		942EEBBACD6C88CAE7F29B29 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.irochi.KaKeBo.VoucherPrototype.UITests;
+				PRODUCT_NAME = PrototypeUITests;
+				TEST_TARGET_NAME = KaKeBoPrototype;
+				GENERATE_INFOPLIST_FILE = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = XX3ULK22EF;
+			};
+			name = Release;
+		};
+		BECB265224D91761C05FDA33 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (FCB48D8F88BCDB0ED9FADFD7, 942EEBBACD6C88CAE7F29B29, );
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C1D6574ADE4A048AA71108CF = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BECB265224D91761C05FDA33;
+			buildPhases = (30F416E6C342BEB0B66F9005, );
+			buildRules = ();
+			dependencies = (E9FAD0C6CD43534327C0AF90, );
+			name = PrototypeUITests;
+			productName = PrototypeUITests;
+			productReference = 91251B722F603F5400AD371C;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0;
+}
