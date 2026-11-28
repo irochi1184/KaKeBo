@@ -57,7 +57,7 @@ struct BudgetTabView: View {
     // 今月の予算マップ（カテゴリ → 予算）
     private var budgetByCategory: [UUID: Budget] {
         var dict: [UUID: Budget] = [:]
-        for b in store.budgets where b.monthId == monthId {
+        for b in store.categoryBudgets(for: monthId) {
             dict[b.categoryId] = b
         }
         return dict

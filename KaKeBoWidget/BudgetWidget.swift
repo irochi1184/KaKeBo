@@ -185,12 +185,15 @@ struct BudgetWidgetSnapshot {
 
 private func makeBudgetSnapshot(category: BudgetWidgetCategoryEntity?, referenceDate: Date) -> BudgetWidgetSnapshot {
     let ctx = currentMonthContext(now: referenceDate)
-    let budgets = WBudgetStore().budgets.filter { $0.monthId == ctx.monthId && $0.isEnabled && $0.limitAmount > 0 }
+    let categories = loadCategories()
+    let categoryIDs = Set(categories.map(\.id))
+    let budgets = WBudgetStore().budgets.filter {
+        $0.monthId == ctx.monthId && $0.isEnabled && $0.limitAmount > 0 && categoryIDs.contains($0.categoryId)
+    }
     let expenses = WStore().transactions.filter {
         $0.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "expense" &&
         ctx.range.contains($0.date)
     }
-    let categories = loadCategories()
     let premium = isPremiumUnlocked(now: referenceDate)
 
     func expenseAmount(of categoryId: UUID) -> Int {
