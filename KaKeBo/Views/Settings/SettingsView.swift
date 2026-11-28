@@ -85,7 +85,6 @@ struct SettingsView: View {
     }
     // 外部URL
     private let appleWidgetURL = URL(string: "https://support.apple.com/ja-jp/HT207122")!
-    private let discordURL = URL(string: "https://discord.gg/RusZAXf57n")!
     // KaKeBoの App Store URL
     private let appStoreURL = URL(string: "https://apps.apple.com/app/id6754249349")!
     
@@ -765,12 +764,6 @@ struct SettingsView: View {
                 }
             }
             
-            SettingsRowButton(
-                title: "開発者・利用者コミュニティへ参加する",
-                systemImage: "apps.iphone",
-                accent: accent,
-                trailingText: "Discord"
-            ) { UIApplication.shared.open(discordURL) }
         } header: {
             Text("サポート")
         }

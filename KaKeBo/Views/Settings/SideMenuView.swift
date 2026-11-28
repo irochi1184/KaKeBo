@@ -57,7 +57,6 @@ struct SideMenuView: View {
     }
 
     private let appleWidgetURL = URL(string: "https://support.apple.com/ja-jp/HT207122")!
-    private let discordURL = URL(string: "https://discord.gg/RusZAXf57n")!
     private let appStoreURL = URL(string: "https://apps.apple.com/app/id6754249349")!
 
     var body: some View {
@@ -390,9 +389,6 @@ struct SideMenuView: View {
             if let url = URL(string: "mailto:ken.office.arita@gmail.com?subject=\(subject)") {
                 UIApplication.shared.open(url)
             }
-        }
-        menuRow("コミュニティへ参加する", icon: "bubble.left.and.bubble.right", accent: accent) {
-            UIApplication.shared.open(discordURL)
         }
     }
 

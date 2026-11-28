@@ -43,7 +43,8 @@ struct BudgetForecastService {
         resolver: MonthStartResolver
     ) -> Forecast {
         // 無効化（一時停止）された予算は未設定扱いにする
-        let budgets = rawBudgets.filter { $0.isEnabled }
+        let categoryIDs = Set(categories.map(\.id))
+        let budgets = rawBudgets.filter { $0.isEnabled && categoryIDs.contains($0.categoryId) }
         let cal = Calendar.current
         let today = Date()
 

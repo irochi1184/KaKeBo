@@ -2,7 +2,7 @@
 //  TutorialOverlay.swift
 //  KaKeBo
 //
-//  Created by OpenAI on 2025/XX/XX.
+//  初回起動では設定を求めず、最初の記録まで最短で案内する。
 //
 
 import SwiftUI
@@ -33,27 +33,19 @@ struct TutorialGate: View {
     }
 }
 
-// MARK: - メインのチュートリアルオーバーレイ
-
 private struct TutorialOverlay: View {
     @Binding var isPresented: Bool
-    @EnvironmentObject var themeStore: ThemeStore
-    @EnvironmentObject var monthStartStore: MonthStartStore
-    @EnvironmentObject var sharedLedgerStore: SharedLedgerStore
-    @EnvironmentObject var ledgerContext: LedgerContext
+    @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var sharedLedgerStore: SharedLedgerStore
+    @EnvironmentObject private var ledgerContext: LedgerContext
+    @EnvironmentObject private var appRoute: AppRoute
     @Environment(\.colorScheme) private var scheme
     @AppStorage("monthStart.onboardingDone") private var monthStartOnboardingDone = false
 
-    @State private var step: TutorialStep = .welcome
-    @State private var usage: TutorialUsage = .personal
-    @State private var showCategoryManager = false
-    @State private var sharedName: String = "みんなの家計簿"
-    @State private var sharedIcon: String = "person.2.fill"
-    @State private var sharedIconCategory: SharedLedgerIconCategory = .shared
-    @State private var sharedColor: Color = Color.accentColor
+    @State private var step: TutorialStep = .quickStart
+    @State private var sharedName = "みんなの家計簿"
     @State private var isCreatingSharedLedger = false
     @State private var creationError: String?
-    @State private var showDesignSelectionSheet = false
 
     private var accent: Color { themeStore.theme.accentColor(for: scheme) }
     private var background: Color { themeStore.theme.backgroundColor(for: scheme) }
@@ -61,693 +53,213 @@ private struct TutorialOverlay: View {
     var body: some View {
         ZStack {
             if isPresented {
-                background.opacity(scheme == .dark ? 0.92 : 0.86).ignoresSafeArea()
+                background.opacity(scheme == .dark ? 0.94 : 0.88)
+                    .ignoresSafeArea()
 
                 VStack(spacing: 18) {
                     header
 
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            content
-                        }
-                        .padding(.horizontal, 4)
+                    switch step {
+                    case .quickStart:
+                        quickStartStep
+                    case .sharedSetup:
+                        sharedLedgerStep
                     }
 
-                    footer
-                }
-                .padding(18)
-                .frame(maxWidth: 640)
-                .background {
-                    if scheme == .dark {
-                         RoundedRectangle(cornerRadius: 22, style: .continuous)
-                             .fill(Color.white.opacity(0.08))
-                    } else {
-                         RoundedRectangle(cornerRadius: 22, style: .continuous)
-                             .fill(.ultraThinMaterial)
+                    if step == .sharedSetup {
+                        sharedFooter
                     }
+                }
+                .padding(20)
+                .frame(maxWidth: 520)
+                .background {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(scheme == .dark ? Color.white.opacity(0.08) : Color(UIColor.systemBackground))
                 }
                 .overlay(
-                    RoundedRectangle(cornerRadius: 22)
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
                         .stroke(accent.opacity(0.2), lineWidth: 1)
                 )
-                .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.15), radius: 24, y: 16)
+                .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.16), radius: 24, y: 16)
                 .padding(.horizontal, 18)
                 .transition(.opacity.combined(with: .scale))
-                .sheet(isPresented: $showCategoryManager) {
-                    NavigationStack {
-                        CategoryListView()
-                            .navigationTitle("カテゴリを設定")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-                }
             }
         }
         .animation(.easeInOut(duration: 0.25), value: isPresented)
-        .sheet(isPresented: $showDesignSelectionSheet) {
-            DesignStyleSelectionSheet(
-                isPresented: $showDesignSelectionSheet,
-                title: "見た目を選びましょう",
-                message: "「標準」と「フラット」を見比べて、好きな表示を選べます。",
-                primaryButtonTitle: "このデザインにする"
-            )
-            .environmentObject(themeStore)
-        }
+        .animation(.easeInOut(duration: 0.2), value: step)
     }
-
-    // MARK: - UI Building Blocks
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(accent)
-                    .font(.title2.weight(.semibold))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("はじめての設定を行いましょう")
-                        .font(.headline.weight(.semibold))
-                    Text("初回の一度だけ表示されます")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if step != .summary {
-                    Button {
-                        finish()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(10)
-                            .background(Circle().fill(.secondary.opacity(0.1)))
-                    }
-                    .accessibilityLabel("閉じる")
-                }
-            }
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: step == .quickStart ? "sparkles" : "person.2.fill")
+                .foregroundStyle(accent)
+                .font(.title2.weight(.semibold))
 
-            ProgressView(value: step.progress)
-                .tint(accent)
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch step {
-        case .welcome:
-            welcomeStep
-        case .monthStart:
-            MonthStartStep(settings: $monthStartStore.settings)
-        case .usageChoice:
-            usageStep
-        case .sharedSetup:
-            sharedLedgerStep
-        case .categorySetup:
-            categoryStep
-        case .designChoice:
-            designChoiceStep
-        case .summary:
-            summaryStep
-        }
-    }
-
-    private var footer: some View {
-        HStack(spacing: 12) {
-            if step.canGoBack && step != .summary {
-                Button("戻る") {
-                    goBack()
-                }
-                .buttonStyle(.bordered)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(step == .quickStart ? "KaKeBoへようこそ" : "共有家計簿を作成")
+                    .font(.headline.weight(.semibold))
+                Text(step == .quickStart ? "設定なしですぐ記録できます" : "名前だけ決めれば始められます")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            if let error = creationError, step == .sharedSetup {
-                Text(error)
-                    .foregroundStyle(.red)
-                    .font(.caption)
+            Button {
+                finish(openEntry: false)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(10)
+                    .background(Circle().fill(.secondary.opacity(0.1)))
             }
-
-            Button(action: goNext) {
-                if isCreatingSharedLedger {
-                    ProgressView()
-                        .tint(.white)
-                        .padding(.vertical, 8)
-                        .frame(width: 70)
-                } else {
-                    Text(step.primaryActionTitle(for: usage))
-                        .fontWeight(.semibold)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 12)
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(accent)
-            .disabled(step == .sharedSetup && isCreatingSharedLedger)
+            .accessibilityLabel("閉じる")
         }
     }
 
-    private var welcomeStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("KaKeBoへようこそ！")
-                .font(.title3.weight(.bold))
-            Text("ダウンロードありがとうございます。これから最初の設定を一緒に進めましょう。下のボタンから開始してください。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Label("月の開始日やカテゴリを決めて、自分に合った家計簿に整えられます。", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(accent)
-                Label("共有設定もここからスタートできます。", systemImage: "person.2.fill")
-                    .foregroundStyle(accent)
-            }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(accent.opacity(0.12))
-            )
-        }
-    }
-
-    private var usageStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("家計簿の使い方を選択")
-                .font(.title3.weight(.bold))
-            Text("まずは個人で使うか、家族やパートナーと共有するかを選びましょう。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 12) {
-                usageCard(
-                    title: "個人で使う",
-                    message: "まずは自分だけでシンプルに登録を始めます。後から共有にも切り替え可能です。",
-                    symbol: "person.crop.circle.fill",
-                    selection: .personal
-                )
-                usageCard(
-                    title: "共有で使う",
-                    message: "家族や同棲・夫婦で同じ家計簿を見ながら管理します。",
-                    symbol: "person.2.circle.fill",
-                    selection: .shared
-                )
-            }
-        }
-    }
-
-    private func usageCard(title: String, message: String, symbol: String, selection: TutorialUsage) -> some View {
-        Button {
-            usage = selection
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: symbol)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(accent)
-                    Text(title)
-                        .font(.headline)
-                }
-                Text(message)
+    private var quickStartStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("まずは1件、記録してみましょう")
+                    .font(.title3.weight(.bold))
+                Text("月の開始日、カテゴリ、デザインは初期設定のままで使えます。必要になったときに設定画面から変更できます。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(selection == usage ? accent.opacity(0.15) : Color.secondary.opacity(0.08))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(selection == usage ? accent : Color.secondary.opacity(0.2), lineWidth: 2)
-            )
+
+            Button {
+                ledgerContext.setPersonal()
+                finish(openEntry: true)
+            } label: {
+                Label("最初の支出を登録する", systemImage: "plus.circle.fill")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(accent)
+                    )
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                creationError = nil
+                step = .sharedSetup
+            } label: {
+                Label("家族・パートナーと共有して始める", systemImage: "person.2.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(accent.opacity(0.12))
+                    )
+            }
+            .buttonStyle(.plain)
+
+            Button("入力せずホームを見る") {
+                ledgerContext.setPersonal()
+                finish(openEntry: false)
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
     }
 
     private var sharedLedgerStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("共有家計簿を作成")
+        VStack(alignment: .leading, spacing: 14) {
+            Text("共有する家計簿の名前")
                 .font(.title3.weight(.bold))
-            Text("共有で使う場合は、まずみんなで使う家計簿を1つ作成しましょう。カテゴリや取引はコピーせず、ここから新しく始められます。")
-                .font(.subheadline)
+
+            TextField("例：ふたりの家計簿", text: $sharedName)
+                .textFieldStyle(.roundedBorder)
+                .submitLabel(.done)
+
+            Label("アイコン・色・カテゴリは、作成後にいつでも変更できます。", systemImage: "info.circle")
+                .font(.footnote)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 12) {
-                TextField("家計簿名", text: $sharedName)
-                    .textFieldStyle(.roundedBorder)
-
-                iconPicker
-
-                HStack {
-                    Text("テーマカラー")
-                    Spacer()
-                    ColorPicker("", selection: $sharedColor, supportsOpacity: false)
-                        .labelsHidden()
-                }
-            }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.secondary.opacity(0.08))
-            )
-
-            HStack(spacing: 10) {
-                Image(systemName: "info.circle")
-                    .foregroundStyle(.secondary)
-                Text("個人用のカテゴリや取引はコピーせず、新しい共有家計簿として登録します。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            if let creationError {
+                Text(creationError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
             }
         }
     }
 
-    private var iconPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("アイコン")
-                .font(.subheadline.weight(.semibold))
-            Picker("アイコンカテゴリ", selection: $sharedIconCategory) {
-                ForEach(SharedLedgerIconCategory.allCases) { category in
-                    Text(category.rawValue).tag(category)
-                }
+    private var sharedFooter: some View {
+        HStack(spacing: 12) {
+            Button("戻る") {
+                creationError = nil
+                step = .quickStart
             }
-            .pickerStyle(.segmented)
+            .buttonStyle(.bordered)
 
-            ScrollView {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 6), spacing: 10) {
-                    ForEach(SharedLedgerIconCategory.symbolsByCategory[sharedIconCategory] ?? [], id: \.self) { symbol in
-                        Button {
-                            sharedIcon = symbol
-                        } label: {
-                            Image(systemName: symbol)
-                                .font(.title3)
-                                .frame(width: 44, height: 44)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(
-                                            sharedIcon == symbol ? accent : Color.secondary.opacity(0.3),
-                                            lineWidth: sharedIcon == symbol ? 2 : 1
-                                        )
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.vertical, 6)
-            }
-            .frame(height: 180)
+            Spacer()
 
-            HStack(spacing: 8) {
-                Text("選択中:")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Image(systemName: sharedIcon)
-                    .font(.title3)
-                    .foregroundStyle(accent)
-            }
-        }
-        .onAppear {
-            sharedIconCategory = SharedLedgerIconCategory.category(for: sharedIcon)
-        }
-        .onChange(of: sharedIcon) { _, newValue in
-            sharedIconCategory = SharedLedgerIconCategory.category(for: newValue)
-        }
-    }
-
-    private var categoryStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("カテゴリを整える")
-                .font(.title3.weight(.bold))
-            Text("出費や収入を把握しやすくするため、よく使うカテゴリを先に作成しておきましょう。共有家計簿を選択中なら共有用のカテゴリも編集できます。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Button {
-                showCategoryManager = true
-            } label: {
-                HStack {
-                    Image(systemName: "slider.horizontal.3")
-                    Text("カテゴリ管理を開く")
+            Button(action: createSharedLedger) {
+                if isCreatingSharedLedger {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(minWidth: 96)
+                } else {
+                    Text("作成して記録する")
                         .fontWeight(.semibold)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.bold))
                 }
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(accent.opacity(0.15))
-                )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var summaryStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("準備が整いました！")
-                .font(.title3.weight(.bold))
-            Text("そのほかにもリマインダー、Todo、固定費、テーマ、アプリロックなど様々な設定があるので自由に設定画面からカスタマイズしてください。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Button {
-                finish()
-            } label: {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                    Text("さぁ家計簿登録を始めよう！")
-                        .fontWeight(.semibold)
-                    Spacer()
-                }
-                .padding()
-                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .tint(accent)
+            .disabled(isCreatingSharedLedger)
         }
     }
 
-    private var designChoiceStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("画面デザインを選ぶ")
-                .font(.title3.weight(.bold))
-            Text("「標準」と「フラット」を比較して、好みの見た目を選択できます。後から設定画面でも変更できます。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 8) {
-                Image(systemName: "paintpalette.fill")
-                    .foregroundStyle(accent)
-                Text("現在の選択: \(themeStore.theme.visualStyle.title)")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(accent.opacity(0.12))
-            )
-
-            Button {
-                showDesignSelectionSheet = true
-            } label: {
-                HStack {
-                    Image(systemName: "rectangle.grid.2x2")
-                    Text("デザイン比較シートを開く")
-                        .fontWeight(.semibold)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.bold))
-                }
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.secondary.opacity(0.08))
-                )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    // MARK: - Actions
-
-    private func goNext() {
-        creationError = nil
-
-        switch step {
-        case .welcome:
-            step = .monthStart
-        case .monthStart:
-            monthStartOnboardingDone = true
-            step = .usageChoice
-        case .usageChoice:
-            if usage == .personal {
-                ledgerContext.setPersonal()
-                step = .categorySetup
-            } else {
-                step = .sharedSetup
-            }
-        case .sharedSetup:
-            createSharedLedger()
-        case .categorySetup:
-            step = .designChoice
-        case .designChoice:
-            step = .summary
-        case .summary:
-            finish()
-        }
-    }
-
-    private func goBack() {
-        switch step {
-        case .monthStart:
-            step = .welcome
-        case .usageChoice:
-            step = .monthStart
-        case .sharedSetup:
-            step = .usageChoice
-        case .categorySetup:
-            step = usage == .personal ? .usageChoice : .sharedSetup
-        case .designChoice:
-            step = .categorySetup
-        case .summary:
-            step = .designChoice
-        case .welcome:
-            break
-        }
-    }
-
-    private func finish() {
+    private func finish(openEntry: Bool) {
         monthStartOnboardingDone = true
         isPresented = false
+
+        guard openEntry else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            appRoute.addTransactionRequested = true
+        }
     }
 
     private func createSharedLedger() {
-        let trimmed = sharedName.trimmingCharacters(in: .whitespaces)
+        let trimmed = sharedName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             creationError = "家計簿名を入力してください"
             return
         }
 
+        creationError = nil
         isCreatingSharedLedger = true
+
         Task {
-            let hex = TutorialUsage.hex(from: sharedColor)
-            if let ledger = await sharedLedgerStore.createLedger(name: trimmed, icon: sharedIcon, colorHex: hex) {
-                sharedLedgerStore.rememberLastOpened(ledger: ledger)
-                ledgerContext.setShared(id: ledger.id)
-                await MainActor.run {
-                    step = .categorySetup
-                }
-            } else {
-                await MainActor.run {
+            let ledger = await sharedLedgerStore.createLedger(
+                name: trimmed,
+                icon: "person.2.fill",
+                colorHex: "#4F46E5"
+            )
+
+            await MainActor.run {
+                isCreatingSharedLedger = false
+                if let ledger {
+                    sharedLedgerStore.rememberLastOpened(ledger: ledger)
+                    ledgerContext.setShared(id: ledger.id)
+                    finish(openEntry: true)
+                } else {
                     creationError = "作成に失敗しました。通信環境をご確認ください。"
                 }
             }
-            await MainActor.run {
-                isCreatingSharedLedger = false
-            }
         }
     }
 }
 
-// MARK: - Step / Usage enums
-
-private enum TutorialStep: Int, CaseIterable {
-    case welcome
-    case monthStart
-    case usageChoice
+private enum TutorialStep {
+    case quickStart
     case sharedSetup
-    case categorySetup
-    case designChoice
-    case summary
-
-    var progress: Double {
-        Double(rawValue + 1) / Double(TutorialStep.allCases.count)
-    }
-
-    var canGoBack: Bool { self != .welcome }
-
-    func primaryActionTitle(for usage: TutorialUsage) -> String {
-        switch self {
-        case .welcome:
-            return "設定を始める"
-        case .monthStart:
-            return "次へ"
-        case .usageChoice:
-            return usage == .personal ? "カテゴリ設定へ" : "共有家計簿を作成"
-        case .sharedSetup:
-            return "作成して進む"
-        case .categorySetup:
-            return "デザイン選択へ"
-        case .designChoice:
-            return "完了へ"
-        case .summary:
-            return "閉じる"
-        }
-    }
-}
-
-private enum TutorialUsage: String {
-    case personal
-    case shared
-
-    static func hex(from color: Color) -> String {
-        let uiColor = UIColor(color)
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-
-        let intR = Int(r * 255)
-        let intG = Int(g * 255)
-        let intB = Int(b * 255)
-        return String(format: "#%02X%02X%02X", intR, intG, intB)
-    }
-}
-
-private enum SharedLedgerIconCategory: String, CaseIterable, Identifiable {
-    case shared = "共有"
-    case living = "暮らし"
-    case shopping = "買い物"
-    case moveAndTrip = "旅行"
-    case hobby = "趣味"
-    case health = "健康"
-    case income = "収入"
-
-    var id: String { rawValue }
-
-    static let symbolsByCategory: [SharedLedgerIconCategory: [String]] = [
-        .shared: [
-            "person.2.fill", "person.2", "person.3.fill", "person.3",
-            "house.fill", "house", "building.2.fill", "building.2",
-            "heart.fill", "heart.circle.fill", "calendar", "wallet.pass.fill",
-            "wallet.pass", "creditcard.fill", "tray.full.fill", "list.bullet.clipboard.fill"
-        ],
-        .living: [
-            "fork.knife", "cup.and.saucer.fill", "takeoutbag.and.cup.and.straw.fill",
-            "lightbulb.fill", "drop.fill", "wifi", "house.fill", "sofa.fill",
-            "washer.fill", "lamp.table.fill", "refrigerator.fill", "bed.double.fill",
-            "pawprint.fill", "leaf.fill", "gift.fill", "sparkles"
-        ],
-        .shopping: [
-            "cart.fill", "cart", "basket.fill", "bag.fill",
-            "tag.fill", "creditcard.fill", "shippingbox.fill", "takeoutbag.and.cup.and.straw",
-            "gift.fill", "ticket.fill", "storefront.fill", "barcode.viewfinder",
-            "qrcode.viewfinder", "scissors", "tshirt.fill", "bag.badge.plus"
-        ],
-        .moveAndTrip: [
-            "tram.fill", "car.fill", "bus.fill", "bicycle", "airplane",
-            "ferry.fill", "fuelpump.fill", "suitcase.fill", "bed.double.fill", "map.fill",
-            "mappin.circle.fill", "camera.fill", "building.columns.fill", "house.lodge.fill",
-            "figure.walk", "figure.run"
-        ],
-        .hobby: [
-            "gamecontroller.fill", "music.note.list", "tv.fill", "book.fill", "graduationcap.fill",
-            "pencil.and.scribble", "paintbrush.pointed.fill", "camera.macro", "theatermasks.fill",
-            "sportscourt.fill", "figure.badminton", "dumbbell.fill", "party.popper.fill",
-            "birthday.cake.fill", "baseball.fill", "basketball.fill"
-        ],
-        .health: [
-            "cross.case.fill", "stethoscope", "pills.fill", "bandage.fill", "heart.text.square.fill",
-            "figure.walk.motion", "figure.cooldown", "figure.mind.and.body", "figure.strengthtraining.traditional",
-            "face.smiling.fill", "sun.max.fill", "moon.stars.fill", "lungs.fill", "allergens.fill",
-            "cross.fill", "bolt.heart.fill"
-        ],
-        .income: [
-            "yensign.circle.fill", "yensign.circle", "banknote.fill", "wallet.pass.fill",
-            "building.columns.fill", "creditcard.fill", "chart.line.uptrend.xyaxis", "briefcase.fill",
-            "doc.text.fill", "calendar.badge.clock", "giftcard.fill", "sparkles.tv.fill",
-            "dollarsign.circle.fill", "eurosign.circle.fill", "sterlingsign.circle.fill", "percent"
-        ]
-    ]
-
-    static func category(for icon: String) -> SharedLedgerIconCategory {
-        if let match = symbolsByCategory.first(where: { $0.value.contains(icon) })?.key {
-            return match
-        }
-        return .shared
-    }
-}
-
-// MARK: - Subviews
-
-private struct MonthStartStep: View {
-    @Binding var settings: MonthStartSettings
-
-    private var resolver: MonthStartResolver {
-        MonthStartResolver(settings: settings, holidayProvider: JapaneseHolidayProvider())
-    }
-
-    private var previewText: String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "M月d日（E）"
-        let range = resolver.monthRange(for: Date())
-        return "\(formatter.string(from: range.lowerBound)) 〜 \(formatter.string(from: range.upperBound))"
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("月の開始日を決める")
-                .font(.title3.weight(.bold))
-            Text("給料日や締め日に合わせて、ホーム画面で集計する基準日を指定できます。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle("カスタム開始日を使う", isOn: Binding(
-                    get: { settings.isCustomStartEnabled },
-                    set: { settings.isCustomStartEnabled = $0 }
-                ))
-
-                if settings.isCustomStartEnabled {
-                    Picker("集計の基準", selection: Binding(
-                        get: { settings.boundaryType },
-                        set: { settings.boundaryType = $0 }
-                    )) {
-                        ForEach(MonthBoundaryType.allCases) { option in
-                            Text(option.label).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Picker("開始日", selection: Binding(
-                        get: { settings.startDay },
-                        set: { settings.startDay = $0 }
-                    )) {
-                        ForEach(1...31, id: \.self) { day in
-                            Text("\(day)日").tag(day)
-                        }
-                    }
-                    .pickerStyle(.wheel)
-
-                    Picker("土日祝日に当たる場合", selection: Binding(
-                        get: { settings.holidayAdjustment },
-                        set: { settings.holidayAdjustment = $0 }
-                    )) {
-                        ForEach(MonthStartAdjustment.allCases) { option in
-                            Text(option.label).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                HStack {
-                    Image(systemName: "calendar")
-                        .foregroundStyle(.secondary)
-                    Text("今月は \(previewText) の期間で集計されます。")
-                    Spacer()
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                )
-            }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(UIColor.secondarySystemBackground))
-            )
-        }
-    }
 }
