@@ -73,20 +73,8 @@ private struct UpdateNoticeContent: View {
 
     static let defaultHighlights: [Highlight] = [
         Highlight(
-            title: "起動時に開く画面を選べるように",
-            message: "アプリを起動したとき最初に表示する画面を、ホーム・カレンダー・レポート・取引一覧・予算・取引追加から選べるようになりました。「取引追加」を選べば起動してすぐ入力できます。",
-            symbol: "arrow.up.forward.app",
-            tint: .blue
-        ),
-        Highlight(
-            title: "カレンダーの土日・祝日を色分け",
-            message: "カレンダーの日付を、祝日・日曜は赤、土曜は青で表示するようにしました。休みの日の出費がひと目で分かります。",
-            symbol: "calendar",
-            tint: .red
-        ),
-        Highlight(
-            title: "予算タブの支出合計を見直し",
-            message: "支出合計に、予算を設定したカテゴリの支出だけを含めるようにしました。総予算と同じ基準になり、使用率や残り金額がより実態に合った表示になります。",
+            title: "総予算の表示を修正しました",
+            message: "削除したカテゴリの予算が総予算に残る問題を修正しました。以前に設定した予算も、設定し直すことなく正しい合計が表示されます。",
             symbol: "yensign.circle",
             tint: .orange
         )
@@ -405,6 +393,10 @@ struct VersionEntry: Identifiable {
 
 /// 過去のアップデート履歴（新しい順）
 let versionHistory: [VersionEntry] = [
+    VersionEntry(version: "3.4.2", items: [
+        "削除したカテゴリの予算が総予算や前月からのコピーに含まれる問題を修正",
+        "設定とサイドメニューからコミュニティへの参加項目を削除",
+    ]),
     VersionEntry(version: "3.4.1", items: [
         "起動時に最初に表示する画面を選べる設定を追加（ホーム・カレンダー・レポート・取引一覧・予算・取引追加）",
         "アップデート後の初回起動時に起動画面を選択できる案内を表示",
